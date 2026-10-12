@@ -11,6 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const TRACKS = ['dolina', 'owal', 'serpentyna'];
 const LAPS = { dolina: 4, owal: 3, serpentyna: 3 };
+// paleta kolorów aut — zgodna z CAR_COLORS w public/js/physics.js
+const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
+const freeColor = (r, pref) => (COLORS.includes(pref) && !r.players.some((p) => p.color === pref) ? pref : COLORS.find((c) => !r.players.some((p) => p.color === c)));
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
 const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil'];
 
@@ -61,7 +64,7 @@ const cleanSettings = (s, track) => ({
 const cleanCar = (c) => (['aurora', 'vortex', 'blaze'].includes(c) ? c : 'aurora');
 const publicRoom = (r) => ({
   id: r.id, state: r.state, track: r.track, settings: r.settings,
-  players: r.players.map((p) => ({ id: p.sid, nick: p.nick, car: p.car, ready: p.ready, slot: p.slot })),
+  players: r.players.map((p) => ({ id: p.sid, nick: p.nick, car: p.car, color: p.color, ready: p.ready, slot: p.slot })),
 });
 const clearTimers = (r) => { r.timers.forEach(clearTimeout); r.timers = []; };
 const later = (r, ms, fn) => r.timers.push(setTimeout(fn, ms));
@@ -148,20 +151,20 @@ function leaveRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('ranking:get', (cb) => typeof cb === 'function' && cb(ranking()));
 
-  socket.on('room:create', ({ nick, car, track, settings } = {}, cb) => {
+  socket.on('room:create', ({ nick, car, track, settings, color } = {}, cb) => {
     if (typeof cb !== 'function') return;
     leaveRoom(socket);
     nick = cleanNick(nick);
     if (nick.length < 2) return cb({ ok: false, error: 'Nick jest za krótki.' });
     const r = { id: genId(), state: 'lobby', track: TRACKS.includes(track) ? track : TRACKS[0], settings: cleanSettings(settings, TRACKS.includes(track) ? track : TRACKS[0]), players: [], timers: [], times: {}, winner: null, recorded: false, pickups: new Map(), pid: 0 };
-    r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot: 0 });
+    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), ready: false, slot: 0 });
     rooms.set(r.id, r);
     socket.join(r.id);
     socket.data.roomId = r.id;
     cb({ ok: true, room: publicRoom(r), you: socket.id });
   });
 
-  socket.on('room:join', ({ id, nick, car } = {}, cb) => {
+  socket.on('room:join', ({ id, nick, car, color } = {}, cb) => {
     if (typeof cb !== 'function') return;
     leaveRoom(socket);
     const r = rooms.get(String(id ?? '').toUpperCase());
@@ -172,7 +175,7 @@ io.on('connection', (socket) => {
     if (r.state === 'racing' || r.state === 'countdown') return cb({ ok: false, error: 'Wyścig już trwa.' });
     for (let n = 2; r.players.some((p) => p.nick.toLowerCase() === nick.toLowerCase()); n++) nick = `${nick.replace(/ \(\d\)$/, '').slice(0, 11)} (${n})`;
     const slot = [0, 1, 2, 3].find((s) => !r.players.some((p) => p.slot === s));
-    r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot });
+    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), ready: false, slot });
     socket.join(r.id);
     socket.data.roomId = r.id;
     cb({ ok: true, room: publicRoom(r), you: socket.id });
@@ -217,6 +220,15 @@ io.on('connection', (socket) => {
     const p = r?.players.find((x) => x.sid === socket.id);
     if (!p || r.state === 'racing' || r.state === 'countdown') return;
     p.car = cleanCar(car);
+    io.to(r.id).emit('room:update', publicRoom(r));
+  });
+
+  socket.on('player:color', (color) => {
+    const r = rooms.get(socket.data.roomId);
+    const p = r?.players.find((x) => x.sid === socket.id);
+    if (!p || r.state === 'racing' || r.state === 'countdown' || !COLORS.includes(color)) return;
+    if (r.players.some((x) => x.sid !== socket.id && x.color === color)) return; // kolor zajęty przez innego gracza
+    p.color = color;
     io.to(r.id).emit('room:update', publicRoom(r));
   });
 

@@ -1,7 +1,7 @@
 // Wrrr Ummm — sterowanie grą: renderer, kamera izometryczna, pętla gry, UI, multiplayer.
 import * as THREE from 'three';
 import { Track, TRACK_DEFS, TRACK_IDS, ROAD_HALF, BARRIER } from './track.js';
-import { CarState, CAR_DEFS, carVsCar } from './physics.js';
+import { CarState, CAR_DEFS, CAR_COLORS, stripeFor, carVsCar } from './physics.js';
 import { buildCar } from './car.js';
 import { buildWorld } from './world.js';
 import { createPost } from './post.js';
@@ -73,6 +73,7 @@ window.addEventListener('resize', resize);
 const S = {
   nick: store.get('tc_nick', ''),
   carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'aurora',
+  color: CAR_COLORS.includes(store.get('tc_color')) ? store.get('tc_color') : '#e0457b',
   trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'dolina',
   ghost: store.get('tc_ghost') !== '0', laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
   mode: 'menu', // menu | lobby | countdown | racing | finished
@@ -95,10 +96,11 @@ function getVis(carId, slot) {
   if (!visCache.has(k)) visCache.set(k, buildCar(carId, CAR_NUM[slot] ?? 7));
   return visCache.get(k);
 }
-function setCar(who, carId, slot) {
+function setCar(who, carId, slot, color) {
   if (who.vis) scene.remove(who.vis.group);
   if (!carId) { who.vis = null; who.st = null; return; }
   who.vis = getVis(carId, slot);
+  who.color = color || S.color; who.vis.setColor(who.color, stripeFor(who.color));
   who.st = new CarState(CAR_DEFS[carId]);
   const [p, lat] = gridPos(slot);
   who.st.place(track, p, lat);
@@ -119,14 +121,16 @@ function syncOpps(force = false) {
     let o = opps.get(p.id);
     if (!o) { o = { id: p.id, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, nitroOn: false }; opps.set(p.id, o); }
     o.nick = p.nick;
-    if (force || !o.vis || o.carId !== p.car || o.slot !== p.slot) { o.carId = p.car; o.slot = p.slot; setCar(o, p.car, p.slot); }
+    if (force || !o.vis || o.carId !== p.car || o.slot !== p.slot) { o.carId = p.car; o.slot = p.slot; setCar(o, p.car, p.slot, p.color); }
+    else if (o.color !== p.color) { o.color = p.color; o.vis.setColor(p.color, stripeFor(p.color)); }
     if (force) o.snaps = [];
   }
 }
 const oppList = () => [...opps.values()].filter((o) => o.st);
 function resetRace() {
   const slot = S.solo ? 0 : mySlot();
-  setCar(me, S.carId, slot);
+  const mp = S.solo ? null : S.room?.players.find((x) => x.id === S.you);
+  setCar(me, mp?.car ?? S.carId, slot, mp?.color ?? S.color);
   if (!S.solo && S.room) syncOpps(true); else clearOpps();
   me.lapIdx = 0; me.maxP = me.st.progress; me.best = Infinity; me.lapTimes = []; me.finished = false; me.finishTime = 0;
   S.results = null; S.resultSounded = false;
@@ -174,7 +178,7 @@ function buildCarList() {
   for (const [id, d] of Object.entries(CAR_DEFS)) {
     const b = document.createElement('button'); b.className = 'car'; b.dataset.id = id;
     b.innerHTML = `<span class="dot" style="background:${d.color}"></span><span><b>${d.name}</b><small>${d.tag}</small></span><span class="stat">${d.stats.map((v) => `<div><i style="width:${Math.round(v * 100)}%"></i></div>`).join('')}</span>`;
-    b.addEventListener('click', () => { S.carId = id; store.set('tc_car', id); markCar(); if (S.mode === 'menu') setCar(me, id, 0); });
+    b.addEventListener('click', () => { S.carId = id; store.set('tc_car', id); markCar(); if (S.mode === 'menu') setCar(me, id, 0, S.color); });
     wrap.append(b);
   }
   const lg = document.createElement('div'); lg.className = 'muted'; lg.style.cssText = 'font-size:11px;text-align:right;letter-spacing:.06em';
@@ -241,9 +245,33 @@ function buildTrackList(wrapId, selected, onPick, canPick) {
 function pickMenuTrack(id) {
   S.trackId = id; store.set('tc_track', id); S.laps = TRACK_DEFS[id].laps; renderMenuSettings();
   buildTrackList('track-list', id, pickMenuTrack, true);
-  if (S.mode === 'menu') { toast('Ładowanie toru…', 800); setTimeout(() => { useTrack(id); setCar(me, S.carId, 0); }, 30); }
+  if (S.mode === 'menu') { toast('Ładowanie toru…', 800); setTimeout(() => { useTrack(id); setCar(me, S.carId, 0, S.color); }, 30); }
 }
-function markCar() { document.querySelectorAll('.car').forEach((b) => b.classList.toggle('sel', b.dataset.id === S.carId)); }
+function swatches(wrapId, selected, taken, onPick) {
+  const w = $(wrapId); w.textContent = '';
+  for (const c of CAR_COLORS) {
+    const b = document.createElement('button'); b.className = 'swatch' + (c === selected ? ' sel' : '') + (taken.has(c) ? ' taken' : '');
+    b.style.background = c; b.disabled = taken.has(c); b.title = taken.has(c) ? 'Kolor zajęty przez innego gracza' : '';
+    b.setAttribute('aria-label', c);
+    b.addEventListener('click', () => onPick(c)); w.append(b);
+  }
+}
+function buildMenuColors() {
+  swatches('menu-colors', S.color, new Set(), (c) => {
+    S.color = c; store.set('tc_color', c); buildMenuColors(); markCar();
+    if (S.mode === 'menu' && me.vis) { me.color = c; me.vis.setColor(c, stripeFor(c)); }
+  });
+}
+function buildLobbyPickers(r, mine) {
+  const w = $('lobby-cars'); w.textContent = '';
+  for (const [id, d] of Object.entries(CAR_DEFS)) {
+    const b = document.createElement('button'); b.textContent = d.name; b.classList.toggle('sel', mine?.car === id);
+    b.addEventListener('click', () => { S.carId = id; store.set('tc_car', id); socket?.emit('player:car', id); }); w.append(b);
+  }
+  const taken = new Set(r.players.filter((p) => p.id !== S.you).map((p) => p.color));
+  swatches('lobby-colors', mine?.color, taken, (c) => { S.color = c; store.set('tc_color', c); socket?.emit('player:color', c); });
+}
+function markCar() { document.querySelectorAll('.car').forEach((b) => { b.classList.toggle('sel', b.dataset.id === S.carId); const d = b.querySelector('.dot'); if (d) d.style.background = S.color; }); }
 
 function goMenu() {
   clearTimers();
@@ -256,7 +284,7 @@ function goMenu() {
   if (!S.laps) S.laps = TRACK_DEFS[S.trackId].laps;
   renderMenuSettings();
   buildTrackList('track-list', S.trackId, pickMenuTrack, true);
-  clearOpps(); setCar(me, S.carId, 0); ghostClear();
+  clearOpps(); setCar(me, S.carId, 0, S.color); ghostClear(); buildMenuColors();
   me.finished = false; resetItems();
   particles.clear(); skids.clear();
   showScreen('menu');
@@ -277,7 +305,7 @@ function renderLobby() {
     if (p) {
       const d = CAR_DEFS[p.car];
       row.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="st"></span>';
-      row.querySelector('.dot').style.background = d.color;
+      row.querySelector('.dot').style.background = p.color;
       const nm = row.querySelector('.nm'); nm.append(p.nick + (p.id === S.you ? ' (Ty)' : ''));
       const sm = document.createElement('small'); sm.textContent = d.name; nm.append(sm);
       const st = row.querySelector('.st'); st.textContent = p.ready ? 'Gotowy' : 'Czeka'; st.classList.toggle('ok', p.ready);
@@ -299,7 +327,9 @@ function renderLobby() {
   btn.textContent = mine?.ready ? 'Gotowy ✓' : 'Gotowy';
   // auta w tle (showroom)
   const slot = mySlot();
-  if (!me.vis || me.carIdShown !== mine?.car || me.slotShown !== slot) { setCar(me, mine?.car || S.carId, slot); me.carIdShown = mine?.car; me.slotShown = slot; }
+  if (!me.vis || me.carIdShown !== mine?.car || me.slotShown !== slot) { setCar(me, mine?.car || S.carId, slot, mine?.color); me.carIdShown = mine?.car; me.slotShown = slot; }
+  else if (mine && me.color !== mine.color) { me.color = mine.color; me.vis.setColor(mine.color, stripeFor(mine.color)); }
+  buildLobbyPickers(r, mine);
   syncOpps(trackChanged);
 }
 
@@ -338,14 +368,14 @@ const emitAck = (ev, data) => new Promise((res) => socket.timeout(5000).emit(ev,
 
 async function createRoom() {
   if (!connect()) return;
-  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups } });
+  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups }, color: S.color });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   S.room = r.room; S.you = r.you; S.solo = false;
   enterLobby();
 }
 async function joinRoom() {
   if (!connect()) return;
-  const r = await emitAck('room:join', { id: S.joinCode, nick: S.nick, car: S.carId });
+  const r = await emitAck('room:join', { id: S.joinCode, nick: S.nick, car: S.carId, color: S.color });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   history.replaceState(null, '', location.pathname);
   S.joinCode = null; $('join-banner').classList.add('hidden'); $('btn-join').classList.add('hidden'); $('btn-create').classList.remove('hidden');
@@ -650,8 +680,8 @@ function ghostPlay(dt) {
 // ======================= Minimapa =======================
 function drawMinimap() {
   if (!me.st || $('hud').classList.contains('hidden')) return;
-  const dots = [{ x: me.st.x, z: me.st.z, color: CAR_DEFS[S.carId].color, me: true }];
-  for (const o of oppList()) dots.push({ x: o.st.x, z: o.st.z, color: CAR_DEFS[o.carId].color, label: (o.nick || '?').trim()[0]?.toUpperCase() });
+  const dots = [{ x: me.st.x, z: me.st.z, color: me.color, me: true }];
+  for (const o of oppList()) dots.push({ x: o.st.x, z: o.st.z, color: o.color, label: (o.nick || '?').trim()[0]?.toUpperCase() });
   if (S.solo && S.ghost && ghost.vis?.group.visible) dots.push({ x: ghost.st.x, z: ghost.st.z, ghost: true });
   minimap.draw(dots, [...items.crates.values()].filter((c) => !c.dying).map((c) => ({ x: c.x, z: c.z, type: c.type })));
 }
@@ -772,7 +802,7 @@ function updateTags() {
   const racing = S.mode === 'countdown' || S.mode === 'racing' || S.mode === 'finished';
   const W = innerWidth, H = innerHeight;
   const place = (key, c, nick) => {
-    const d = tagFor(key, nick, c?.vis ? c.vis.def.color : '#fff');
+    const d = tagFor(key, nick, c?.color || '#fff');
     if (!racing || !c?.st || !c.vis || !nick) { d.style.display = 'none'; return; }
     pv.set(c.st.x, 3.4, c.st.z).project(camera);
     d.style.display = 'flex';
@@ -880,8 +910,7 @@ function updateCamera(dt) {
   } else {
     const P = new THREE.Vector3(me.st ? me.st.x : 0, 0.8, me.st ? me.st.z : 0);
     const ol = oppList();
-    if (ol.length) { const all = [me, ...ol]; P.set(all.reduce((a, c) => a + c.st.x, 0) / all.length, 0.8, all.reduce((a, c) => a + c.st.z, 0) / all.length); }
-    const a = T * 0.2 + 0.5, r = 15.5 + ol.length * 7;
+    const a = T * 0.2 + 0.5, r = 15.5 + ol.length * 1.5;
     pos = new THREE.Vector3(P.x + Math.cos(a) * r, 8.2 + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
     look = P.clone(); fov = 36; shift = S.mode === 'menu' || S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
   }
@@ -963,7 +992,7 @@ function bindUi() {
   }
   resize();
   useTrack(S.trackId);
-  setCar(me, S.carId, 0);
+  setCar(me, S.carId, 0, S.color);
   requestAnimationFrame(frame);
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);

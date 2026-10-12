@@ -64,9 +64,11 @@ function paintMaterial({ paint, stripe, glass = false, roof = false }) {
   });
   const key = `paint-${glass}-${roof}-${!!stripe}`;
   m.customProgramCacheKey = () => key;
+  m.userData.paint = paint; m.userData.stripe = stripe || paint;
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uPaint = { value: new THREE.Color(paint) };
-    sh.uniforms.uStripe = { value: new THREE.Color(stripe || paint) };
+    sh.uniforms.uPaint = { value: new THREE.Color(m.userData.paint) };
+    sh.uniforms.uStripe = { value: new THREE.Color(m.userData.stripe) };
+    m.userData.u = sh.uniforms;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vOP;\nvarying vec3 vON;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOP = position;\nvON = normal;');
@@ -121,14 +123,16 @@ function makeWheel(R, w) {
   return { pivot, roll };
 }
 
-export function buildCar(id, number) {
+export function buildCar(id, number, color = null) {
   const def = CAR_DEFS[id];
   const M = MODELS[id];
   const group = new THREE.Group();
   const body = new THREE.Group(); // pochylane (przechył/przysiad)
   group.add(body);
 
-  const paintMat = paintMaterial({ paint: def.color, stripe: def.stripe });
+  const paintMats = [];
+  const reg = (mat, kind) => { paintMats.push({ mat, kind }); return mat; };
+  const paintMat = reg(paintMaterial({ paint: def.color, stripe: def.stripe }), 'body');
   const bodyGeo = extrudeProfile(M.body, M.W, M.L);
   const bodyMesh = new THREE.Mesh(bodyGeo, paintMat);
   bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
@@ -136,7 +140,7 @@ export function buildCar(id, number) {
   const pickables = [bodyMesh];
 
   if (M.cabin) {
-    const cabMat = paintMaterial({ paint: def.color, stripe: def.stripe, glass: true, roof: true });
+    const cabMat = reg(paintMaterial({ paint: def.color, stripe: def.stripe, glass: true, roof: true }), 'cabin');
     const cabGeo = extrudeProfile(M.cabin, M.W * 0.76, M.L, 0.14, 0.12);
     const cab = new THREE.Mesh(cabGeo, cabMat);
     cab.castShadow = true;
@@ -161,7 +165,7 @@ export function buildCar(id, number) {
   }
   if (M.spoiler) {
     const sp = new THREE.Group();
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.08, M.W * 1.05), paintMaterial({ paint: def.stripe || 0x222222 }));
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.08, M.W * 1.05), reg(paintMaterial({ paint: def.stripe || 0x222222 }), 'accent'));
     wing.castShadow = true;
     for (const sz of [-0.7, 0.7]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.1), darkMat); post.position.set(0.1, -0.2, sz); sp.add(post); }
     sp.add(wing);
@@ -210,7 +214,18 @@ export function buildCar(id, number) {
 
   return {
     group, body, wheels, tailMat, def, model: M,
-    pitch: 0, roll: 0, spin: 0,
+    pitch: 0, roll: 0, spin: 0, color: null,
+    /** zmiana koloru lakieru w locie (bez przebudowy modelu) */
+    setColor(paint, stripe) {
+      if (this.color === paint) return; this.color = paint;
+      for (const { mat, kind } of paintMats) {
+        const u = mat.userData.u;
+        if (kind === 'accent') { mat.color.set(stripe); mat.userData.paint = stripe; mat.userData.stripe = stripe; if (u) { u.uPaint.value.set(stripe); u.uStripe.value.set(stripe); } continue; }
+        if (kind === 'body') mat.color.set(paint);
+        mat.userData.paint = paint; mat.userData.stripe = stripe;
+        if (u) { u.uPaint.value.set(paint); u.uStripe.value.set(stripe); }
+      }
+    },
     /** Aktualizacja wizualna na podstawie stanu fizycznego. */
     sync(st, dt) {
       group.position.set(st.x, 0, st.z);

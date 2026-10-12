@@ -187,3 +187,11 @@ export function carVsCar(me, opp) {
   }
   return hit;
 }
+
+/** Paleta kolorów aut — musi być zgodna z listą w server.js. */
+export const CAR_COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
+/** Kolor pasów dobrany do jasności lakieru. */
+export function stripeFor(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#1a1a24' : '#fff4e6';
+}
