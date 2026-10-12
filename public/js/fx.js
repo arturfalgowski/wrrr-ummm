@@ -22,7 +22,7 @@ const FRAG = /* glsl */`
 
 export class Particles {
   constructor(scene, max = 900) {
-    this.max = max; this.cursor = 0;
+    this.max = max; this.cursor = 0; this.ground = null;
     this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 3);
     this.size = new Float32Array(max); this.alpha = new Float32Array(max);
     this.vel = new Float32Array(max * 3);
@@ -43,6 +43,7 @@ export class Particles {
 
   emit(x, y, z, vx, vy, vz, life, s0, s1, color, a0 = 0.5, drag = 1.5, grav = 0) {
     const i = this.cursor; this.cursor = (this.cursor + 1) % this.max;
+    if (this.ground) y += this.ground(x, z);
     this.pos.set([x, y, z], i * 3); this.vel.set([vx, vy, vz], i * 3);
     this.col.set([color.r, color.g, color.b], i * 3);
     this.life[i] = life; this.age[i] = 0; this.s0[i] = s0; this.s1[i] = s1; this.a0[i] = a0; this.drag[i] = drag; this.grav[i] = grav;
@@ -57,7 +58,8 @@ export class Particles {
       const k = Math.max(0, 1 - this.drag[i] * dt);
       this.vel[i * 3] *= k; this.vel[i * 3 + 1] = this.vel[i * 3 + 1] * k - this.grav[i] * dt; this.vel[i * 3 + 2] *= k;
       this.pos[i * 3] += this.vel[i * 3] * dt; this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt; this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      if (this.pos[i * 3 + 1] < 0.05) { this.pos[i * 3 + 1] = 0.05; this.vel[i * 3 + 1] = 0; }
+      const gy = (this.ground ? this.ground(this.pos[i * 3], this.pos[i * 3 + 2]) : 0) + 0.05;
+      if (this.pos[i * 3 + 1] < gy) { this.pos[i * 3 + 1] = gy; this.vel[i * 3 + 1] = 0; }
       this.size[i] = this.s0[i] + (this.s1[i] - this.s0[i]) * t;
       this.alpha[i] = this.a0[i] * (1 - t) * (1 - t);
     }

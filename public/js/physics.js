@@ -23,6 +23,7 @@ export class CarState {
     this.brakeLit = false; this.throttle = 0; this.accelNow = 0;
     this.hit = 0;           // siła ostatniego uderzenia (do dźwięku/iskier)
     this.wallContact = false;
+    this.y = undefined; this.vy = 0; this.vyT = 0; this.air = false; this.landHit = 0;
     this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
   }
 

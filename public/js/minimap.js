@@ -7,7 +7,13 @@ export class Minimap {
     this.pts = null;
   }
 
+  setArena(R, obstacles) {
+    this.arena = { R, obstacles }; this.track = null;
+    this.b = { minX: -R, maxX: R, minZ: -R, maxZ: R }; this.pts = [[0, 0]];
+  }
+
   setTrack(track) {
+    this.arena = null;
     this.track = track;
     const b = track.bounds;
     this.b = b;
@@ -35,6 +41,13 @@ export class Minimap {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, this.w, this.h);
     g.lineJoin = 'round'; g.lineCap = 'round';
+    if (this.arena) {
+      const [cx, cy] = this._p(0, 0), R = this.arena.R * this.s;
+      g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 5.5; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+      g.beginPath(); g.arc(cx, cy, 12 * this.s, 0, Math.PI * 2); g.setLineDash([3, 3]); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1; g.stroke(); g.setLineDash([]);
+      g.fillStyle = 'rgba(255,255,255,.45)';
+      for (const [ox, oz] of this.arena.obstacles) { const [px, py] = this._p(ox, oz); g.beginPath(); g.arc(px, py, 2, 0, Math.PI * 2); g.fill(); }
+    } else {
     g.beginPath();
     this.pts.forEach(([x, z], i) => { const [px, py] = this._p(x, z); i ? g.lineTo(px, py) : g.moveTo(px, py); });
     g.closePath();
@@ -43,6 +56,7 @@ export class Minimap {
     // linia startu
     const t = this.track, [sx, sy] = this._p(t.x[0], t.z[0]), nx = -t.tz[0], nz = t.tx[0];
     g.beginPath(); g.moveTo(sx - nx * 5, sy - nz * 5); g.lineTo(sx + nx * 5, sy + nz * 5); g.strokeStyle = '#ff4f8b'; g.lineWidth = 2; g.stroke();
+    }
     for (const c of crates) {
       const [px, py] = this._p(c.x, c.z);
       g.save(); g.translate(px, py); g.rotate(Math.PI / 4);

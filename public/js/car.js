@@ -217,7 +217,7 @@ export function buildCar(id, number, color = null) {
 
   return {
     group, body, wheels, tailMat, def, model: M,
-    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, color: null, stripeC: null, dmg: 0,
+    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, tx: 0, tz: 0, color: null, stripeC: null, dmg: 0,
     /** zmiana koloru lakieru w locie (bez przebudowy modelu) */
     setColor(paint, stripe) {
       if (this.color === paint && this.stripeC === stripe) return;
@@ -254,7 +254,10 @@ export function buildCar(id, number, color = null) {
     },
     /** Aktualizacja wizualna na podstawie stanu fizycznego. */
     sync(st, dt) {
-      group.position.set(st.x, 0, st.z);
+      group.rotation.order = 'YZX';
+      group.position.set(st.x, st.y || 0, st.z);
+      this.tx += ((st.tiltX || 0) - this.tx) * Math.min(1, dt * 12 + (dt ? 0 : 1)); this.tz += ((st.tiltZ || 0) - this.tz) * Math.min(1, dt * 12 + (dt ? 0 : 1));
+      group.rotation.x = this.tx; group.rotation.z = this.tz;
       // na ręcznym tył auta wyraźnie „wychodzi” w bok (efekt wizualny ponad fizyką)
       if (Math.abs(st.steer) > 0.1) this.hdir = Math.sign(st.steer);
       this.hk += (((st.hand ? 0.24 : 0) * (this.hdir || 1)) - this.hk) * Math.min(1, dt * 9);

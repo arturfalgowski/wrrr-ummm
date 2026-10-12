@@ -162,6 +162,8 @@ export const sfx = {
     src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 1.4);
     tone({ type: 'sine', f: 110, f2: 28, dur: 0.9, gain: 0.9 });
   },
+  rocket() { tone({ type: 'sawtooth', f: 180, f2: 700, dur: 0.5, gain: 0.18 }); if (ctx) { const t = ctx.currentTime; const src = noiseSrc(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7); src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.75); } },
+  shield() { tone({ type: 'sine', f: 300, f2: 900, dur: 0.5, gain: 0.2 }); tone({ type: 'triangle', f: 600, f2: 1800, dur: 0.5, gain: 0.1, when: 0.05 }); },
   empty() { tone({ type: 'square', f: 200, dur: 0.06, gain: 0.08 }); },
   join() { tone({ type: 'sine', f: 600, dur: 0.1, gain: 0.15 }); tone({ type: 'sine', f: 900, dur: 0.16, gain: 0.15, when: 0.09 }); },
 };

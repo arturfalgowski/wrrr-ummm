@@ -38,6 +38,14 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 | E | zrzut plamy oleju |
 | M | wyciszenie |
 
+## Arena (tryb walki)
+
+Drugi tryb: nie ścigamy się, tylko walczymy. Okrągła arena z górkami, dołami, rampami do skoków, centralną platformą i słupami-osłonami.
+Wygrywa ostatni żywy — 0% wytrzymałości oznacza eliminację bez odradzania (wyeliminowany ogląda dalej, A/D zmienia kamerę).
+Na arenę spadają paczki z bronią; masz **jeden slot na broń** (nowa zastępuje starą), używasz jej klawiszem **F**:
+bomba (mina za autem), rakieta (naprowadzana na najbliższego), karabin (seria 4 s), tarcza (5 s), olej. Do tego nitro (Shift) i naprawa.
+Tryb wybierasz w menu (host w lobby); solo gra się z 1–3 botami.
+
 ## Paczki
 
 Na tor spadają (niezbyt często) paczki: **nitro**, **naboje** i **olej**. Naboje zbierasz i używasz kiedy chcesz — F uruchamia 4-sekundową serię z karabinu; każde trafienie zwalnia rywala.
@@ -53,6 +61,7 @@ server.js            Express + Socket.IO: pokoje, odliczanie, wynik, ranking (SQ
 public/index.html    UI (nick, menu, lobby, HUD, wyniki)
 public/js/main.js    pętla gry, kamera izometryczna (auto-dopasowana do toru), sieć, UI
 public/js/minimap.js minimapa w HUD
+public/js/arena.js    teren areny i fizyka (skoki, zbocza), arenaworld.js — jej wygląd
 public/js/items.js   paczki, pociski, plamy oleju
 public/js/tires.js   rozbijane opony
 public/js/track.js   definicje 3 torów, oś toru, próbkowanie, zapytania o pozycję (postęp, odległość boczna)

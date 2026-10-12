@@ -8,6 +8,8 @@ import { createPost } from './post.js';
 import { Particles, SkidMarks } from './fx.js';
 import { Items } from './items.js';
 import { Minimap } from './minimap.js';
+import { ARENA_R, SPAWNS, OBSTACLES, field as arenaField, heightAt, arenaStep, tiltAt } from './arena.js';
+import { buildArenaWorld } from './arenaworld.js';
 import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -39,14 +41,16 @@ items._thud = () => sfx.land();
 // ======================= Tory (każdy budowany raz, potem tylko przełączany) =======================
 const worlds = {};
 let track = null, world = null, trackId = null;
+const isArena = () => trackId === 'arena';
 function useTrack(id) {
-  if (!TRACK_DEFS[id]) id = TRACK_IDS[0];
+  if (id !== 'arena' && !TRACK_DEFS[id]) id = TRACK_IDS[0];
   if (trackId === id && world) return;
   if (world) world.root.visible = false;
-  if (!worlds[id]) { const t = new Track(id); worlds[id] = { track: t, world: buildWorld(scene, renderer, t) }; }
+  if (!worlds[id]) worlds[id] = id === 'arena' ? { track: arenaField, world: buildArenaWorld(scene, renderer) } : (() => { const t = new Track(id); return { track: t, world: buildWorld(scene, renderer, t) }; })();
   ({ track, world } = worlds[id]);
   trackId = id;
-  minimap.setTrack(track);
+  items.ground = id === 'arena' ? heightAt : null; particles.ground = items.ground;
+  if (id === 'arena') minimap.setArena(ARENA_R, OBSTACLES); else minimap.setTrack(track);
   world.root.visible = true;
   scene.background = world.sky;
   scene.fog = new THREE.Fog(world.sky, 300, 1500);
@@ -73,6 +77,7 @@ window.addEventListener('resize', resize);
 const S = {
   nick: store.get('tc_nick', ''),
   carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'aurora',
+  game: store.get('tc_game') === 'arena' ? 'arena' : 'race', bots: 3,
   color: CAR_COLORS.includes(store.get('tc_color')) ? store.get('tc_color') : '#e0457b',
   trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'dolina',
   ghost: store.get('tc_ghost') !== '0', laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
@@ -80,7 +85,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
+const me = { weapon: null, shieldT: 0, specIdx: 0, deadAt: 0, hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
 const opps = new Map(); // id gracza -> { id, nick, carId, slot, st, vis, audio, snaps, prevVf, smokeAcc, finished }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -102,10 +107,19 @@ function setCar(who, carId, slot, color) {
   who.vis = getVis(carId, slot);
   who.color = color || S.color; who.dead = false; who.vis.group.visible = true; who.vis.setDamage(0); who.vis.setColor(who.color, stripeFor(who.color));
   who.st = new CarState(CAR_DEFS[carId]);
-  const [p, lat] = gridPos(slot);
-  who.st.place(track, p, lat);
+  if (isArena()) {
+    const sp = SPAWNS[slot % 4], st = who.st;
+    st.x = sp[0]; st.z = sp[1]; st.yaw = sp[2]; st.y = heightAt(st.x, st.z); st.vx = st.vz = st.vf = st.vl = 0; st.air = false; st.vy = 0; st.vyT = 0;
+  } else { const [p, lat] = gridPos(slot); who.st.place(track, p, lat); who.st.y = undefined; }
   scene.add(who.vis.group);
   who.vis.sync(who.st, 0);
+}
+function stepCar(st, inp, dt) { if (isArena()) arenaStep(st, inp, dt); else st.step(track, inp, dt); }
+/** nachylenie auta względem terenu (tylko arena) */
+function updateTilt(st) {
+  if (!isArena()) { st.tiltX = 0; st.tiltZ = 0; return; }
+  if (st.air) { st.tiltX = 0; st.tiltZ = clamp(Math.atan2(st.vy, Math.max(8, Math.hypot(st.vx, st.vz))) * 0.7, -0.6, 0.6); }
+  else { const [rx, pz] = tiltAt(st.x, st.z, st.yaw); st.tiltX = rx; st.tiltZ = pz; }
 }
 function mySlot() { const p = S.room?.players.find((x) => x.id === S.you); return p ? p.slot : 0; }
 
@@ -131,7 +145,7 @@ function resetRace() {
   const slot = S.solo ? 0 : mySlot();
   const mp = S.solo ? null : S.room?.players.find((x) => x.id === S.you);
   setCar(me, mp?.car ?? S.carId, slot, mp?.color ?? S.color);
-  if (!S.solo && S.room) syncOpps(true); else clearOpps();
+  if (!S.solo && S.room) syncOpps(true); else { clearOpps(); if (S.solo && isArena()) spawnBots(); }
   me.lapIdx = 0; me.maxP = me.st.progress; me.best = Infinity; me.lapTimes = []; me.finished = false; me.finishTime = 0;
   S.results = null; S.resultSounded = false;
   particles.clear(); skids.clear(); resetItems();
@@ -140,6 +154,8 @@ function resetRace() {
   $('hud-time').textContent = '0:00.00';
   $('hud-lap').textContent = `1/${S.lapsNow}`;
   $('chip-pos').classList.toggle('hidden', !opps.size);
+  $('hud-lap').parentElement.classList.toggle('hidden', isArena());
+  $('chip-pos').querySelector('.lbl').textContent = isArena() ? 'Żywi' : 'Pozycja';
 }
 
 // ======================= Ekrany =======================
@@ -200,11 +216,13 @@ function trackPreview(id) {
 function buildSettings(wrapId, vals, canEdit, onChange) {
   const w = $(wrapId); w.textContent = '';
   const row = (label) => { const r = document.createElement('div'); r.className = 'set'; const l = document.createElement('span'); l.textContent = label; r.append(l); w.append(r); return r; };
-  const r1 = row('Okrążenia');
-  const st = document.createElement('div'); st.className = 'step';
-  const mk = (txt, delta) => { const b = document.createElement('button'); b.textContent = txt; b.disabled = !canEdit || (delta < 0 ? vals.laps <= 1 : vals.laps >= 10); b.addEventListener('click', () => onChange({ laps: vals.laps + delta })); return b; };
-  const n = document.createElement('b'); n.textContent = vals.laps;
-  st.append(mk('−', -1), n, mk('+', 1)); r1.append(st);
+  const stepper = (label, key, min, max) => {
+    const r1 = row(label), st = document.createElement('div'); st.className = 'step';
+    const mk = (txt, delta) => { const b = document.createElement('button'); b.textContent = txt; b.disabled = !canEdit || (delta < 0 ? vals[key] <= min : vals[key] >= max); b.addEventListener('click', () => onChange({ [key]: vals[key] + delta })); return b; };
+    const n = document.createElement('b'); n.textContent = vals[key]; st.append(mk('−', -1), n, mk('+', 1)); r1.append(st);
+  };
+  if (vals.laps !== undefined) stepper('Okrążenia', 'laps', 1, 10);
+  if (vals.bots !== undefined) stepper('Boty przeciwników (solo)', 'bots', 1, 3);
   const r2 = row('Paczki');
   const sg = document.createElement('div'); sg.className = 'seg';
   for (const [v, t] of [['off', 'Brak'], ['rare', 'Rzadko'], ['normal', 'Normalnie'], ['often', 'Często']]) {
@@ -222,8 +240,10 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
   }
 }
 function renderMenuSettings() {
-  buildSettings('menu-settings', { laps: S.laps, pickups: S.pickups, ghost: S.ghost }, true, (c) => {
+  const arena = S.game === 'arena';
+  buildSettings('menu-settings', arena ? { bots: S.bots, pickups: S.pickups } : { laps: S.laps, pickups: S.pickups, ghost: S.ghost }, true, (c) => {
     if (c.laps != null) S.laps = c.laps;
+    if (c.bots != null) S.bots = c.bots;
     if (c.ghost != null) { S.ghost = c.ghost; store.set('tc_ghost', c.ghost ? '1' : '0'); }
     if (c.pickups) { S.pickups = c.pickups; store.set('tc_pickups', c.pickups); }
     renderMenuSettings();
@@ -271,6 +291,25 @@ function buildLobbyPickers(r, mine) {
   const taken = new Set(r.players.filter((p) => p.id !== S.you).map((p) => p.color));
   swatches('lobby-colors', mine?.color, taken, (c) => { S.color = c; store.set('tc_color', c); socket?.emit('player:color', c); });
 }
+function modeButtons(wrapId, current, canPick, onPick) {
+  const w = $(wrapId); w.textContent = '';
+  for (const [id, name, sub] of [['race', 'Wyścig', 'ściganie się na torze'], ['arena', 'Arena', 'walka do ostatniego żywego']]) {
+    const b = document.createElement('button'); b.classList.toggle('sel', current === id); b.disabled = !canPick && current !== id;
+    b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = name; b.querySelector('small').textContent = sub;
+    b.addEventListener('click', () => onPick(id)); w.append(b);
+  }
+}
+function applyModeUi() {
+  $('track-section').classList.toggle('hidden', S.game === 'arena');
+  modeButtons('mode-list', S.game, true, pickMenuMode);
+  renderMenuSettings();
+  const arena = S.game === 'arena';
+  $('btn-solo').textContent = arena ? 'Arena solo z botami' : 'Trening solo';
+}
+function pickMenuMode(g) {
+  S.game = g; store.set('tc_game', g); applyModeUi();
+  if (S.mode === 'menu') { toast('Ładowanie…', 800); setTimeout(() => { useTrack(g === 'arena' ? 'arena' : S.trackId); setCar(me, S.carId, 0, S.color); }, 30); }
+}
 function markCar() { document.querySelectorAll('.car').forEach((b) => { b.classList.toggle('sel', b.dataset.id === S.carId); const d = b.querySelector('.dot'); if (d) d.style.background = S.color; }); }
 
 function goMenu() {
@@ -280,9 +319,9 @@ function goMenu() {
   setMode('menu');
   $('menu-nick').textContent = S.nick;
   $('menu-err').textContent = '';
-  useTrack(S.trackId);
+  useTrack(S.game === 'arena' ? 'arena' : S.trackId);
   if (!S.laps) S.laps = TRACK_DEFS[S.trackId].laps;
-  renderMenuSettings();
+  applyModeUi();
   buildTrackList('track-list', S.trackId, pickMenuTrack, true);
   clearOpps(); setCar(me, S.carId, 0, S.color); ghostClear(); buildMenuColors();
   me.finished = false; resetItems();
@@ -317,10 +356,13 @@ function renderLobby() {
   const mine = r.players.find((x) => x.id === S.you);
   const isHost = mine?.slot === 0;
   buildTrackList('lobby-tracks', r.track, (id) => socket?.emit('room:track', id), isHost);
-  buildSettings('lobby-settings', r.settings, isHost, (c) => socket?.emit('room:settings', c));
+  buildSettings('lobby-settings', r.mode === 'arena' ? { pickups: r.settings.pickups } : r.settings, isHost, (c) => socket?.emit('room:settings', c));
   $('track-note').textContent = isHost ? '— wybierasz jako gospodarz' : '— wybiera gospodarz';
-  const trackChanged = r.track !== trackId;
-  if (trackChanged) { useTrack(r.track); me.carIdShown = null; }
+  const wantTrack = r.mode === 'arena' ? 'arena' : r.track;
+  const trackChanged = wantTrack !== trackId;
+  if (trackChanged) { useTrack(wantTrack); me.carIdShown = null; }
+  modeButtons('lobby-mode', r.mode, isHost, (m) => socket?.emit('room:mode', m));
+  $('lobby-track-section').classList.toggle('hidden', r.mode === 'arena');
   const btn = $('btn-ready');
   btn.disabled = !two;
   btn.classList.toggle('on', !!mine?.ready);
@@ -358,7 +400,7 @@ function connect() {
   socket.on('race:opp', (id, a) => { const o = opps.get(id); if (!o || !Array.isArray(a) || a.length < 13) return; o.snaps.push({ t: performance.now(), a }); if (o.snaps.length > 40) o.snaps.shift(); });
   socket.on('race:end', (data) => { S.results = data; if (S.mode === 'racing' || S.mode === 'finished' || S.mode === 'countdown') { setMode('finished'); showResultsMP(); } });
   socket.on('ranking', (list) => renderRanking(list));
-  socket.on('pickup:spawn', (p) => { if (S.mode === 'racing' || S.mode === 'countdown') spawnCrate(p.id, p.type, p.u, p.l); });
+  socket.on('pickup:spawn', (p) => { if (S.mode === 'racing' || S.mode === 'countdown') spawnCrate(p.id, p.type, p.u, p.l, p.x, p.z); });
   socket.on('pickup:remove', ({ id }) => items.remove(id, false));
   socket.on('pickup:taken', ({ id, by, type }) => { items.remove(id); if (by === S.you) applyPickup(type); });
   socket.on('game:event', (e) => onGameEvent(e));
@@ -368,7 +410,7 @@ const emitAck = (ev, data) => new Promise((res) => socket.timeout(5000).emit(ev,
 
 async function createRoom() {
   if (!connect()) return;
-  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups }, color: S.color });
+  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups }, color: S.color, mode: S.game });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   S.room = r.room; S.you = r.you; S.solo = false;
   enterLobby();
@@ -395,7 +437,8 @@ function enterLobby() {
 function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 function startPrepare() {
   clearTimers();
-  useTrack(S.solo ? S.trackId : S.room.track);
+  const arenaNow = S.solo ? S.game === 'arena' : S.room.mode === 'arena';
+  useTrack(arenaNow ? 'arena' : S.solo ? S.trackId : S.room.track);
   S.lapsNow = S.solo ? S.laps : S.room.settings.laps;
   resetRace();
   setMode('countdown');
@@ -476,6 +519,17 @@ function showResultsMP() {
   const w = d.players.find((p) => p.id === d.winner);
   $('res-sub').textContent = d.reason === 'left' ? 'Pozostali gracze opuścili wyścig.' : `${w ? w.nick : 'Gracz'} wygrywa wyścig.`;
   const t = $('res-table'); t.textContent = '';
+  if (d.mode === 'arena') {
+    $('res-title').textContent = won ? 'Wygrywasz arenę!' : 'Wyeliminowany';
+    $('res-sub').textContent = d.reason === 'left' ? 'Pozostali gracze opuścili arenę.' : `${w ? w.nick : 'Gracz'} wygrywa arenę.`;
+    const head2 = document.createElement('tr'); head2.innerHTML = '<th>Miejsce</th><th>Status</th>'; t.append(head2);
+    const ord = d.order?.length ? d.order : [d.winner];
+    const all = [...ord, ...d.players.map((p) => p.id).filter((id) => !ord.includes(id))];
+    all.forEach((id, i) => { const p = d.players.find((q) => q.id === id); if (!p) return; const tr = document.createElement('tr'); if (i === 0) tr.className = 'win'; const a = document.createElement('td'); a.textContent = `${i + 1}. ${p.nick}${p.id === S.you ? ' (Ty)' : ''}`; const b = document.createElement('td'); b.textContent = i === 0 ? 'ostatni żywy' : 'wyeliminowany'; tr.append(a, b); t.append(tr); });
+    if (d.ranking) renderRanking(d.ranking);
+    if (!S.resultSounded) { S.resultSounded = true; (won ? sfx.win : sfx.lose)(); $('btn-rematch').textContent = 'Rewanż'; $('btn-rematch').classList.remove('on'); }
+    updateResultsButtons(); showScreen('results'); return;
+  }
   const head = document.createElement('tr'); head.innerHTML = '<th>Kierowca</th><th>Czas</th>'; t.append(head);
   const rank = (p) => (p.id === d.winner ? -1 : d.times[p.id] != null ? d.times[p.id] : 1e9);
   const order = [...d.players].sort((a, b) => rank(a) - rank(b));
@@ -530,6 +584,8 @@ function applyOpp(opp, a, b, f, ex, exT) {
   st.throttle = a[9]; st.brakeLit = !!a[10]; st.onGrass = !!a[11]; st.slip = Math.abs(st.vl);
   opp.finished = !!a[12]; st.nitro = !!a[13]; st.hand = !!a[14];
   if (a[15] != null) { st.hp = a[15]; const d = 1 - a[15] / 100; st.damage = d; opp.vis?.setDamage(d); }
+  if (a[17] != null) st.y = a[17];
+  opp.shield = !!a[18];
   const dead = !!a[16];
   if (dead !== !!opp.dead && opp.vis) {
     opp.dead = dead; opp.vis.group.visible = !dead;
@@ -552,7 +608,7 @@ function carFx(c, key, dt) {
   const braking = st.brakeLit && sp > 24;
   const [lx, lz] = wheelWorld(st, -M.wheelX, M.wheelZ);
   const [rx, rz] = wheelWorld(st, -M.wheelX, -M.wheelZ);
-  const on = (sliding || braking) && S.mode !== 'menu' && S.mode !== 'lobby';
+  const on = !isArena() && (sliding || braking) && S.mode !== 'menu' && S.mode !== 'lobby';
   skids.add(key + 'L', lx, lz, on, st.hand ? 0.42 : 0.34); skids.add(key + 'R', rx, rz, on, st.hand ? 0.42 : 0.34);
   if (S.mode === 'menu' || S.mode === 'lobby') return;
   const hp = st.hp ?? 100;
@@ -606,6 +662,7 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) toggleMute();
+  if (me.dead && isArena() && !e.repeat) { if (e.code === 'KeyA' || e.code === 'ArrowLeft') me.specIdx--; if (e.code === 'KeyD' || e.code === 'ArrowRight') me.specIdx++; }
   if (!e.repeat) {
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') useNitro();
     else if (e.code === 'KeyF') fire();
@@ -634,7 +691,7 @@ function setHp(v) {
 }
 /** obrażenia własnego auta (liczone lokalnie; rywale dostają stan w pakiecie) */
 function damage(amount) {
-  if (amount <= 0.2 || me.dead || me.inv > 0 || me.finished || S.mode !== 'racing') return;
+  if (amount <= 0.2 || me.dead || me.inv > 0 || me.shieldT > 0 || me.finished || S.mode !== 'racing') return;
   const before = me.hp;
   setHp(me.hp - amount);
   if (before > 30 && me.hp <= 30) toast('Auto mocno uszkodzone!', 1600);
@@ -652,6 +709,7 @@ function explode(x, z) {
   sparks(x, z, 40);
 }
 function die() {
+  if (isArena()) return eliminateMe();
   me.dead = true; me.respawnT = 3; me.fireT = 0;
   explode(me.st.x, me.st.z);
   me.vis.group.visible = false;
@@ -682,7 +740,7 @@ function ghostBuild(carId) {
 }
 function ghostSetup() {
   ghostClear();
-  if (!S.solo) return;
+  if (!S.solo || isArena()) return;
   let g = null;
   try { g = JSON.parse(store.get(ghostKey())); } catch { /* brak */ }
   if (g && g.s?.length > 30 && CAR_DEFS[g.car]) { ghost.data = g; ghost.best = g.time; if (S.ghost) ghostBuild(g.car); }
@@ -743,11 +801,213 @@ function drawMinimap() {
   minimap.draw(dots, [...items.crates.values()].filter((c) => !c.dying).map((c) => ({ x: c.x, z: c.z, type: c.type })));
 }
 
+// ======================= Arena: bronie, wybuchy, boty, eliminacje =======================
+const WEAPON_NAMES = { bomb: 'Bomba', rocket: 'Rakieta', ammo: 'Karabin', shield: 'Tarcza', oil: 'Olej' };
+const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
+let arenaEnd = false, idSeq = 0;
+const nextId = () => `${(S.you || 'me').slice(0, 5)}${++idSeq}`;
+const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const entityById = (id) => (id === S.you ? me : opps.get(id) || null);
+
+function hitMe() { me.st.vx *= 0.93; me.st.vz *= 0.93; me.st.slowT = 1.3; damage(2.2); sparks(me.st.x, me.st.z, 14); sfx.hit(); }
+function knock(st, x, z, hv, vv) {
+  const dx = st.x - x, dz = st.z - z, d = Math.hypot(dx, dz) || 1;
+  st.vx += (dx / d) * hv; st.vz += (dz / d) * hv;
+  if (isArena()) { st.air = true; st.vy = Math.max(st.vy || 0, vv); }
+}
+function damageBot(o, amount) {
+  if (o.dead || o.shieldT > 0 || amount <= 0.2) return;
+  o.hp = Math.max(0, o.hp - amount); o.st.hp = o.hp; o.st.damage = 1 - o.hp / 100; o.vis.setDamage(o.st.damage);
+  if (o.hp <= 0) { o.dead = true; o.vis.group.visible = false; explode(o.st.x, o.st.z); toast(`${o.nick} wyeliminowany`, 1800); }
+}
+/** wybuch: obrażenia dla mnie i botów (rywale w multiplayerze liczą go u siebie z eventu) */
+function blast(x, z, r, dmg) {
+  explode(x, z);
+  if (me.st && !me.dead && !me.finished && S.mode === 'racing') {
+    const d = Math.hypot(me.st.x - x, me.st.z - z);
+    if (d < r) { const k = 1 - d / r; damage(dmg * (0.45 + 0.55 * k)); knock(me.st, x, z, 8 + 14 * k, 4 + 8 * k); }
+  }
+  for (const o of oppList()) if (o.bot && !o.dead) {
+    const d = Math.hypot(o.st.x - x, o.st.z - z);
+    if (d < r) { const k = 1 - d / r; damageBot(o, dmg * (0.45 + 0.55 * k)); knock(o.st, x, z, 8 + 14 * k, 4 + 8 * k); }
+  }
+}
+function emitEvent(e) { if (!S.solo) socket?.emit('game:event', e); }
+function detonateBomb(b) { b.dead = true; blast(b.x, b.z, 8, 45); emitEvent({ t: 'boom', id: b.id, x: b.x, z: b.z, r: 8, dmg: 45 }); }
+function detonateRocket(r) { r.dead = true; blast(r.x, r.z, 6.5, 34); emitEvent({ t: 'boom', id: r.id, x: r.x, z: r.z, r: 6.5, dmg: 34 }); }
+
+function nearestEnemy(st, exceptId) {
+  let best = null, bs = 1e9;
+  for (const o of oppList()) {
+    if (o.dead || o.id === exceptId) continue;
+    const d = Math.hypot(o.st.x - st.x, o.st.z - st.z), a = Math.abs(wrapA(Math.atan2(o.st.z - st.z, o.st.x - st.x) - st.yaw));
+    const sc = d * (1 + 0.6 * a);
+    if (sc < bs) { bs = sc; best = o; }
+  }
+  return best;
+}
+function fireArena() {
+  if (!racingNow()) return;
+  const w = me.weapon, s = me.st, cs = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+  if (!w || me.fireT > 0) { sfx.empty(); return; }
+  if (w === 'bomb') { const id = nextId(), x = s.x - cs * 3.2, z = s.z - sn * 3.2; items.dropBomb(id, x, z, 'me'); emitEvent({ t: 'bomb', id, x, z }); sfx.oil(); }
+  else if (w === 'rocket') {
+    const tgt = nearestEnemy(s), id = nextId(), x = s.x + cs * 3.2, z = s.z + sn * 3.2;
+    items.launchRocket(id, x, z, s.yaw, 'me', tgt ? () => (tgt.dead ? null : tgt.st) : null); sfx.rocket();
+    emitEvent({ t: 'rocket', id, x, z, yaw: s.yaw, to: tgt && !tgt.bot ? tgt.id : null });
+  } else if (w === 'ammo') { me.fireT = 4; me.fireAcc = 0; }
+  else if (w === 'shield') { me.shieldT = 5; sfx.shield(); }
+  else if (w === 'oil') { const x = s.x - cs * 3.4, z = s.z - sn * 3.4; items.dropOil(x, z, 'me'); emitEvent({ t: 'oil', x, z }); sfx.oil(); }
+  me.weapon = null; updateSlots();
+}
+/** trafienia pocisków karabinu: moje w rywali i boty, pociski botów we mnie i inne boty */
+function shotHits() {
+  for (const sh of items.shots) {
+    if (sh.life <= 0) continue;
+    const near = (st) => [0, 1.5, -1.5].some((d) => Math.hypot(sh.x - (st.x + Math.cos(st.yaw) * d), sh.z - (st.z + Math.sin(st.yaw) * d)) < 2.1);
+    if (sh.owner === 'me') {
+      for (const o of oppList()) {
+        if (o.dead || !near(o.st)) continue;
+        items.killShot(sh); sparks(o.st.x, o.st.z, 14); sfx.hit();
+        if (o.bot) { o.st.vx *= 0.95; o.st.vz *= 0.95; damageBot(o, 2.4); } else emitEvent({ t: 'hit', to: o.id });
+        break;
+      }
+    } else if (sh.owner.startsWith('bot:')) {
+      const bid = sh.owner.slice(4);
+      if (!me.dead && !me.finished && near(me.st)) { items.killShot(sh); hitMe(); continue; }
+      for (const o of oppList()) if (o.bot && o.id !== bid && !o.dead && near(o.st)) { items.killShot(sh); sparks(o.st.x, o.st.z, 10); damageBot(o, 2.4); break; }
+    }
+  }
+}
+function updateArenaCombat(dt) {
+  if (!isArena() || S.mode !== 'racing') return;
+  const actors = [];
+  if (!me.dead) actors.push(me);
+  for (const o of oppList()) if (o.bot && !o.dead) actors.push(o);
+  for (const b of items.bombs) {
+    if (b.dead || b.age < 0.8) continue;
+    for (const a of actors) { if (Math.hypot(a.st.x - b.x, a.st.z - b.z) < 3.6 && Math.abs((a.st.y || 0) - heightAt(b.x, b.z)) < 3) { detonateBomb(b); break; } }
+  }
+  for (const r of items.rockets) {
+    if (r.dead || r.owner.startsWith('opp:')) continue;
+    const ownerBot = r.owner.startsWith('bot:') ? r.owner.slice(4) : null;
+    let hit = r.life <= 0 || Math.hypot(r.x, r.z) > ARENA_R - 1.5 || OBSTACLES.some(([ox, oz, or]) => Math.hypot(r.x - ox, r.z - oz) < or + 0.7);
+    if (!hit) {
+      if (r.owner === 'me') hit = oppList().some((o) => !o.dead && Math.hypot(o.st.x - r.x, o.st.z - r.z) < 2.8 && Math.abs((o.st.y || 0) + 1 - (heightAt(r.x, r.z) + 1.3)) < 3.5);
+      else hit = (!me.dead && Math.hypot(me.st.x - r.x, me.st.z - r.z) < 2.8) || oppList().some((o) => o.bot && o.id !== ownerBot && !o.dead && Math.hypot(o.st.x - r.x, o.st.z - r.z) < 2.8);
+    }
+    if (hit) detonateRocket(r);
+  }
+}
+function setShieldFx(vis, on, t) {
+  if (!vis) return;
+  if (!vis.shieldMesh) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(3.3, 24, 16), new THREE.MeshBasicMaterial({ color: 0x7ad8ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.y = 1.1; vis.group.add(m); vis.shieldMesh = m;
+  }
+  vis.shieldMesh.visible = on; if (on) vis.shieldMesh.material.opacity = 0.2 + Math.sin(t * 9) * 0.07;
+}
+
+// ---- eliminacje i koniec rundy ----
+function eliminateMe() {
+  me.dead = true; me.respawnT = Infinity; me.fireT = 0; me.deadAt = performance.now();
+  explode(me.st.x, me.st.z); me.vis.group.visible = false; me.st.vx = me.st.vz = me.st.vf = me.st.vl = 0;
+  toast('Wyeliminowany! Oglądasz resztę walki (A/D — zmiana kamery)', 3500);
+  if (!S.solo) socket?.emit('arena:dead');
+  updateSlots();
+}
+function spectateTarget() {
+  const alive = oppList().filter((o) => !o.dead);
+  return alive.length ? alive[((me.specIdx % alive.length) + alive.length) % alive.length] : null;
+}
+function checkArenaSoloEnd() {
+  if (!S.solo || !isArena() || arenaEnd || S.mode !== 'racing') return;
+  const botsAlive = oppList().filter((o) => !o.dead).length;
+  if (!me.dead && botsAlive === 0) { arenaEnd = true; setMode('finished'); showResultsArenaSolo(true); }
+  else if (me.dead && performance.now() - me.deadAt > 2800) { arenaEnd = true; setMode('finished'); showResultsArenaSolo(false); }
+}
+function showResultsArenaSolo(won) {
+  $('res-title').className = 'res-title' + (won ? '' : ' lose'); $('res-title').textContent = won ? 'Wygrywasz arenę!' : 'Wyeliminowany';
+  $('res-sub').textContent = won ? 'Wszyscy przeciwnicy wyeliminowani.' : `Pokonani przeciwnicy: ${oppList().filter((o) => o.dead).length}/${opps.size}`;
+  const t = $('res-table'); t.textContent = '';
+  const head = document.createElement('tr'); head.innerHTML = '<th>Kierowca</th><th>Status</th>'; t.append(head);
+  const rows = [[S.nick + ' (Ty)', !me.dead], ...oppList().map((o) => [o.nick, !o.dead])];
+  for (const [n, alive] of rows) { const tr = document.createElement('tr'); if (alive) tr.className = 'win'; const a = document.createElement('td'); a.textContent = n; const b = document.createElement('td'); b.textContent = alive ? 'żywy' : 'wyeliminowany'; tr.append(a, b); t.append(tr); }
+  $('btn-rematch').textContent = 'Jeszcze raz'; $('btn-rematch').disabled = false; $('btn-rematch').classList.remove('on');
+  $('rank-results').parentElement.querySelectorAll('h4, #rank-results').forEach((e) => e.classList.add('hidden'));
+  (won ? sfx.win : sfx.lose)();
+  showScreen('results');
+}
+
+// ---- boty (trening solo na arenie) ----
+function spawnBots() {
+  const colors = CAR_COLORS.filter((c) => c !== S.color);
+  for (let i = 0; i < S.bots; i++) {
+    const o = { id: 'bot' + i, bot: true, nick: BOT_NAMES[i], carId: ['vortex', 'blaze', 'aurora'][i % 3], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { t: 0, target: null, stuck: 0, rev: 0, revSteer: 1, cd: 2 + Math.random() * 3 } };
+    opps.set(o.id, o); setCar(o, o.carId, o.slot, colors[i % colors.length]); o.st.hp = 100;
+  }
+}
+function botApply(o, type) {
+  if (type === 'repair') { o.hp = Math.min(100, o.hp + 40); o.st.hp = o.hp; o.st.damage = 1 - o.hp / 100; o.vis.setDamage(o.st.damage); }
+  else if (type === 'nitro') o.nitroT = 2.5;
+  else o.weapon = type;
+}
+function botUpdate(o, dt) {
+  if (o.dead) return;
+  const st = o.st, ai = o.ai;
+  o.hitCd -= dt;
+  if (o.shieldT > 0) o.shieldT -= dt;
+  if (o.nitroT > 0) o.nitroT -= dt; st.nitro = o.nitroT > 0;
+  // cel: najbliższy żywy wróg (ja albo inny bot)
+  ai.t -= dt;
+  if (ai.t <= 0) {
+    ai.t = 0.35 + Math.random() * 0.3;
+    let best = null, bd = 1e9;
+    const cand = []; if (!me.dead) cand.push(me.st); for (const q of oppList()) if (q !== o && !q.dead) cand.push(q.st);
+    for (const c of cand) { const d = Math.hypot(c.x - st.x, c.z - st.z); if (d < bd) { bd = d; best = c; } }
+    ai.target = best;
+  }
+  let tx = ai.target ? ai.target.x : 0, tz = ai.target ? ai.target.z : 0;
+  if (!o.weapon || o.hp < 55) { // zbieranie paczek
+    let crate = null, cd = 1e9;
+    for (const c of items.crates.values()) if (c.landed && !c.dying) { const d = Math.hypot(c.x - st.x, c.z - st.z); if (d < cd) { cd = d; crate = c; } }
+    if (crate && cd < 60) { tx = crate.x; tz = crate.z; }
+  }
+  if (Math.hypot(st.x, st.z) > ARENA_R - 11) { tx = 0; tz = 0; }
+  const ang = wrapA(Math.atan2(tz - st.z, tx - st.x) - st.yaw);
+  const inp = { throttle: 1, brake: 0, steer: clamp(ang * 2.2, -1, 1), hand: false };
+  if (Math.abs(ang) > 2 && st.speed > 10) { inp.throttle = 0; inp.brake = 1; }
+  if (st.speed < 2.5 && !st.air) ai.stuck += dt; else ai.stuck = 0;
+  if (ai.stuck > 1.1) { ai.rev = 0.9; ai.stuck = 0; ai.revSteer = Math.random() < 0.5 ? -1 : 1; }
+  if (ai.rev > 0) { ai.rev -= dt; inp.throttle = 0; inp.brake = 1; inp.steer = ai.revSteer; }
+  stepCar(st, inp, dt);
+  if (st.landHit > 0) damageBot(o, st.landHit * 0.5);
+  if (st.hit > 3 && o.hitCd <= 0) { damageBot(o, (st.hit - 3) * 0.35); o.hitCd = 0.2; if (st.hit > 8) sparks(st.x, st.z, st.hit); }
+  if (!me.dead) { const h = carVsCar(st, me.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.6); o.hitCd = 0.15; } }
+  for (const q of oppList()) if (q !== o && !q.dead) { const h = carVsCar(st, q.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.2); o.hitCd = 0.15; } }
+  const c = items.touch(st.x, st.z, 3.2);
+  if (c && !c.requested) { c.requested = true; botApply(o, c.type); items.remove(c.id); }
+  // broń
+  ai.cd -= dt;
+  const tg = ai.target;
+  if (o.weapon && tg && ai.cd <= 0) {
+    const d = Math.hypot(tg.x - st.x, tg.z - st.z), a = wrapA(Math.atan2(tg.z - st.z, tg.x - st.x) - st.yaw), cs = Math.cos(st.yaw), sn = Math.sin(st.yaw);
+    ai.cd = 0.5;
+    if (o.weapon === 'ammo' && d < 48 && Math.abs(a) < 0.3) { o.fireT = 4; o.fireAcc = 0; o.weapon = null; }
+    else if (o.weapon === 'rocket' && d < 90 && Math.abs(a) < 0.9) { items.launchRocket('r' + o.id + (++idSeq), st.x + cs * 3.2, st.z + sn * 3.2, st.yaw, 'bot:' + o.id, () => (tg === me.st ? (me.dead ? null : me.st) : tg)); sfx.rocket(); o.weapon = null; }
+    else if (o.weapon === 'bomb' && d < 14) { items.dropBomb('b' + o.id + (++idSeq), st.x - cs * 3.2, st.z - sn * 3.2, 'bot:' + o.id); o.weapon = null; }
+    else if (o.weapon === 'shield' && o.hp < 65 && d < 35) { o.shieldT = 5; o.weapon = null; }
+    else if (o.weapon === 'oil' && d < 18 && Math.abs(a) > 2.2) { items.dropOil(st.x - cs * 3.4, st.z - sn * 3.4, 'bot:' + o.id); o.weapon = null; }
+  }
+  if (o.fireT > 0) { o.fireT -= dt; o.fireAcc -= dt; if (o.fireAcc <= 0) { items.shoot(st.x, st.z, st.yaw, st.vx, st.vz, 'bot:' + o.id); o.fireAcc = 0.16; } }
+}
+function refreshOpp(o) { return o.bot ? true : sampleOpp(o, performance.now()); }
+
 // ======================= Przedmioty, broń, nitro =======================
 const soloSpawn = { t: 5, id: 1 };
 function resetItems() {
   items.clear();
-  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
+  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.weapon = null; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
   me.items = { nitro: false, oil: false, ammo: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
   if (me.st) { me.st.nitro = false; me.st.slowT = 0; me.st.inOil = false; }
   soloSpawn.t = 5;
@@ -755,9 +1015,16 @@ function resetItems() {
   updateSlots();
 }
 const crateSpot = (u, l) => track.at(Math.floor(u * track.N), l * ROAD_HALF * 0.8);
-function spawnCrate(id, type, u, l) { const q = crateSpot(u, l); items.spawn(id, type, q.x, q.z); }
+function spawnCrate(id, type, u, l, ax, az) {
+  if (ax !== undefined) { // arena: odsuń paczkę od słupów
+    for (const [ox, oz, or] of OBSTACLES) { const d = Math.hypot(ax - ox, az - oz); if (d < or + 3) { const k = (or + 3.5) / (d || 1); ax = ox + (ax - ox) * k; az = oz + (az - oz) * k; } }
+    items.spawn(id, type, ax, az); return;
+  }
+  const q = crateSpot(u, l); items.spawn(id, type, q.x, q.z);
+}
 function applyPickup(type) {
   sfx.pickup();
+  if (isArena() && ['bomb', 'rocket', 'ammo', 'shield', 'oil'].includes(type)) { me.weapon = type; toast(`${WEAPON_NAMES[type]} — F`); updateSlots(); return; }
   if (type === 'nitro') { me.items.nitro = true; toast('Nitro — Shift'); }
   else if (type === 'ammo') { me.items.ammo = true; toast('Naboje — F (strzelasz przez 4 s)'); }
   else if (type === 'repair') { setHp(me.hp + 40); toast('Naprawa +40'); }
@@ -771,6 +1038,7 @@ function useNitro() {
 }
 /** F: uruchamia 4-sekundową serię (naboje można trzymać do dowolnego momentu) */
 function fire() {
+  if (isArena()) return fireArena();
   if (!racingNow()) return;
   if (!me.items.ammo || me.fireT > 0) { if (!me.fireT) sfx.empty(); return; }
   me.items.ammo = false; me.fireT = 4; me.fireAcc = 0; updateSlots();
@@ -789,14 +1057,27 @@ function dropOil() {
 function onGameEvent(e) {
   if (e.t === 'shoot') items.shoot(e.x, e.z, e.yaw, e.vx, e.vz, 'opp:' + e.from);
   else if (e.t === 'oil') items.dropOil(e.x, e.z, 'opp');
+  else if (e.t === 'bomb') items.dropBomb(e.id, e.x, e.z, 'opp:' + e.from);
+  else if (e.t === 'rocket') items.launchRocket(e.id, e.x, e.z, e.yaw, 'opp:' + e.from, () => entityById(e.to)?.st || null);
+  else if (e.t === 'boom') { items.removeBomb(e.id); items.rockets.filter((r) => r.id === e.id).forEach((r) => { r.dead = true; }); blast(e.x, e.z, e.r, e.dmg); }
   else if (e.t === 'hit' && e.to !== S.you) items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   else if (e.t === 'hit' && me.st) {
-    me.st.vx *= 0.93; me.st.vz *= 0.93; me.st.slowT = 1.3; damage(2.2);
-    sparks(me.st.x, me.st.z, 14); sfx.hit(); toast('Trafiony!', 1400);
+    hitMe(); toast('Trafiony!', 1400);
     items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   }
 }
+function updateBar() { $('ammo-bar').style.width = `${me.fireT > 0 ? clamp(me.fireT / 4, 0, 1) * 100 : clamp(me.shieldT / 5, 0, 1) * 100}%`; }
 function updateSlots() {
+  if (isArena()) {
+    const sh = me.shieldT > 0, gun = me.fireT > 0;
+    $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
+    $('slot-oil').classList.add('hidden');
+    $('slot-ammo').classList.toggle('has', !!me.weapon || sh || gun); $('slot-ammo').classList.toggle('active', sh || gun);
+    $('slot-ammo').querySelector('span').textContent = gun ? 'Ogień!' : sh ? 'Tarcza!' : (WEAPON_NAMES[me.weapon] || 'Broń');
+    $('ammo-bar').style.width = `${gun ? clamp(me.fireT / 4, 0, 1) * 100 : sh ? clamp(me.shieldT / 5, 0, 1) * 100 : 0}%`;
+    return;
+  }
+  $('slot-oil').classList.remove('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał';
   $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0);
   $('slot-nitro').classList.toggle('active', me.nitroT > 0);
   $('slot-ammo').classList.toggle('has', me.items.ammo || me.fireT > 0);
@@ -824,15 +1105,20 @@ function updateGameplay(dt, active) {
     else {
       me.fireT -= dt; me.fireAcc -= dt;
       if (me.fireAcc <= 0 && me.fireT > 0) { shootOne(); me.fireAcc = 0.12; }
-      if (me.fireT <= 0) { me.fireT = 0; updateSlots(); } else $('ammo-bar').style.width = `${me.fireT / 4 * 100}%`;
+      if (me.fireT <= 0) { me.fireT = 0; updateSlots(); } else updateBar();
     }
   }
+  if (me.shieldT > 0) { me.shieldT -= dt; if (me.shieldT <= 0) { me.shieldT = 0; updateSlots(); } else updateBar(); }
   // paczki: solo spawnuje lokalnie, w multiplayerze robi to serwer
   if (S.solo && S.mode === 'racing') {
     soloSpawn.t -= dt;
     if (soloSpawn.t <= 0) {
-      soloSpawn.t = (8 + Math.random() * 5) * ({ off: 1, rare: 1.8, normal: 1, often: 0.5 }[S.pickups]);
-      if (S.pickups !== 'off' && items.crates.size < 3) spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'][Math.random() * 7 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
+      const arena = isArena();
+      soloSpawn.t = (arena ? 5 + Math.random() * 3 : 8 + Math.random() * 5) * ({ off: 1, rare: 1.8, normal: 1, often: 0.5 }[S.pickups]);
+      if (S.pickups !== 'off' && items.crates.size < (arena ? 5 : 3)) {
+        if (arena) { const a = Math.random() * 6.28, rad = Math.sqrt(Math.random()) * ARENA_R * 0.82; spawnCrate(soloSpawn.id++, ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'][Math.random() * 11 | 0], 0, 0, Math.cos(a) * rad, Math.sin(a) * rad); }
+        else spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'][Math.random() * 7 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
+      }
     }
     for (const c of items.crates.values()) if (c.landed && !c.dying && c.age > 30) items.remove(c.id, false);
   }
@@ -843,19 +1129,8 @@ function updateGameplay(dt, active) {
       if (S.solo) { applyPickup(c.type); items.remove(c.id); } else socket?.emit('pickup:take', { id: c.id });
     }
   }
-  // trafienia własnych pocisków w rywali (rozstrzyga strzelający)
-  for (const sh of items.shots) {
-    if (sh.owner !== 'me' || sh.life <= 0) continue;
-    for (const o of oppList()) {
-      if (o.dead) continue;
-      const cs = Math.cos(o.st.yaw), sn = Math.sin(o.st.yaw);
-      if ([0, 1.5, -1.5].some((d) => Math.hypot(sh.x - (o.st.x + cs * d), sh.z - (o.st.z + sn * d)) < 2.1)) {
-        items.killShot(sh); sparks(o.st.x, o.st.z, 14); sfx.hit();
-        if (!S.solo) socket?.emit('game:event', { t: 'hit', to: o.id });
-        break;
-      }
-    }
-  }
+  shotHits();
+  updateArenaCombat(dt);
 }
 
 // ======================= Pętla gry =======================
@@ -876,7 +1151,7 @@ function updateTags() {
     const d = tagFor(key, nick, c?.color || '#fff');
     if (!racing || !c?.st || !c.vis || !nick || c.dead) { d.style.display = 'none'; return; }
     const hpv = c === me ? me.hp : c.st.hp ?? 100; d._hp.style.width = `${clamp(hpv, 0, 100)}%`; d._hp.style.background = hpv > 50 ? '#5be3a1' : hpv > 25 ? '#ffd84d' : '#ff4f6e';
-    pv.set(c.st.x, 3.4, c.st.z).project(camera);
+    pv.set(c.st.x, (c.st.y || 0) + 3.4, c.st.z).project(camera);
     d.style.display = 'flex';
     d.style.transform = `translate(${((pv.x + 1) / 2) * W}px, ${((1 - pv.y) / 2) * H}px) translate(-50%, -100%)`;
   };
@@ -900,13 +1175,14 @@ function frame(now) {
   if (me.st && active) {
     if (me.dead) {
       me.respawnT -= dt; if (me.respawnT <= 0) respawn();
-      for (const o of oppList()) sampleOpp(o, performance.now());
+      for (const o of oppList()) refreshOpp(o);
     } else {
     const inp = me.finished ? { throttle: 0, brake: 0.3, steer: 0, hand: false } : input;
-    me.st.step(track, inp, dt);
+    stepCar(me.st, inp, dt);
+    if (me.st.landHit > 0) damage(me.st.landHit);
     if (me.inv > 0) { me.inv -= dt; me.vis.group.visible = me.inv <= 0 || Math.floor(me.inv * 10) % 2 === 0; }
     for (const o of oppList()) {
-      if (sampleOpp(o, performance.now()) && !o.dead) {
+      if (refreshOpp(o) && !o.dead) {
         const h = carVsCar(me.st, o.st);
         if (h > 1.5 && me.hitCd <= 0) { sfx.crash(h / 14, 0); sparks((me.st.x + o.st.x) / 2, (me.st.z + o.st.z) / 2, h); me.hitCd = 0.15; damage(h * 0.7); }
       }
@@ -914,9 +1190,10 @@ function frame(now) {
     me.hitCd -= dt;
     if (me.st.hit > 3 && me.hitCd <= 0) { sfx.crash(me.st.hit / 18, 0); sparks(me.st.x, me.st.z, me.st.hit); me.hitCd = 0.2; damage((me.st.hit - 3) * 0.9); }
     }
-    if (!me.dead && (S.mode === 'racing' || (S.mode === 'finished' && !me.finished && !S.solo))) onLapProgress();
-  } else if (racing) for (const o of oppList()) sampleOpp(o, performance.now());
+    if (!isArena() && !me.dead && (S.mode === 'racing' || (S.mode === 'finished' && !me.finished && !S.solo))) onLapProgress();
+  } else if (racing) for (const o of oppList()) refreshOpp(o);
 
+  if (isArena() && active && S.mode === 'racing') { for (const o of oppList()) if (o.bot) botUpdate(o, dt); checkArenaSoloEnd(); }
   if (me.st && active) ghostRecord(dt);
   ghostPlay(dt);
   if (me.st) updateGameplay(dt, active); else if (world) world.tires.update(dt);
@@ -927,14 +1204,19 @@ function frame(now) {
     if (sendAcc >= 0.033) {
       sendAcc = 0;
       const s = me.st, r = (v) => Math.round(v * 100) / 100;
-      socket.volatile.emit('race:state', [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.progress), input.throttle, s.brakeLit ? 1 : 0, s.onGrass ? 1 : 0, me.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, Math.round(me.hp), me.dead ? 1 : 0]);
+      socket.volatile.emit('race:state', [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.progress), input.throttle, s.brakeLit ? 1 : 0, s.onGrass ? 1 : 0, me.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, Math.round(me.hp), me.dead ? 1 : 0, Math.round((s.y || 0) * 10) / 10, me.shieldT > 0 ? 1 : 0]);
     }
   }
 
   // wizualizacja
+  if (me.st) updateTilt(me.st);
+  setShieldFx(me.vis, me.shieldT > 0 && !me.dead, T);
+  for (const o of oppList()) setShieldFx(o.vis, o.bot ? o.shieldT > 0 : o.shield && !o.dead, T);
   if (me.vis && me.st) me.vis.sync(me.st, dt);
   for (const o of oppList()) {
     o.st.accelNow += (((o.st.vf - o.prevVf) / dt) - o.st.accelNow) * Math.min(1, dt * 6); o.prevVf = o.st.vf;
+    if (isArena() && !o.bot) { const gh = heightAt(o.st.x, o.st.z); o.st.air = (o.st.y ?? gh) - gh > 0.6; if (o.st.y === undefined) o.st.y = gh; o.st.vy = 0; }
+    updateTilt(o.st);
     o.vis.sync(o.st, dt);
   }
   if (racing) { carFx(me, 'me', dt); for (const o of oppList()) carFx(o, 'o' + o.id, dt); }
@@ -967,11 +1249,12 @@ function updateCamera(dt) {
   void racingView;
   if (racingView && me.st) {
     // kamera podąża za moim autem; oddala się, gdy rywal jest daleko
-    const m = me.st;
+    const subj = me.dead && isArena() ? spectateTarget() : null;
+    const m = subj ? subj.st : me.st;
     let fx = m.x + m.vx * 0.28, fz = m.z + m.vz * 0.28;
-    let half = 27 + clamp(m.speed - 15, 0, 30) * 0.18;
+    let half = (isArena() ? 33 : 27) + clamp(m.speed - 15, 0, 30) * 0.18;
     let near = null, nd = 1e9;
-    for (const o of oppList()) { const d = Math.hypot(o.st.x - m.x, o.st.z - m.z); if (d < nd) { nd = d; near = o; } }
+    for (const o of oppList()) { if (o.st === m || o.dead) continue; const d = Math.hypot(o.st.x - m.x, o.st.z - m.z); if (d < nd) { nd = d; near = o; } }
     if (near) {
       const dx = near.st.x - m.x, dz = near.st.z - m.z, d = nd;
       const w = 0.25 * clamp(d / 60, 0, 1);
@@ -979,7 +1262,9 @@ function updateCamera(dt) {
       half = Math.max(half, 20 + d * 0.5);
     }
     half = Math.min(half, 80);
-    if (cam.first || cam.racingT === undefined) { cam.focus.set(fx, 0, fz); cam.half = half; }
+    const fy = (m.y || 0) * 0.9;
+    if (cam.first || cam.racingT === undefined) { cam.focus.set(fx, fy, fz); cam.half = half; }
+    cam.focus.y += (fy - cam.focus.y) * (1 - Math.exp(-dt * 5));
     cam.half += (half - cam.half) * (1 - Math.exp(-dt * 1.8));
     cam.focus.x += (fx - cam.focus.x) * (1 - Math.exp(-dt * 6)); cam.focus.z += (fz - cam.focus.z) * (1 - Math.exp(-dt * 6));
     pos = cam.focus.clone().addScaledVector(CAM_DIR, cam.half * 3.9); look = cam.focus.clone();
@@ -1018,7 +1303,10 @@ function updateHud() {
   $('hud-bar').style.width = `${clamp(sp / me.st.def.maxSpeed, 0, 1) * 100}%`;
   if (S.mode === 'racing' && !me.finished) setText('hud-time', fmt(elapsed()));
   else if (me.finished) setText('hud-time', fmt(me.finishTime));
-  if (opps.size) setText('hud-pos', `${1 + oppList().filter((o) => o.st.progress > me.st.progress).length}/${opps.size + 1}`);
+  if (opps.size) {
+    if (isArena()) setText('hud-pos', `${(me.dead ? 0 : 1) + oppList().filter((o) => !o.dead).length}/${opps.size + 1}`);
+    else setText('hud-pos', `${1 + oppList().filter((o) => o.st.progress > me.st.progress).length}/${opps.size + 1}`);
+  }
   setText('hud-lap', `${clamp(me.lapIdx + 1, 1, S.lapsNow)}/${S.lapsNow}`);
 }
 
