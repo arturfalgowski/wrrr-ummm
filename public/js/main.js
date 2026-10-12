@@ -1246,16 +1246,17 @@ let reactCd = 0;
 function updateChatUi() {
   const c = $('chat');
   c.classList.toggle('hidden', S.mode === 'menu' || !$('scr-nick').classList.contains('hidden'));
-  c.classList.toggle('side', S.mode === 'lobby' || S.mode === 'finished');
+  document.body.classList.toggle('chat-on', !c.classList.contains('hidden'));
 }
 function chatAdd(m) {
   const log = $('chat-log'), d = document.createElement('div');
   d.className = 'msg' + (m.sys ? ' sys' : '') + (m.react ? ' react' : '');
   if (!m.sys) { const b = document.createElement('b'); b.textContent = m.nick; b.style.color = m.color || '#fff'; d.append(b); }
   d.append(document.createTextNode(m.text));
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.append(d);
-  while (log.children.length > 8) log.firstChild.remove();
-  setTimeout(() => d.classList.add('old'), 12000); setTimeout(() => d.remove(), 45000);
+  while (log.children.length > 100) log.firstChild.remove();
+  if (atBottom) log.scrollTop = log.scrollHeight; // przewinięta historia zostaje na miejscu
 }
 function showBubble(id, text) {
   const old = bubbles.get(id); if (old) old.el.remove();
