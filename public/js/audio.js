@@ -155,8 +155,49 @@ export const sfx = {
   lose() { [392, 349, 311, 262].forEach((f, i) => tone({ type: 'triangle', f, dur: 0.32, gain: 0.2, when: i * 0.17 })); },
   click() { tone({ type: 'triangle', f: 520, f2: 760, dur: 0.07, gain: 0.12 }); },
   hover() { tone({ type: 'sine', f: 900, dur: 0.035, gain: 0.04 }); },
-  pickup() { tone({ type: 'sine', f: 660, f2: 1320, dur: 0.18, gain: 0.2 }); tone({ type: 'triangle', f: 990, f2: 1980, dur: 0.22, gain: 0.12, when: 0.07 }); },
-  land() { tone({ type: 'sine', f: 120, f2: 50, dur: 0.18, gain: 0.25 }); },
+  pickup(type = 'generic') {
+    const T = {
+      nitro: () => { tone({ type: 'sawtooth', f: 200, f2: 900, dur: 0.28, gain: 0.14 }); tone({ type: 'sine', f: 1200, f2: 2400, dur: 0.2, gain: 0.1, when: 0.12 }); },
+      ammo: () => { for (let i = 0; i < 3; i++) tone({ type: 'square', f: 420 + i * 120, dur: 0.05, gain: 0.12, when: i * 0.07 }); tone({ type: 'triangle', f: 1400, dur: 0.1, gain: 0.1, when: 0.24 }); },
+      oil: () => { tone({ type: 'sine', f: 380, f2: 110, dur: 0.22, gain: 0.22 }); tone({ type: 'sine', f: 560, f2: 160, dur: 0.18, gain: 0.12, when: 0.08 }); },
+      repair: () => { [880, 1175, 1568].forEach((f, i) => tone({ type: 'sine', f, dur: 0.22, gain: 0.14, when: i * 0.08 })); },
+      bomb: () => { for (let i = 0; i < 3; i++) tone({ type: 'square', f: 760, dur: 0.05, gain: 0.12, when: i * 0.1 }); tone({ type: 'sine', f: 140, f2: 70, dur: 0.2, gain: 0.2, when: 0.32 }); },
+      rocket: () => { tone({ type: 'sine', f: 1500, dur: 0.07, gain: 0.12 }); tone({ type: 'sine', f: 1500, dur: 0.07, gain: 0.12, when: 0.12 }); tone({ type: 'sawtooth', f: 300, f2: 1100, dur: 0.3, gain: 0.1, when: 0.24 }); },
+      shield: () => { tone({ type: 'sine', f: 500, f2: 1500, dur: 0.4, gain: 0.14 }); tone({ type: 'triangle', f: 1000, f2: 3000, dur: 0.35, gain: 0.07, when: 0.05 }); },
+      generic: () => { tone({ type: 'sine', f: 660, f2: 1320, dur: 0.18, gain: 0.2 }); tone({ type: 'triangle', f: 990, f2: 1980, dur: 0.22, gain: 0.12, when: 0.07 }); },
+    };
+    (T[type] || T.generic)();
+  },
+  /* kolizje zależne od materiału */
+  wall(power = 0.5, pan = 0) {
+    if (!ctx) return; const p = Math.min(1, power), t = ctx.currentTime;
+    const src = noiseSrc(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.5 * p + 0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.45);
+    tone({ type: 'sine', f: 820, dur: 0.45, gain: 0.12 * p + 0.03 }); tone({ type: 'sine', f: 1130, dur: 0.35, gain: 0.08 * p + 0.02 });
+    tone({ type: 'sine', f: 120, f2: 50, dur: 0.2, gain: 0.35 * p + 0.1 });
+  },
+  carHit(power = 0.5) {
+    if (!ctx) return; const p = Math.min(1, power), t = ctx.currentTime;
+    const src = noiseSrc(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 650; bp.Q.value = 0.8;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.6 * p + 0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.35);
+    tone({ type: 'sawtooth', f: 160, f2: 55, dur: 0.22, gain: 0.3 * p + 0.08 }); tone({ type: 'square', f: 300, f2: 90, dur: 0.08, gain: 0.06 * p });
+  },
+  pillar(power = 0.5) {
+    if (!ctx) return; const p = Math.min(1, power), t = ctx.currentTime;
+    const src = noiseSrc(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.7 * p + 0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.4);
+    tone({ type: 'sine', f: 95, f2: 36, dur: 0.4, gain: 0.55 * p + 0.15 });
+  },
+  land(power = 0.5) { const p = Math.min(1, power); tone({ type: 'sine', f: 110, f2: 38, dur: 0.22, gain: 0.35 * p + 0.1 }); tone({ type: 'square', f: 220, f2: 80, dur: 0.06, gain: 0.06 * p }); },
+  splash() {
+    if (!ctx) return; const t = ctx.currentTime;
+    const src = noiseSrc(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(1800, t); bp.frequency.exponentialRampToValueAtTime(600, t + 0.5); bp.Q.value = 0.9;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.6);
+  },
   nitro() {
     if (!ctx) return; const t = ctx.currentTime;
     const src = noiseSrc(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
@@ -175,6 +216,12 @@ export const sfx = {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
     src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 1.4);
     tone({ type: 'sine', f: 110, f2: 28, dur: 0.9, gain: 0.9 });
+  },
+  thunder() {
+    if (!ctx) return; const t = ctx.currentTime;
+    const src = noiseSrc(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(90, t + 2.4);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.7, t + 0.08); g.gain.exponentialRampToValueAtTime(0.25, t + 0.7); g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+    src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 2.7);
   },
   rocket() { tone({ type: 'sawtooth', f: 180, f2: 700, dur: 0.5, gain: 0.18 }); if (ctx) { const t = ctx.currentTime; const src = noiseSrc(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7); src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.75); } },
   shield() { tone({ type: 'sine', f: 300, f2: 900, dur: 0.5, gain: 0.2 }); tone({ type: 'triangle', f: 600, f2: 1800, dur: 0.5, gain: 0.1, when: 0.05 }); },

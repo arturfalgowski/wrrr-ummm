@@ -15,8 +15,20 @@
 </head>
 <body>
 <canvas id="gl"></canvas>
+<div id="flash"></div>
 <div id="tags"></div>
 <div id="bubbles"></div>
+
+<div id="rooms-modal" class="modal hidden"><div class="card wide">
+  <h3>Pokoje publiczne</h3>
+  <div id="rooms-list" class="rooms"></div>
+  <div class="row-btns"><button class="btn ghost" id="rooms-refresh">Odśwież</button><button class="btn ghost" id="rooms-close">Zamknij</button></div>
+</div></div>
+
+<div id="profile" class="modal hidden"><div class="card narrow" id="profile-card"></div></div>
+
+<div id="replay-ui" class="hidden"><span>POWTÓRKA</span><button class="btn small" id="replay-cam">Kamera: auto</button><button class="btn small primary" id="replay-close">Zamknij powtórkę</button></div>
+<div id="spec-banner" class="hidden">OBSERWUJESZ</div>
 
 <div id="loading"><div class="spinner"></div><span>Budowanie toru…</span></div>
 
@@ -89,6 +101,7 @@
     <div class="seg wide2" id="mode-list"></div>
     <h3>Kolor auta</h3>
     <div class="swatches" id="menu-colors"></div>
+    <details class="detbox" id="custom-box"><summary>Personalizacja auta (numer, wzór, felgi)</summary><div class="settings" id="menu-custom"></div></details>
     <div id="track-section">
     <h3>Wybierz tor</h3>
     <div class="tracks" id="track-list"></div>
@@ -100,11 +113,17 @@
       <button class="btn primary hidden" id="btn-join">Dołącz do wyścigu</button>
       <button class="btn ghost" id="btn-solo">Trening solo</button>
     </div>
+    <div class="row-btns">
+      <button class="btn ghost" id="btn-quick">Szybka gra</button>
+      <button class="btn ghost" id="btn-rooms">Pokoje publiczne</button>
+    </div>
     <div class="err" id="menu-err"></div>
   </div>
   <div class="card rank">
     <h3>Ranking</h3>
+    <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button></div>
     <ol id="rank-menu" class="ranklist"></ol>
+    <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
   </div>
 </section>
 
@@ -120,6 +139,7 @@
     <h3>Twoje auto <span class="muted" style="text-transform:none;letter-spacing:0">— podgląd widzisz obok; kolory innych graczy są zablokowane</span></h3>
     <div class="seg wide" id="lobby-cars"></div>
     <div class="swatches" id="lobby-colors"></div>
+    <details class="detbox"><summary>Personalizacja auta (numer, wzór, felgi)</summary><div class="settings" id="lobby-custom"></div></details>
     <div class="seg wide2" id="lobby-mode" style="margin-top:16px"></div>
     <div id="lobby-track-section">
     <h3>Tor <span class="muted" id="track-note" style="text-transform:none;letter-spacing:0"></span></h3>
@@ -135,16 +155,27 @@
   </div>
 </section>
 
+<section id="scr-spec" class="screen left hidden">
+  <div class="card wide">
+    <h3>Obserwujesz pokój <b id="spec-code" class="code"></b></h3>
+    <p class="muted" id="spec-info">Czekasz na start wyścigu — gdy ruszy, zobaczysz go na żywo (A/D zmienia kamerę).</p>
+    <div class="players" id="spec-players"></div>
+    <div class="row-btns"><button class="btn ghost" id="btn-spec-leave">Wyjdź</button></div>
+  </div>
+</section>
+
 <section id="scr-results" class="screen center hidden">
   <div class="card res">
     <div class="res-title" id="res-title">Wygrana!</div>
     <div class="res-sub" id="res-sub"></div>
     <table class="restable" id="res-table"></table>
+    <div class="tour hidden" id="tour-box"><h4 id="tour-title">Turniej</h4><table class="restable" id="tour-table"></table><div class="muted" id="tour-note" style="font-size:12px;margin-top:6px"></div><div class="tracks" id="tour-tracks" style="margin-top:10px"></div></div>
     <div class="rematch hidden" id="rematch-box"><h4>Rewanż</h4><div id="rematch-list"></div></div>
-    <h4>Ranking</h4>
+    <h4 id="rank-results-title">Ranking</h4>
     <ol id="rank-results" class="ranklist compact"></ol>
     <div class="row-btns">
       <button class="btn primary" id="btn-rematch">Rewanż</button>
+      <button class="btn ghost" id="btn-replay">Powtórka</button>
       <button class="btn ghost" id="btn-menu">Menu</button>
     </div>
   </div>

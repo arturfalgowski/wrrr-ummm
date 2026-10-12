@@ -74,9 +74,9 @@ export const THEMES = {
   pustynia: { sky: 0xf0d3a8, hemi: [0xffe6c0, 0x9a7a5a, 0.9], sun: [0xffc487, 3.5], grass: [217, 184, 120], light: [236, 206, 150], dark: [190, 150, 90], flowers: false,
     gravel: '#a9764f', gravel2: '#c28f62', gravelA: 'rgba(255,215,160,0.3)', gravelB: 'rgba(90,55,30,0.3)', asphalt: '#625b6b',
     foliage: ['#7a5a3a', '#8f8a3e', '#a39a4a', '#b6ab58'], trees: 90, rock: 0xc09270, rocks: 140, bush: [0.12, 0.45, 0.4], bushes: 90 },
-  jesien: { sky: 0x8b95a1, hemi: [0xbcc6d4, 0x58504a, 0.95], sun: [0xdfe6f2, 1.5], grass: [96, 112, 62], light: [130, 140, 70], dark: [60, 76, 40], flowers: false,
-    gravel: '#6f5a46', gravel2: '#85705a', gravelA: 'rgba(210,190,160,0.22)', gravelB: 'rgba(40,30,20,0.35)', asphalt: '#44434f',
-    foliage: ['#4e3a2b', '#9b3f16', '#c0701a', '#d9a02c'], trees: 300, rock: 0x8c8678, rocks: 70, bush: [0.08, 0.5, 0.3], bushes: 160 },
+  jesien: { sky: 0xe9c9a2, hemi: [0xffe3c2, 0x8a6a52, 0.9], sun: [0xffbf80, 3.3], grass: [150, 126, 62], light: [196, 150, 60], dark: [104, 76, 40], flowers: false,
+    gravel: '#94704a', gravel2: '#ad8760', gravelA: 'rgba(255,215,160,0.28)', gravelB: 'rgba(70,40,25,0.3)', asphalt: '#4f4a58',
+    foliage: ['#5b4331', '#b4491a', '#d17f1c', '#e9b53a'], trees: 300, rock: 0x9a8670, rocks: 70, bush: [0.07, 0.6, 0.38], bushes: 160 },
   wyspa: { sky: 0xaee3f2, hemi: [0xdaf4ff, 0x7aa08e, 0.95], sun: [0xfff1cf, 3.2], grass: [74, 192, 122], light: [118, 224, 156], dark: [30, 142, 92], flowers: true,
     gravel: '#e4d29a', gravel2: '#efe0b2', gravelA: 'rgba(255,255,255,0.4)', gravelB: 'rgba(150,120,70,0.25)', asphalt: '#575868',
     foliage: ['#7a5a3a', '#1c9a68', '#2eb87a', '#63dca6'], trees: 220, rock: 0xb8b4a8, rocks: 50, bush: [0.38, 0.5, 0.42], bushes: 140 },
@@ -175,6 +175,7 @@ export function buildWorld(scene, renderer, track) {
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
   root.add(sun, sun.target);
   world.sun = sun;
+  world.env = { sun, hemi, baseSky: new THREE.Color(T.sky), sunBase: { color: new THREE.Color(T.sun[0]), intensity: T.sun[1] }, hemiBase: { sky: new THREE.Color(T.hemi[0]), ground: new THREE.Color(T.hemi[1]), intensity: T.hemi[2] } };
 
   // ---------- Teren ----------
   const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ map: grassTile(T), roughness: 1 }));
@@ -224,11 +225,11 @@ export function buildWorld(scene, renderer, track) {
   root.add(ground);
 
   // ---------- Asfalt, krawężniki, linie ----------
-  const hy = track.hy, rainy = !!track.rain;
-  world.rain = rainy;
+  const hy = track.hy;
   const asphalt = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, (k) => 0.02 + hy[k], { vScale: 16 }),
-    new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt), roughness: rainy ? 0.32 : 0.88, metalness: rainy ? 0.25 : 0.0, color: rainy ? 0xa9abb8 : 0xffffff }));
+    new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt), roughness: 0.88, metalness: 0.0 }));
   asphalt.receiveShadow = true; root.add(asphalt);
+  world.asphaltMat = asphalt.material;
 
   // podpory jezdni: płyta mostu/hopki z bokami, filary, laguna pod łukiem
   const elevated = (i) => hy[i] > 0.05 || hy[(i + 1) % N] > 0.05;
@@ -321,6 +322,17 @@ export function buildWorld(scene, renderer, track) {
     }
   }
   posts.count = pc; posts.castShadow = true; root.add(posts);
+
+  // nocne światła przy bandzie (widoczne tylko w nocy)
+  {
+    const lamp = new THREE.InstancedMesh(new THREE.SphereGeometry(0.42, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe2a8 }), Math.ceil(N / 20) * 2 + 4);
+    let lc = 0;
+    for (const side of [-1, 1]) for (let i = 0; i < N; i += 20) {
+      const off = side * (track.bar[i] + 0.2);
+      lamp.setMatrixAt(lc++, m4.compose(v3.set(track.x[i] - track.tz[i] * off, 1.35 + hy[i], track.z[i] + track.tx[i] * off), q4.identity(), s3));
+    }
+    lamp.count = lc; lamp.visible = false; root.add(lamp); world.env.nightMesh = lamp;
+  }
 
   // opony w zewnętrznych łukach zakrętów (rozbijane przy uderzeniu)
   const tireCols = ['#1c1b22', '#ececf2', '#d8282e', '#1c1b22'];

@@ -82,7 +82,7 @@ export class Track {
       this.bounds.minZ = Math.min(this.bounds.minZ, this.z[i]); this.bounds.maxZ = Math.max(this.bounds.maxZ, this.z[i]);
     }
     this._features(def.features || {});
-    this.rain = !!def.rain;
+    this.gripMul = 1;
   }
 
   /** wysokość jezdni (mosty, łuki, hopki), położenie barier i strefy poślizgu */

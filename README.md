@@ -25,6 +25,17 @@ W trakcie jazdy w rogu ekranu jest **minimapa**: zarys toru, pozycje wszystkich 
 Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otworzy drugi gracz
 (adres LAN, np. `http://192.168.0.10:3000`, albo wdrożenie na serwerze). Link w lobby jest budowany z adresu, pod którym otwarto grę.
 
+## Turniej, boty, pogoda, personalizacja
+
+- **Turniej:** opcja w ustawieniach wyścigu — seria 3 wyścigów, punkty 10-6-4-2, po każdej rundzie klasyfikacja; tor kolejnej rundy wybiera host (w solo — Ty). Po trzeciej rundzie ogłaszany jest mistrz.
+- **Boty w wyścigu:** 0–3 botów jedzie po torze (w solo i w pokoju; w multiplayerze symuluje je host). Biorą udział w klasyfikacji i punktach.
+- **Pogoda i pora dnia:** deszcz i burza (mokry asfalt, mniejsza przyczepność, błyski i grzmoty), zmierzch i noc z reflektorami aut i światłami przy bandzie. Opcja *Losowo* losuje na każdy wyścig; w pokoju losuje serwer, więc wszyscy mają to samo.
+- **Personalizacja aut:** numer startowy 1–99, wzór lakieru (pasy / płomienie / szachownica / brak), 4 style felg i kolor felg, tablica z nickiem. Widoczne dla wszystkich graczy.
+- **Pokoje publiczne i obserwatorzy:** lista otwartych pokoi („Pokoje publiczne”), **Szybka gra**, a do trwającego wyścigu można dołączyć jako widz (A/D zmienia kamerę). Host może ukryć pokój z listy.
+- **Powtórka:** po wyścigu przycisk **Powtórka** odtwarza ostatnie ~12 s w zwolnionym tempie z kamerami: pościg, z góry, z boku.
+- **Rankingi:** osobne dla wyścigów i areny, klik w gracza otwiera profil (zwycięstwa, drugie miejsca, skuteczność, najlepszy czas).
+- **Dźwięk:** kolizje zależne od materiału (bariera, auto, słup, opony, lądowanie, kałuża) i osobne dźwięki zebrania każdej paczki.
+
 ## Czat i reakcje
 
 **Enter** otwiera czat (Enter wysyła, Esc zamyka), klawisze **1–9** wysyłają szybkie reakcje (GG!, Dobra jazda!, Uważaj!, Haha, Nie ze mną!, Pomocy!, Rewanż?, Ale numer!, Do mety!).

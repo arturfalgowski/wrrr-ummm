@@ -31,13 +31,14 @@ export function buildArenaWorld(scene, renderer) {
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.42;
   }
   world.sky = new THREE.Color(0x8d7fb4);
-  root.add(new THREE.HemisphereLight(0xcfd2ff, 0x4a4256, 1.0));
+  const hemi = new THREE.HemisphereLight(0xcfd2ff, 0x4a4256, 1.0); root.add(hemi);
   const sun = new THREE.DirectionalLight(0xffc99a, 3.0);
   sun.position.set(-90, 95, 85); sun.target.position.set(0, 0, 0);
   sun.castShadow = true; const sm = Math.min(2048, renderer.capabilities.maxTextureSize); sun.shadow.mapSize.set(sm, sm);
   Object.assign(sun.shadow.camera, { left: -118, right: 118, top: 118, bottom: -118, near: 20, far: 380 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.05;
   root.add(sun, sun.target);
+  world.env = { sun, hemi, baseSky: new THREE.Color(0x8d7fb4), sunBase: { color: new THREE.Color(0xffc99a), intensity: 3.0 }, hemiBase: { sky: new THREE.Color(0xcfd2ff), ground: new THREE.Color(0x4a4256), intensity: 1.0 } };
 
   // ---- daleka płaszczyzna ----
   const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ color: 0x34343f, roughness: 1 }));

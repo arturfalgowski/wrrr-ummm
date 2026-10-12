@@ -63,7 +63,7 @@ export class CarState {
     this.onGrass = ad > ROAD_HALF + KERB_W;
     const surf = !this.onGrass && track.surfaceAt ? track.surfaceAt(q.idx, q.d) : null;
     this.surf = surf;
-    const surfGrip = (this.onGrass ? 0.5 : 1) * (surf === 'ice' ? 0.2 : surf === 'water' ? 0.5 : 1) * (track.rain && !this.onGrass ? 0.85 : 1);
+    const surfGrip = (this.onGrass ? 0.5 : 1) * (surf === 'ice' ? 0.2 : surf === 'water' ? 0.5 : 1) * (!this.onGrass ? (track.gripMul ?? 1) : 1);
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
     const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
