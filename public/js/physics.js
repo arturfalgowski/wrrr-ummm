@@ -24,7 +24,7 @@ export class CarState {
     this.hit = 0;           // siła ostatniego uderzenia (do dźwięku/iskier)
     this.wallContact = false;
     this.y = undefined; this.vy = 0; this.vyT = 0; this.air = false; this.landHit = 0;
-    this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
+    this.damage = 0; this.pull = 1; this.hp = 100; this.spin = 0; this._oilPrev = false; this.surf = null; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
   }
 
   place(track, p, lateral) {
@@ -52,10 +52,18 @@ export class CarState {
   _sub(track, input, h) {
     const def = this.def;
     const q = track.query(this.x, this.z, this.lastIdx);
+    if (this.air) { // lot po hopce/moście: bez trakcji, tylko balistyka poziomu
+      this.x += this.vx * h; this.z += this.vz * h;
+      this.vf = this.vx * Math.cos(this.yaw) + this.vz * Math.sin(this.yaw); this.vl = -this.vx * Math.sin(this.yaw) + this.vz * Math.cos(this.yaw);
+      this._walls(track, q, h);
+      return;
+    }
     const ad = Math.abs(q.d);
     this.onKerb = ad > ROAD_HALF && ad <= ROAD_HALF + KERB_W;
     this.onGrass = ad > ROAD_HALF + KERB_W;
-    const surfGrip = this.onGrass ? 0.5 : 1;
+    const surf = !this.onGrass && track.surfaceAt ? track.surfaceAt(q.idx, q.d) : null;
+    this.surf = surf;
+    const surfGrip = (this.onGrass ? 0.5 : 1) * (surf === 'ice' ? 0.2 : surf === 'water' ? 0.5 : 1) * (track.rain && !this.onGrass ? 0.85 : 1);
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
     const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
@@ -77,7 +85,11 @@ export class CarState {
     this.hand = !!input.hand && Math.abs(this.vf) > 3;
     yawRate += this.pull * this.damage * 0.3 * lowSpeed; // uszkodzone auto ściąga na bok
     if (input.hand) yawRate *= 1.45;
-    if (this.inOil) yawRate = yawRate * 0.55 + Math.sin(this.t * 9 + this.x * 0.3) * 1.5 * lowSpeed;
+    if (this.inOil) {
+      if (!this._oilPrev) { this.spin = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 1.2); this.vl += Math.sign(this.spin) * 5 * lowSpeed; } // wybicie z toru przy wjeździe w plamę
+      yawRate = yawRate * 0.25 + Math.sin(this.t * 7 + this.x * 0.3) * 2.6 * lowSpeed + this.spin;
+    }
+    this._oilPrev = this.inOil; this.spin *= Math.exp(-1.1 * h);
     // samoograniczający się drift: im większy kąt poślizgu, tym mniej skręt go dalej powiększa
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
     if (this.steer * vl < 0) {
@@ -114,7 +126,7 @@ export class CarState {
     let grip = def.grip * surfGrip;
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
     if (input.hand) grip = Math.min(grip, 2.4);
-    if (this.inOil) grip = Math.min(grip, 0.7);
+    if (this.inOil) grip = Math.min(grip, 0.22);
     const speedBefore = Math.hypot(vf, vl);
     vl -= vl * (1 - Math.exp(-grip * h));
     // przekierowanie pędu: boczny poślizg zamienia się w ruch do przodu zamiast po prostu znikać
@@ -129,10 +141,14 @@ export class CarState {
     this.x += this.vx * h;
     this.z += this.vz * h;
 
-    // bariery po obu stronach toru
+    this._walls(track, q, h);
+  }
+
+  /** bariery po obu stronach toru + postęp wzdłuż toru */
+  _walls(track, q, h) {
     const q2 = track.query(this.x, this.z, q.idx);
     this.d = q2.d;
-    const lim = BARRIER - 1.25;
+    const lim = (track.barrierAt ? track.barrierAt(q2.idx) : BARRIER) - 1.25;
     this.wallContact = false;
     if (Math.abs(q2.d) > lim) {
       const side = Math.sign(q2.d);
@@ -161,6 +177,32 @@ export class CarState {
     this.lastIdx = q2.idx;
     this.idx = q2.idx;
   }
+}
+
+/** Wysokość jezdni (mosty, łuki, hopki): jazda po profilu drogi, skoki z uskoków, lądowanie. */
+export function trackHeightStep(car, track, dt) {
+  if (!track.hy) return;
+  const idx = car.idx, lim = track.barrierAt(idx);
+  const hn = Math.abs(car.d) <= (lim < 12 ? lim : ROAD_HALF + KERB_W + 0.4) ? track.heightAt(idx) : 0;
+  if (car.y === undefined) { car.y = hn; car.vy = 0; car.vyT = 0; car.air = false; }
+  car.landHit = 0;
+  if (car.air) {
+    car.vy -= 30 * dt; car.y += car.vy * dt;
+    if (car.y <= hn) {
+      const imp = -(car.vy - track.slopeAt(idx) * car.vf);
+      car.y = hn; car.air = false; car.vyT = 0; car.vy = 0;
+      if (imp > 18) car.landHit = Math.min(25, (imp - 18) * 1.2);
+    }
+    return;
+  }
+  const sl = track.slopeAt(idx);
+  if (Math.abs(sl) > 0.004) { // grawitacja na pochyłości (podjazd zwalnia, zjazd przyspiesza)
+    const i = ((Math.floor(idx) % track.N) + track.N) % track.N;
+    car.vx -= track.tx[i] * sl * 16 * dt; car.vz -= track.tz[i] * sl * 16 * dt;
+  }
+  const ballistic = car.y + car.vyT * dt - 0.5 * 30 * dt * dt;
+  if (car.vyT > 2.5 && ballistic > hn + 0.12) { car.air = true; car.vy = Math.min(car.vyT, 12); car.y = Math.max(ballistic, hn); }
+  else { car.vyT = clamp((hn - car.y) / dt * 0.6 + car.vyT * 0.4, -15, 15); car.y = hn; }
 }
 
 /** Kolizja dwóch aut modelowanych jako dwa okręgi. Zmienia tylko `me` (przeciwnik robi to samo u siebie). */

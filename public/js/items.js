@@ -66,11 +66,11 @@ export class Items {
   }
 
   /* ---------- paczki ---------- */
-  spawn(id, type, x, z) {
+  spawn(id, type, x, z, ghOverride) {
     if (this.crates.has(id)) return;
     const col = new THREE.Color(ITEM_TYPES[type].color);
     const mat = new THREE.MeshStandardMaterial({ map: crateTexture(type), emissiveMap: crateTexture(type), emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.4, metalness: 0.2 });
-    const gh = this.ground ? this.ground(x, z) : 0;
+    const gh = ghOverride !== undefined ? ghOverride : this.ground ? this.ground(x, z) : 0;
     const mesh = new THREE.Mesh(this.boxGeo, mat);
     mesh.castShadow = true; mesh.position.set(x, gh + 34, z);
     const beam = new THREE.Mesh(this.beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
@@ -90,8 +90,8 @@ export class Items {
   }
   _free(c) { this.parent.remove(c.mesh, c.beam, c.ring); c.mesh.material.dispose(); c.beam.material.dispose(); c.ring.material.dispose(); this.crates.delete(c.id); }
   /** zwraca id paczki w zasięgu (tylko wylądowane) */
-  touch(x, z, r) {
-    for (const c of this.crates.values()) if (c.landed && !c.dying && Math.hypot(c.x - x, c.z - z) < r) return c;
+  touch(x, z, r, y = 0) {
+    for (const c of this.crates.values()) if (c.landed && !c.dying && Math.abs(c.gh - y) < 3.5 && Math.hypot(c.x - x, c.z - z) < r) return c;
     return null;
   }
 
@@ -110,11 +110,11 @@ export class Items {
   /* ---------- olej ---------- */
   dropOil(x, z, owner) {
     const mesh = new THREE.Mesh(this.oilGeo, this.oilMat.clone());
-    const rx = 3.4 + Math.random() * 0.6, rz = 3.0 + Math.random() * 0.6;
+    const rx = 4.8 + Math.random() * 0.8, rz = 4.2 + Math.random() * 0.8;
     mesh.position.set(x, 0.06, z); mesh.rotation.y = Math.random() * 6.28; mesh.scale.set(0.01, 1, 0.01);
     mesh.receiveShadow = true;
     this.parent.add(mesh);
-    this.oils.push({ x, z, r: 3.1, rx, rz, mesh, age: 0, life: 14, owner });
+    this.oils.push({ x, z, r: 4.4, rx, rz, mesh, age: 0, life: 14, owner });
   }
   inOil(x, z) {
     for (const o of this.oils) if (o.age > 0.15 && Math.hypot(o.x - x, o.z - z) < o.r) return true;

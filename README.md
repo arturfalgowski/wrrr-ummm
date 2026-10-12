@@ -17,7 +17,7 @@ Zmienna `PORT` zmienia port. Ranking trafia do `data/ranking.db`.
 
 1. Wpisz nick (zapamiętany w LocalStorage), wybierz auto.
 2. **Stwórz wyścig** → skopiuj link i wyślij go znajomym (do 4 graczy w pokoju). Po otwarciu linku wybierają auto i dołączają.
-3. Host wybiera tor w lobby (5 torów: Dolina Sosen, Pustynny Owal, Zimowa Serpentyna, Jesienna Pętla, Nadmorski Wir). Gdy wszyscy w pokoju (min. 2) klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
+3. Host wybiera tor w lobby (5 torów, każdy z innymi atrakcjami: Dolina Sosen (hopka, kałuża), Pustynny Owal (dwie hopki), Zimowa Serpentyna (lodowe plamy), Jesienna Pętla (deszcz, ósemka z mostem, kałuże), Nadmorski Wir (most nad lagunią, hopka, kałuża)). Gdy wszyscy w pokoju (min. 2) klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
 4. **Trening solo** — jazda bez przeciwnika, opcjonalnie z **duchem** swojego najlepszego okrążenia (zapisywany w przeglądarce osobno dla każdego toru).
 
 W trakcie jazdy w rogu ekranu jest **minimapa**: zarys toru, pozycje wszystkich graczy (kolor auta + pierwsza litera nicku), paczki i duch.

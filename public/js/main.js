@@ -1,7 +1,7 @@
 // Wrrr Ummm — sterowanie grą: renderer, kamera izometryczna, pętla gry, UI, multiplayer.
 import * as THREE from 'three';
 import { Track, TRACK_DEFS, TRACK_IDS, ROAD_HALF, BARRIER } from './track.js';
-import { CarState, CAR_DEFS, CAR_COLORS, stripeFor, carVsCar } from './physics.js';
+import { CarState, CAR_DEFS, CAR_COLORS, stripeFor, carVsCar, trackHeightStep } from './physics.js';
 import { buildCar } from './car.js';
 import { buildWorld } from './world.js';
 import { createPost } from './post.js';
@@ -11,7 +11,7 @@ import { Minimap } from './minimap.js';
 import { ARENA_R, SPAWNS, OBSTACLES, field as arenaField, heightAt, arenaStep, tiltAt } from './arena.js';
 import { buildArenaWorld } from './arenaworld.js';
 import { Music } from './music.js';
-import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted } from './audio.js';
+import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted, setRain } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -54,6 +54,8 @@ function useTrack(id) {
   ({ track, world } = worlds[id]);
   trackId = id;
   items.ground = id === 'arena' ? heightAt : null; particles.ground = items.ground;
+  scene.environmentIntensity = world.rain ? 0.9 : 0.42;
+  setRainAudio();
   if (id === 'arena') minimap.setArena(ARENA_R, OBSTACLES); else minimap.setTrack(track);
   world.root.visible = true;
   scene.background = world.sky;
@@ -61,6 +63,32 @@ function useTrack(id) {
   items.clear(); particles.clear(); skids.clear();
   cam.first = true;
 }
+
+// ======================= Deszcz =======================
+const rain = (() => {
+  const n = 5000, pos = new Float32Array(n * 6), end = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) { const x = Math.random(), y = Math.random(), z = Math.random(); pos.set([x, y, z, x, y, z], i * 6); end[i * 2] = 0; end[i * 2 + 1] = 1; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(190, 70, 190) } },
+    vertexShader: `attribute float aEnd; uniform float uTime; uniform vec3 uCenter; uniform vec3 uBox; varying float vA;
+      void main() {
+        vec3 p = position;
+        float sp = 0.9 + fract(p.x * 91.7 + p.z * 37.3) * 0.5;
+        p.y = fract(p.y - uTime * 0.55 * sp);
+        vec3 w = uCenter + vec3((p.x - 0.5) * uBox.x, p.y * uBox.y, (p.z - 0.5) * uBox.z);
+        w += aEnd * vec3(-0.9, 3.2, -0.3);
+        vA = 0.18 + 0.32 * (1.0 - aEnd);
+        gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
+      }`,
+    fragmentShader: `varying float vA; void main() { gl_FragColor = vec4(0.78, 0.84, 0.95, vA); }`,
+  });
+  const l = new THREE.LineSegments(g, m); l.frustumCulled = false; l.visible = false; l.renderOrder = 6;
+  scene.add(l); return l;
+})();
+const setRainAudio = () => setRain(!!(world?.rain) && S.mode !== 'menu');
 
 // ======================= Kamera =======================
 const RACE_FOV = 24;
@@ -119,10 +147,15 @@ function setCar(who, carId, slot, color) {
   scene.add(who.vis.group);
   who.vis.sync(who.st, 0);
 }
-function stepCar(st, inp, dt) { if (isArena()) arenaStep(st, inp, dt); else st.step(track, inp, dt); }
+function stepCar(st, inp, dt) { if (isArena()) arenaStep(st, inp, dt); else { st.step(track, inp, dt); trackHeightStep(st, track, dt); } }
 /** nachylenie auta względem terenu (tylko arena) */
 function updateTilt(st) {
-  if (!isArena()) { st.tiltX = 0; st.tiltZ = 0; return; }
+  if (!isArena()) { // tor: nachylenie jezdni (mosty, hopki)
+    st.tiltX = 0;
+    if (st.air) st.tiltZ = clamp(Math.atan2(st.vy || 0, Math.max(8, Math.hypot(st.vx, st.vz))) * 0.7, -0.6, 0.6);
+    else st.tiltZ = track.hy && st.idx !== undefined ? Math.atan(track.slopeAt(st.idx)) : 0;
+    return;
+  }
   if (st.air) { st.tiltX = 0; st.tiltZ = clamp(Math.atan2(st.vy, Math.max(8, Math.hypot(st.vx, st.vz))) * 0.7, -0.6, 0.6); }
   else { const [rx, pz] = tiltAt(st.x, st.z, st.yaw); st.tiltX = rx; st.tiltZ = pz; }
 }
@@ -176,7 +209,7 @@ function toast(msg, ms = 2200) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms);
 }
-function setMode(m) { S.mode = m; updateChatUi(); }
+function setMode(m) { S.mode = m; updateChatUi(); if (typeof setRainAudio === 'function') setRainAudio(); }
 
 function renderRanking(list) {
   for (const id of ['rank-menu', 'rank-results']) {
@@ -616,13 +649,14 @@ const wheelWorld = (st, lx, lz) => {
 };
 function carFx(c, key, dt) {
   const st = c.st; if (!st || !c.vis || c.dead) return;
+  if (!isArena()) particles.yOff = st.y || 0;
   const sp = Math.abs(st.vf);
   const M = c.vis.model;
   const sliding = (st.slip > 5.5 || st.hand) && sp > 7 && !st.onGrass;
   const braking = st.brakeLit && sp > 24;
   const [lx, lz] = wheelWorld(st, -M.wheelX, M.wheelZ);
   const [rx, rz] = wheelWorld(st, -M.wheelX, -M.wheelZ);
-  const on = !isArena() && (sliding || braking) && S.mode !== 'menu' && S.mode !== 'lobby';
+  const on = !isArena() && !st.air && (st.y || 0) < 0.3 && (sliding || braking) && S.mode !== 'menu' && S.mode !== 'lobby';
   skids.add(key + 'L', lx, lz, on, st.hand ? 0.42 : 0.34); skids.add(key + 'R', rx, rz, on, st.hand ? 0.42 : 0.34);
   if (S.mode === 'menu' || S.mode === 'lobby') return;
   const hp = st.hp ?? 100;
@@ -635,6 +669,15 @@ function carFx(c, key, dt) {
       const g = crit ? 0.16 : 0.55; tmpC.setRGB(g, g, g * 1.05);
       particles.emit(hx, 1.0, hz, st.vx * 0.1 + (Math.random() - 0.5), 2 + Math.random() * 2.5, st.vz * 0.1 + (Math.random() - 0.5), 1.2, 1.3, 4.6, tmpC, crit ? 0.8 : 0.6, 1);
       if (crit && Math.random() < 0.7) { tmpC.setRGB(1, 0.35 + Math.random() * 0.4, 0.08); particles.emit(hx, 0.9, hz, (Math.random() - 0.5) * 1.5, 2.5 + Math.random() * 2, (Math.random() - 0.5) * 1.5, 0.4, 2.2, 0.3, tmpC, 0.95, 2); }
+    }
+  }
+  if (st.surf && sp > 8 && !st.air) { // rozbryzgi z kałuży / lodowe iskry spod kół
+    c.smokeAcc += dt * 55 * clamp(sp / 35, 0.3, 1);
+    while (c.smokeAcc >= 1) {
+      c.smokeAcc -= 1;
+      const side = Math.random() > 0.5;
+      if (st.surf === 'ice') tmpC.setRGB(0.8, 0.92, 1); else tmpC.setRGB(0.55, 0.66, 0.8);
+      particles.emit(side ? lx : rx, 0.2, side ? lz : rz, st.vx * 0.15 + (Math.random() - 0.5) * 3, 2 + Math.random() * 3.5, st.vz * 0.15 + (Math.random() - 0.5) * 3, 0.55, 0.5, 1.5, tmpC, 0.6, 1.2, 9);
     }
   }
   if (st.nitro) {
@@ -1043,7 +1086,8 @@ function spawnCrate(id, type, u, l, ax, az) {
     for (const [ox, oz, or] of OBSTACLES) { const d = Math.hypot(ax - ox, az - oz); if (d < or + 3) { const k = (or + 3.5) / (d || 1); ax = ox + (ax - ox) * k; az = oz + (az - oz) * k; } }
     items.spawn(id, type, ax, az); return;
   }
-  const q = crateSpot(u, l); items.spawn(id, type, q.x, q.z);
+  const idx = Math.floor(u * track.N), q = track.at(idx, l * ROAD_HALF * 0.8);
+  items.spawn(id, type, q.x, q.z, track.hy ? track.heightAt(idx) : 0);
 }
 function applyPickup(type) {
   sfx.pickup();
@@ -1150,7 +1194,7 @@ function updateGameplay(dt, active) {
     for (const c of items.crates.values()) if (c.landed && !c.dying && c.age > 30) items.remove(c.id, false);
   }
   if (racingNow() && !me.dead) {
-    const c = items.touch(me.st.x, me.st.z, 3) || items.touch(me.st.x + Math.cos(me.st.yaw) * 1.6, me.st.z + Math.sin(me.st.yaw) * 1.6, 2.6);
+    const c = items.touch(me.st.x, me.st.z, 3, me.st.y || 0) || items.touch(me.st.x + Math.cos(me.st.yaw) * 1.6, me.st.z + Math.sin(me.st.yaw) * 1.6, 2.6, me.st.y || 0);
     if (c && !c.requested) {
       c.requested = true;
       if (S.solo) { applyPickup(c.type); items.remove(c.id); } else socket?.emit('pickup:take', { id: c.id });
@@ -1299,11 +1343,12 @@ function frame(now) {
   if (me.vis && me.st) me.vis.sync(me.st, dt);
   for (const o of oppList()) {
     o.st.accelNow += (((o.st.vf - o.prevVf) / dt) - o.st.accelNow) * Math.min(1, dt * 6); o.prevVf = o.st.vf;
+    if (!isArena() && track.hy && o.st.y !== undefined) { o.st.idx = ((o.st.progress % track.N) + track.N) % track.N; const gh = track.heightAt(o.st.idx); o.st.air = o.st.y - gh > 0.6; }
     if (isArena() && !o.bot) { const gh = heightAt(o.st.x, o.st.z); o.st.air = (o.st.y ?? gh) - gh > 0.6; if (o.st.y === undefined) o.st.y = gh; o.st.vy = 0; }
     updateTilt(o.st);
     o.vis.sync(o.st, dt);
   }
-  if (racing) { carFx(me, 'me', dt); for (const o of oppList()) carFx(o, 'o' + o.id, dt); }
+  if (racing) { carFx(me, 'me', dt); for (const o of oppList()) carFx(o, 'o' + o.id, dt); particles.yOff = 0; }
   particles.update(dt, camera, renderer.domElement.height);
   world.update(T);
 
@@ -1375,7 +1420,8 @@ function updateCamera(dt) {
   if (Math.abs(cam.shift) > 0.002) camera.setViewOffset(W, H, -W * cam.shift, 0, W, H); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   post.tilt.uniforms.uAmount.value = cam.tilt;
-  scene.fog.near = Math.max(160, dist * 1.5); scene.fog.far = scene.fog.near + Math.max(900, dist * 3);
+  rain.visible = !!world.rain; if (rain.visible) { rain.material.uniforms.uTime.value = T; rain.material.uniforms.uCenter.value.copy(cam.look).setY(Math.max(0, cam.look.y - 8)); }
+  scene.fog.near = Math.max(160, dist * 1.5) * (world.rain ? 0.55 : 1); scene.fog.far = scene.fog.near + Math.max(900, dist * 3);
 }
 
 let hudCache = {};

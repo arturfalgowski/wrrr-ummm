@@ -53,8 +53,9 @@ function wall(track, off, y0, y1, { pred = () => true, uScale = 4 } = {}) {
   for (let i = 0; i < track.N; i++) {
     if (!pred(i)) continue;
     const j = (i + 1) % track.N;
-    for (const [k, y, u, v] of [[i, y0, i * track.ds / uScale, 0], [i, y1, i * track.ds / uScale, 1], [j, y1, (i + 1) * track.ds / uScale, 1], [j, y0, (i + 1) * track.ds / uScale, 0]]) {
-      pos.push(track.x[k] - track.tz[k] * off, y, track.z[k] + track.tx[k] * off); uv.push(u, v);
+    for (const [k, hi, u, v] of [[i, 0, i * track.ds / uScale, 0], [i, 1, i * track.ds / uScale, 1], [j, 1, (i + 1) * track.ds / uScale, 1], [j, 0, (i + 1) * track.ds / uScale, 0]]) {
+      const o = typeof off === 'function' ? off(k) : off, yy = hi ? (typeof y1 === 'function' ? y1(k) : y1) : (typeof y0 === 'function' ? y0(k) : y0);
+      pos.push(track.x[k] - track.tz[k] * o, yy, track.z[k] + track.tx[k] * o); uv.push(u, v);
     }
     idx.push(n, n + 1, n + 2, n, n + 2, n + 3); n += 4;
   }
@@ -73,9 +74,9 @@ export const THEMES = {
   pustynia: { sky: 0xf0d3a8, hemi: [0xffe6c0, 0x9a7a5a, 0.9], sun: [0xffc487, 3.5], grass: [217, 184, 120], light: [236, 206, 150], dark: [190, 150, 90], flowers: false,
     gravel: '#a9764f', gravel2: '#c28f62', gravelA: 'rgba(255,215,160,0.3)', gravelB: 'rgba(90,55,30,0.3)', asphalt: '#625b6b',
     foliage: ['#7a5a3a', '#8f8a3e', '#a39a4a', '#b6ab58'], trees: 90, rock: 0xc09270, rocks: 140, bush: [0.12, 0.45, 0.4], bushes: 90 },
-  jesien: { sky: 0xe9c9a2, hemi: [0xffe3c2, 0x8a6a52, 0.9], sun: [0xffbf80, 3.3], grass: [150, 126, 62], light: [196, 150, 60], dark: [104, 76, 40], flowers: false,
-    gravel: '#94704a', gravel2: '#ad8760', gravelA: 'rgba(255,215,160,0.28)', gravelB: 'rgba(70,40,25,0.3)', asphalt: '#4f4a58',
-    foliage: ['#5b4331', '#b4491a', '#d17f1c', '#e9b53a'], trees: 300, rock: 0x9a8670, rocks: 70, bush: [0.07, 0.6, 0.38], bushes: 160 },
+  jesien: { sky: 0x8b95a1, hemi: [0xbcc6d4, 0x58504a, 0.95], sun: [0xdfe6f2, 1.5], grass: [96, 112, 62], light: [130, 140, 70], dark: [60, 76, 40], flowers: false,
+    gravel: '#6f5a46', gravel2: '#85705a', gravelA: 'rgba(210,190,160,0.22)', gravelB: 'rgba(40,30,20,0.35)', asphalt: '#44434f',
+    foliage: ['#4e3a2b', '#9b3f16', '#c0701a', '#d9a02c'], trees: 300, rock: 0x8c8678, rocks: 70, bush: [0.08, 0.5, 0.3], bushes: 160 },
   wyspa: { sky: 0xaee3f2, hemi: [0xdaf4ff, 0x7aa08e, 0.95], sun: [0xfff1cf, 3.2], grass: [74, 192, 122], light: [118, 224, 156], dark: [30, 142, 92], flowers: true,
     gravel: '#e4d29a', gravel2: '#efe0b2', gravelA: 'rgba(255,255,255,0.4)', gravelB: 'rgba(150,120,70,0.25)', asphalt: '#575868',
     foliage: ['#7a5a3a', '#1c9a68', '#2eb87a', '#63dca6'], trees: 220, rock: 0xb8b4a8, rocks: 50, bush: [0.38, 0.5, 0.42], bushes: 140 },
@@ -223,9 +224,44 @@ export function buildWorld(scene, renderer, track) {
   root.add(ground);
 
   // ---------- Asfalt, krawężniki, linie ----------
-  const asphalt = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, 0.02, { vScale: 16 }),
-    new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt), roughness: 0.88, metalness: 0.0 }));
+  const hy = track.hy, rainy = !!track.rain;
+  world.rain = rainy;
+  const asphalt = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, (k) => 0.02 + hy[k], { vScale: 16 }),
+    new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt), roughness: rainy ? 0.32 : 0.88, metalness: rainy ? 0.25 : 0.0, color: rainy ? 0xa9abb8 : 0xffffff }));
   asphalt.receiveShadow = true; root.add(asphalt);
+
+  // podpory jezdni: płyta mostu/hopki z bokami, filary, laguna pod łukiem
+  const elevated = (i) => hy[i] > 0.05 || hy[(i + 1) % N] > 0.05;
+  if (hy.some((v) => v > 0.05)) {
+    const concrete = new THREE.MeshStandardMaterial({ color: 0xb3ada5, roughness: 0.9, side: THREE.DoubleSide });
+    const slab = new THREE.Mesh(strip(track, -10.5, 10.5, (k) => hy[k] - 0.015, { pred: elevated }), concrete);
+    const under = new THREE.Mesh(strip(track, -10.5, 10.5, (k) => hy[k] - 1.5, { pred: elevated }), concrete);
+    const sideL = new THREE.Mesh(wall(track, -10.5, (k) => hy[k] - 1.5, (k) => hy[k], { pred: elevated }), concrete);
+    const sideR = new THREE.Mesh(wall(track, 10.5, (k) => hy[k] - 1.5, (k) => hy[k], { pred: elevated }), concrete);
+    for (const m of [slab, sideL, sideR]) { m.castShadow = true; m.receiveShadow = true; root.add(m); }
+    root.add(under);
+    const pil = [];
+    for (let i = 0; i < N; i += 16) if (hy[i] > 2.2) for (const sd of [-5.5, 5.5]) pil.push([track.x[i] - track.tz[i] * sd, track.z[i] + track.tx[i] * sd, hy[i] - 1.4]);
+    if (pil.length) {
+      const pm = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.0, 1.3, 1, 12), concrete, pil.length);
+      const mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), pp = new THREE.Vector3(), ss = new THREE.Vector3();
+      pil.forEach(([x, z, h], i) => pm.setMatrixAt(i, mm.compose(pp.set(x, h / 2 - 0.2, z), qq.identity(), ss.set(1, h, 1))));
+      pm.castShadow = true; pm.receiveShadow = true; root.add(pm);
+    }
+    for (const hp of track.humps) { // laguna pod łukiem
+      const inRange = (i) => i >= hp.i0 - 24 && i <= hp.i1 + 24;
+      const sand = new THREE.Mesh(strip(track, -62, 62, 0.02, { pred: inRange }), new THREE.MeshStandardMaterial({ color: 0xe8d9a8, roughness: 1 }));
+      const sea = new THREE.Mesh(strip(track, -52, 52, 0.06, { pred: (i) => i >= hp.i0 - 12 && i <= hp.i1 + 12 }), new THREE.MeshStandardMaterial({ color: 0x1fa6c4, roughness: 0.08, metalness: 0.5, transparent: true, opacity: 0.85 }));
+      sand.receiveShadow = true; sea.receiveShadow = true; root.add(sand, sea);
+    }
+  }
+  // kałuże i lód
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x1b2638, roughness: 0.03, metalness: 0.9, transparent: true, opacity: 0.8, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  const iceMat = new THREE.MeshStandardMaterial({ color: 0xc4e8ff, roughness: 0.04, metalness: 0.5, transparent: true, opacity: 0.82, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+  for (const p of track.puddles) {
+    const m = new THREE.Mesh(strip(track, p.l0 * ROAD_HALF, p.l1 * ROAD_HALF, (k) => 0.05 + hy[k], { pred: (i) => i >= p.i0 && i <= p.i1 }), p.kind === 'ice' ? iceMat : waterMat);
+    m.receiveShadow = true; m.renderOrder = 1; root.add(m);
+  }
 
   // kerby na wewnętrznej stronie zakrętów
   const KT = 0.02;
@@ -237,7 +273,7 @@ export function buildWorld(scene, renderer, track) {
   const red = new THREE.Color('#d6242c'), white = new THREE.Color('#f5f2ee');
   const kerbCol = (i, c) => c.copy(Math.floor(i / 3) % 2 ? red : white);
   for (const side of [1, -1]) {
-    const g = strip(track, side > 0 ? ROAD_HALF : -ROAD_HALF - KERB_W, side > 0 ? ROAD_HALF + KERB_W : -ROAD_HALF, 0.04,
+    const g = strip(track, side > 0 ? ROAD_HALF : -ROAD_HALF - KERB_W, side > 0 ? ROAD_HALF + KERB_W : -ROAD_HALF, (k) => 0.04 + hy[k],
       { pred: (i) => dil[i] && Math.sign(track.kappa[i]) === side, color: kerbCol });
     const m = new THREE.Mesh(g, kerbMat); m.receiveShadow = true; root.add(m);
   }
@@ -245,9 +281,9 @@ export function buildWorld(scene, renderer, track) {
   const lineMat = new THREE.MeshStandardMaterial({ color: 0xf0eef6, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const s of [-1, 1]) {
     const a = s * (ROAD_HALF - 0.75), b = s * (ROAD_HALF - 0.4);
-    const m = new THREE.Mesh(strip(track, Math.min(a, b), Math.max(a, b), 0.03, {}), lineMat); m.receiveShadow = true; root.add(m);
+    const m = new THREE.Mesh(strip(track, Math.min(a, b), Math.max(a, b), (k) => 0.03 + hy[k], {}), lineMat); m.receiveShadow = true; root.add(m);
   }
-  const dash = new THREE.Mesh(strip(track, -0.14, 0.14, 0.03, { pred: (i) => Math.floor(i / 5) % 2 === 0 }), lineMat);
+  const dash = new THREE.Mesh(strip(track, -0.14, 0.14, (k) => 0.03 + hy[k], { pred: (i) => Math.floor(i / 5) % 2 === 0 }), lineMat);
   dash.receiveShadow = true; root.add(dash);
   // linia startu
   const finish = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, 0.035, { pred: (i) => i === 0 || i === 1, vScale: 2 }),
@@ -273,13 +309,13 @@ export function buildWorld(scene, renderer, track) {
   let pc = 0;
   const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(1, 1, 1), eul = new THREE.Euler();
   for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(wall(track, side * BARRIER, 0.32, 0.98, { uScale: 4 }), railMat);
+    const rail = new THREE.Mesh(wall(track, (k) => side * track.bar[k], (k) => hy[k] + 0.32, (k) => hy[k] + (track.bar[k] < 12 ? 1.5 : 0.98), { uScale: 4 }), railMat);
     rail.castShadow = true; root.add(rail);
-    const cap = new THREE.Mesh(wall(track, side * BARRIER, 0.98, 1.04, {}), new THREE.MeshStandardMaterial({ color: 0x9aa0ae, side: THREE.DoubleSide, roughness: 0.5 }));
+    const cap = new THREE.Mesh(wall(track, (k) => side * track.bar[k], (k) => hy[k] + (track.bar[k] < 12 ? 1.5 : 0.98), (k) => hy[k] + (track.bar[k] < 12 ? 1.56 : 1.04), {}), new THREE.MeshStandardMaterial({ color: 0x9aa0ae, side: THREE.DoubleSide, roughness: 0.5 }));
     root.add(cap);
     for (let i = 0; i < N; i += 5) {
-      const off = side * (BARRIER + 0.18);
-      v3.set(track.x[i] - track.tz[i] * off, 0.55, track.z[i] + track.tx[i] * off);
+      const off = side * (track.bar[i] + 0.18);
+      v3.set(track.x[i] - track.tz[i] * off, 0.55 + hy[i], track.z[i] + track.tx[i] * off);
       q4.setFromEuler(eul.set(0, -track.psi[i], 0));
       posts.setMatrixAt(pc++, m4.compose(v3, q4, s3));
     }
@@ -292,7 +328,7 @@ export function buildWorld(scene, renderer, track) {
   const outerRun = new Uint8Array(N);
   for (let i = 0; i < N; i++) outerRun[i] = Math.abs(track.kappa[i]) > 0.026 ? 1 : 0;
   for (let i = 0; i < N; i += 2) {
-    if (!outerRun[i] || tireList.length > 700) continue;
+    if (!outerRun[i] || tireList.length > 700 || hy[i] > 0.3 || track.bar[i] < 12) continue;
     const side = -Math.sign(track.kappa[i]);
     const off = side * (BARRIER - 0.95);
     const h = 2 + ((i / 2) % 3 === 0 ? 1 : 0);
@@ -307,7 +343,7 @@ export function buildWorld(scene, renderer, track) {
   const fenceMat = new THREE.MeshStandardMaterial({ map: fenceTexture, transparent: true, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.5 });
   const fencePosts = [];
   for (const side of [-1, 1]) {
-    const pred = (i) => outerRun[i] && -Math.sign(track.kappa[i]) === side;
+    const pred = (i) => outerRun[i] && hy[i] < 0.3 && track.bar[i] > 12 && -Math.sign(track.kappa[i]) === side;
     const g = wall(track, side * (BARRIER + 2.4), 0.2, 4.8, { pred, uScale: 3.5 });
     if (g.attributes.position.count) { const m = new THREE.Mesh(g, fenceMat); m.castShadow = true; root.add(m); }
     for (let i = 0; i < N; i += 7) if (pred(i)) fencePosts.push([track.x[i] - track.tz[i] * side * (BARRIER + 2.4), track.z[i] + track.tx[i] * side * (BARRIER + 2.4)]);
@@ -324,7 +360,7 @@ export function buildWorld(scene, renderer, track) {
   let bc = 0, br = 0;
   for (let i = 0; i < N; i++) {
     const prev = dil[(i + N - 1) % N], nxt = dil[(i + 1) % N];
-    if (dil[i] && (!prev || !nxt) && bc < 78) {
+    if (dil[i] && (!prev || !nxt) && bc < 78 && hy[i] < 0.3) {
       const side = Math.sign(track.kappa[i]) || 1;
       const off = side * (ROAD_HALF + KERB_W + 1.1);
       const px = track.x[i] - track.tz[i] * off, pz = track.z[i] + track.tx[i] * off;

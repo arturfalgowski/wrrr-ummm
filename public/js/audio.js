@@ -120,6 +120,20 @@ export class CarAudio {
   }
 }
 
+let rainNode = null;
+export function setRain(on) {
+  if (!ctx) return;
+  if (on && !rainNode) {
+    const src = noiseSrc(), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+    hp.type = 'highpass'; hp.frequency.value = 900; lp.type = 'lowpass'; lp.frequency.value = 7000; g.gain.value = 0.0001;
+    src.connect(hp).connect(lp).connect(g).connect(master); src.start();
+    g.gain.setTargetAtTime(0.11, ctx.currentTime, 0.6);
+    rainNode = { src, g };
+  } else if (!on && rainNode) {
+    const n = rainNode; rainNode = null; n.g.gain.setTargetAtTime(0, ctx.currentTime, 0.3); setTimeout(() => { try { n.src.stop(); } catch { /* ok */ } }, 900);
+  }
+}
+
 export const sfx = {
   crash(power = 0.5, pan = 0) {
     if (!ctx) return;

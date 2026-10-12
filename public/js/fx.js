@@ -22,7 +22,7 @@ const FRAG = /* glsl */`
 
 export class Particles {
   constructor(scene, max = 900) {
-    this.max = max; this.cursor = 0; this.ground = null;
+    this.max = max; this.cursor = 0; this.ground = null; this.yOff = 0;
     this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 3);
     this.size = new Float32Array(max); this.alpha = new Float32Array(max);
     this.vel = new Float32Array(max * 3);
@@ -43,7 +43,7 @@ export class Particles {
 
   emit(x, y, z, vx, vy, vz, life, s0, s1, color, a0 = 0.5, drag = 1.5, grav = 0) {
     const i = this.cursor; this.cursor = (this.cursor + 1) % this.max;
-    if (this.ground) y += this.ground(x, z);
+    if (this.ground) y += this.ground(x, z); else y += this.yOff || 0;
     this.pos.set([x, y, z], i * 3); this.vel.set([vx, vy, vz], i * 3);
     this.col.set([color.r, color.g, color.b], i * 3);
     this.life[i] = life; this.age[i] = 0; this.s0[i] = s0; this.s1[i] = s1; this.a0[i] = a0; this.drag[i] = drag; this.grav[i] = grav;
