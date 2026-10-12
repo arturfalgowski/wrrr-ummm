@@ -181,7 +181,9 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 @keyframes pulse2 { to { box-shadow: 0 0 36px rgba(39,199,255,1); } }
 .slot .timer { position: absolute; left: 8px; right: 8px; bottom: 4px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.25); display: none; overflow: hidden; }
 .slot .timer b { display: block; height: 100%; background: #fff; width: 100%; }
-#slot-ammo.has .timer { display: block; }
+#slot-ammo.active .timer { display: block; }
+#slot-ammo.active { animation: pulse3 .25s ease-in-out infinite alternate; }
+@keyframes pulse3 { to { box-shadow: 0 0 36px rgba(255,176,46,1); } }
 @media (max-width: 820px) { .hud-items { bottom: 70px; } }
 @media (max-width: 480px) { .tracks { grid-template-columns: 1fr; } }
 

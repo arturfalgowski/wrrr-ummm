@@ -80,7 +80,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { items: { nitro: false, oil: false, ammoT: 0 }, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
+const me = { items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
 const opps = new Map(); // id gracza -> { id, nick, carId, slot, st, vis, audio, snaps, prevVf, smokeAcc, finished }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -690,7 +690,7 @@ function drawMinimap() {
 const soloSpawn = { t: 5, id: 1 };
 function resetItems() {
   items.clear();
-  me.items = { nitro: false, oil: false, ammoT: 0 }; me.nitroT = 0; me.tireCd = 0;
+  me.items = { nitro: false, oil: false, ammo: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
   if (me.st) { me.st.nitro = false; me.st.slowT = 0; me.st.inOil = false; }
   soloSpawn.t = 5;
   world?.tires.reset();
@@ -701,7 +701,7 @@ function spawnCrate(id, type, u, l) { const q = crateSpot(u, l); items.spawn(id,
 function applyPickup(type) {
   sfx.pickup();
   if (type === 'nitro') { me.items.nitro = true; toast('Nitro — Shift'); }
-  else if (type === 'ammo') { me.items.ammoT = 2; toast('Naboje — F (masz 2 s)'); }
+  else if (type === 'ammo') { me.items.ammo = true; toast('Naboje — F (strzelasz przez 4 s)'); }
   else { me.items.oil = true; toast('Olej — E'); }
   updateSlots();
 }
@@ -710,12 +710,15 @@ function useNitro() {
   if (!racingNow() || !me.items.nitro || me.nitroT > 0) return;
   me.items.nitro = false; me.nitroT = 2.5; sfx.nitro(); updateSlots();
 }
+/** F: uruchamia 4-sekundową serię (naboje można trzymać do dowolnego momentu) */
 function fire() {
   if (!racingNow()) return;
-  if (me.items.ammoT <= 0) { if (me.items.nitro || me.items.oil || true) sfx.empty(); return; }
+  if (!me.items.ammo || me.fireT > 0) { if (!me.fireT) sfx.empty(); return; }
+  me.items.ammo = false; me.fireT = 4; me.fireAcc = 0; updateSlots();
+}
+function shootOne() {
   const s = me.st;
-  items.shoot(s.x, s.z, s.yaw, s.vx, s.vz, 'me');
-  me.items.ammoT = 0; sfx.shoot(); updateSlots();
+  items.shoot(s.x, s.z, s.yaw, s.vx, s.vz, 'me'); sfx.shoot();
   if (!S.solo) socket?.emit('game:event', { t: 'shoot', x: s.x, z: s.z, yaw: s.yaw, vx: s.vx, vz: s.vz });
 }
 function dropOil() {
@@ -729,7 +732,7 @@ function onGameEvent(e) {
   else if (e.t === 'oil') items.dropOil(e.x, e.z, 'opp');
   else if (e.t === 'hit' && e.to !== S.you) items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   else if (e.t === 'hit' && me.st) {
-    me.st.vx *= 0.4; me.st.vz *= 0.4; me.st.slowT = 2.2;
+    me.st.vx *= 0.93; me.st.vz *= 0.93; me.st.slowT = 1.3;
     sparks(me.st.x, me.st.z, 14); sfx.hit(); toast('Trafiony!', 1400);
     items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   }
@@ -737,9 +740,10 @@ function onGameEvent(e) {
 function updateSlots() {
   $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0);
   $('slot-nitro').classList.toggle('active', me.nitroT > 0);
-  $('slot-ammo').classList.toggle('has', me.items.ammoT > 0);
+  $('slot-ammo').classList.toggle('has', me.items.ammo || me.fireT > 0);
+  $('slot-ammo').classList.toggle('active', me.fireT > 0);
   $('slot-oil').classList.toggle('has', me.items.oil);
-  $('ammo-bar').style.width = `${clamp(me.items.ammoT / 2, 0, 1) * 100}%`;
+  $('ammo-bar').style.width = `${clamp(me.fireT / 4, 0, 1) * 100}%`;
 }
 const puff = (x, z, n = 3) => { for (let i = 0; i < n; i++) { tmpC.setRGB(0.2, 0.2, 0.22); particles.emit(x, 0.5, z, (Math.random() - 0.5) * 4, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 4, 0.6, 0.8, 2.2, tmpC, 0.5, 1.5); } };
 
@@ -756,7 +760,14 @@ function updateGameplay(dt, active) {
   // olej i nitro
   me.st.inOil = items.inOil(me.st.x, me.st.z);
   if (me.nitroT > 0) { me.nitroT -= dt; me.st.nitro = me.nitroT > 0; if (me.nitroT <= 0) updateSlots(); } else me.st.nitro = false;
-  if (me.items.ammoT > 0) { me.items.ammoT -= dt; if (me.items.ammoT <= 0) { me.items.ammoT = 0; updateSlots(); } else $('ammo-bar').style.width = `${me.items.ammoT / 2 * 100}%`; }
+  if (me.fireT > 0) {
+    if (me.finished) me.fireT = 0;
+    else {
+      me.fireT -= dt; me.fireAcc -= dt;
+      if (me.fireAcc <= 0 && me.fireT > 0) { shootOne(); me.fireAcc = 0.12; }
+      if (me.fireT <= 0) { me.fireT = 0; updateSlots(); } else $('ammo-bar').style.width = `${me.fireT / 4 * 100}%`;
+    }
+  }
   // paczki: solo spawnuje lokalnie, w multiplayerze robi to serwer
   if (S.solo && S.mode === 'racing') {
     soloSpawn.t -= dt;

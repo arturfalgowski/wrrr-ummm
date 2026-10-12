@@ -34,13 +34,13 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 | A, D / ← → | skręt |
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (2,5 s) |
-| F | strzał (naboje ważne 2 s od zebrania) |
+| F | karabin: seria przez 4 s (naboje trzymasz do dowolnej chwili) |
 | E | zrzut plamy oleju |
 | M | wyciszenie |
 
 ## Paczki
 
-Na tor spadają (niezbyt często) paczki: **nitro**, **naboje** i **olej**. Trafiony pociskiem rywal traci prędkość.
+Na tor spadają (niezbyt często) paczki: **nitro**, **naboje** i **olej**. Naboje zbierasz i używasz kiedy chcesz — F uruchamia 4-sekundową serię z karabinu; każde trafienie zwalnia rywala.
 Plama oleju odbiera przyczepność każdemu, kto w nią wjedzie — także temu, kto ją zrzucił.
 Stosy opon przy bandzie rozlatują się po uderzeniu (i lekko zwalniają auto).
 
