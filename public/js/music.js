@@ -14,8 +14,9 @@ export class Music {
     this.el.volume = this.vol;
     this.el.addEventListener('ended', () => this.playRandom());
     this.el.addEventListener('error', () => { this.pending = false; });
+    // przeglądarki (zwłaszcza Safari) pozwalają zacząć dźwięk dopiero po geście użytkownika — próbuj przy każdym
     const unlock = () => { if (this.pending) this._play(); };
-    window.addEventListener('pointerdown', unlock); window.addEventListener('keydown', unlock);
+    for (const ev of ['pointerdown', 'click', 'touchend', 'keydown']) window.addEventListener(ev, unlock, true);
   }
 
   async load() {
@@ -24,7 +25,7 @@ export class Music {
 
   _play() {
     if (!this.enabled || !this.el.src) return;
-    this.el.play().then(() => { this.pending = false; }).catch(() => { this.pending = true; });
+    this.el.play().then(() => { this.pending = false; this._hint(false); }).catch((e) => { if (e?.name !== 'AbortError') { this.pending = true; this._hint(true); } });
   }
 
   /** losuje utwór (inny niż poprzedni) i odtwarza */
@@ -37,6 +38,8 @@ export class Music {
     this.el.volume = this.vol;
     this._play();
   }
+
+  _hint(on) { document.getElementById('btn-music')?.classList.toggle('wait', on && this.enabled); }
 
   setEnabled(on) {
     this.enabled = on; store.set('tc_music', on ? '1' : '0');
