@@ -72,13 +72,13 @@ export class Items {
     const mat = new THREE.MeshStandardMaterial({ map: crateTexture(type), emissiveMap: crateTexture(type), emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.4, metalness: 0.2 });
     const gh = this.ground ? this.ground(x, z) : 0;
     const mesh = new THREE.Mesh(this.boxGeo, mat);
-    mesh.castShadow = true; mesh.position.set(x, gh + 60, z);
+    mesh.castShadow = true; mesh.position.set(x, gh + 34, z);
     const beam = new THREE.Mesh(this.beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     beam.position.set(x, gh + 8, z);
     const ring = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }));
     ring.position.set(x, gh + 0.07, z);
     this.parent.add(mesh, beam, ring);
-    this.crates.set(id, { id, type, x, z, gh, mesh, beam, ring, y: gh + 60, vy: 0, landed: false, age: 0, dying: 0 });
+    this.crates.set(id, { id, type, x, z, gh, mesh, beam, ring, y: gh + 34, vy: 0, landed: false, age: 0, dying: 0 });
   }
   remove(id, pop = true) {
     const c = this.crates.get(id); if (!c) return;
@@ -222,4 +222,4 @@ export class Items {
     this.shots = []; this.oils = []; this.bombs = []; this.rockets = [];
   }
 }
-const clampH = (y) => Math.min(1, Math.max(0, y / 60));
+const clampH = (y) => Math.min(1, Math.max(0, y / 34));

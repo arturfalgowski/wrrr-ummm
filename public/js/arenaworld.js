@@ -32,7 +32,7 @@ export function buildArenaWorld(scene, renderer) {
   root.add(new THREE.HemisphereLight(0xffe2c4, 0x7a5a48, 0.95));
   const sun = new THREE.DirectionalLight(0xffc58a, 3.4);
   sun.position.set(-90, 95, 85); sun.target.position.set(0, 0, 0);
-  sun.castShadow = true; const sm = Math.min(4096, renderer.capabilities.maxTextureSize); sun.shadow.mapSize.set(sm, sm);
+  sun.castShadow = true; const sm = Math.min(2048, renderer.capabilities.maxTextureSize); sun.shadow.mapSize.set(sm, sm);
   Object.assign(sun.shadow.camera, { left: -118, right: 118, top: 118, bottom: -118, near: 20, far: 380 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.05;
   root.add(sun, sun.target);
@@ -42,7 +42,7 @@ export function buildArenaWorld(scene, renderer) {
   far.rotation.x = -Math.PI / 2; far.position.y = -0.4; far.receiveShadow = true; root.add(far);
 
   // ---- teren ----
-  const SIZE = (ARENA_R + 22) * 2, SEG = 190;
+  const SIZE = (ARENA_R + 22) * 2, SEG = 130;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
   const sand = new THREE.Color('#c79a63'), dirt = new THREE.Color('#8f6038'), pit = new THREE.Color('#e0bc86'), pitDeep = new THREE.Color('#9b7448'), ramp = new THREE.Color('#f0ac22'), plat = new THREE.Color('#a8a29a');
@@ -62,7 +62,7 @@ export function buildArenaWorld(scene, renderer) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
   const terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, map: noiseTex(), roughness: 0.96 }));
-  terrain.receiveShadow = true; terrain.castShadow = true; root.add(terrain);
+  terrain.receiveShadow = true; root.add(terrain);
 
   // ---- bariera ----
   const stripes = stripeTex();

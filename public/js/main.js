@@ -982,7 +982,7 @@ function botUpdate(o, dt) {
   if (ai.rev > 0) { ai.rev -= dt; inp.throttle = 0; inp.brake = 1; inp.steer = ai.revSteer; }
   stepCar(st, inp, dt);
   if (st.landHit > 0) damageBot(o, st.landHit * 0.5);
-  if (st.hit > 3 && o.hitCd <= 0) { damageBot(o, (st.hit - 3) * 0.35); o.hitCd = 0.2; if (st.hit > 8) sparks(st.x, st.z, st.hit); }
+  if (st.hit > 3 && o.hitCd <= 0) { damageBot(o, (st.hit - 3) * 0.3); o.hitCd = 0.2; if (st.hit > 8) sparks(st.x, st.z, st.hit); }
   if (!me.dead) { const h = carVsCar(st, me.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.6); o.hitCd = 0.15; } }
   for (const q of oppList()) if (q !== o && !q.dead) { const h = carVsCar(st, q.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.2); o.hitCd = 0.15; } }
   const c = items.touch(st.x, st.z, 3.2);
@@ -1179,7 +1179,7 @@ function frame(now) {
     } else {
     const inp = me.finished ? { throttle: 0, brake: 0.3, steer: 0, hand: false } : input;
     stepCar(me.st, inp, dt);
-    if (me.st.landHit > 0) damage(me.st.landHit);
+    if (me.st.landHit > 0) damage(Math.min(30, me.st.landHit));
     if (me.inv > 0) { me.inv -= dt; me.vis.group.visible = me.inv <= 0 || Math.floor(me.inv * 10) % 2 === 0; }
     for (const o of oppList()) {
       if (refreshOpp(o) && !o.dead) {
@@ -1188,7 +1188,7 @@ function frame(now) {
       }
     }
     me.hitCd -= dt;
-    if (me.st.hit > 3 && me.hitCd <= 0) { sfx.crash(me.st.hit / 18, 0); sparks(me.st.x, me.st.z, me.st.hit); me.hitCd = 0.2; damage((me.st.hit - 3) * 0.9); }
+    if (me.st.hit > 3 && me.hitCd <= 0) { sfx.crash(me.st.hit / 18, 0); sparks(me.st.x, me.st.z, me.st.hit); me.hitCd = 0.2; damage(Math.min(35, (me.st.hit - 3) * (isArena() ? 0.55 : 0.9))); }
     }
     if (!isArena() && !me.dead && (S.mode === 'racing' || (S.mode === 'finished' && !me.finished && !S.solo))) onLapProgress();
   } else if (racing) for (const o of oppList()) refreshOpp(o);

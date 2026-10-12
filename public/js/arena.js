@@ -77,6 +77,7 @@ export function arenaStep(car, input, dt) {
   if (car.y === undefined) { car.y = heightAt(car.x, car.z); car.vy = 0; car.vyT = 0; car.air = false; }
   car.landHit = 0;
   if (car.air) {
+    car.hit = 0; // w locie nie przenoś starego uderzenia (wcześniej liczyło obrażenia co klatkę)
     const n = Math.max(1, Math.ceil(dt / 0.01)), h = dt / n;
     for (let i = 0; i < n; i++) {
       car.x += car.vx * h; car.z += car.vz * h;
@@ -86,9 +87,10 @@ export function arenaStep(car, input, dt) {
       obstacleCollide(car);
       const gh = heightAt(car.x, car.z);
       if (car.y <= gh) {
-        const imp = -car.vy;
+        const g = gradAt(car.x, car.z);
+        const imp = -(car.vy - (g.x * car.vx + g.z * car.vz)); // prędkość względem zbocza, nie względem poziomu
         car.y = gh; car.air = false; car.vyT = 0;
-        if (imp > 13) car.landHit = (imp - 13) * 2.4;
+        if (imp > 18) car.landHit = Math.min(25, (imp - 18) * 1.2);
         car.vy = 0; break;
       }
     }
