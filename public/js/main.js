@@ -7,6 +7,7 @@ import { buildWorld } from './world.js';
 import { createPost } from './post.js';
 import { Particles, SkidMarks } from './fx.js';
 import { Items } from './items.js';
+import { Minimap } from './minimap.js';
 import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +33,7 @@ const post = createPost(renderer, scene, camera);
 const particles = new Particles(scene);
 const skids = new SkidMarks(scene);
 const items = new Items(scene, particles);
+const minimap = new Minimap(document.getElementById('minimap'));
 items._thud = () => sfx.land();
 
 // ======================= Tory (każdy budowany raz, potem tylko przełączany) =======================
@@ -44,6 +46,7 @@ function useTrack(id) {
   if (!worlds[id]) { const t = new Track(id); worlds[id] = { track: t, world: buildWorld(scene, renderer, t) }; }
   ({ track, world } = worlds[id]);
   trackId = id;
+  minimap.setTrack(track);
   world.root.visible = true;
   scene.background = world.sky;
   scene.fog = new THREE.Fog(world.sky, 300, 1500);
@@ -71,7 +74,7 @@ const S = {
   nick: store.get('tc_nick', ''),
   carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'aurora',
   trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'dolina',
-  laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
+  ghost: store.get('tc_ghost') !== '0', laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
   mode: 'menu', // menu | lobby | countdown | racing | finished
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
@@ -128,7 +131,8 @@ function resetRace() {
   me.lapIdx = 0; me.maxP = me.st.progress; me.best = Infinity; me.lapTimes = []; me.finished = false; me.finishTime = 0;
   S.results = null; S.resultSounded = false;
   particles.clear(); skids.clear(); resetItems();
-  $('hud-best').textContent = '';
+  me.best = Infinity; ghostSetup();
+  if (!S.solo) $('hud-best').textContent = '';
   $('hud-time').textContent = '0:00.00';
   $('hud-lap').textContent = `1/${S.lapsNow}`;
   $('chip-pos').classList.toggle('hidden', !opps.size);
@@ -204,10 +208,19 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
     b.addEventListener('click', () => onChange({ pickups: v })); sg.append(b);
   }
   r2.append(sg);
+  if (vals.ghost !== undefined) {
+    const r3 = row('Duch rekordu (trening solo)');
+    const sg3 = document.createElement('div'); sg3.className = 'seg';
+    for (const [v, t] of [[false, 'Wył.'], [true, 'Wł.']]) {
+      const b = document.createElement('button'); b.textContent = t; b.classList.toggle('sel', vals.ghost === v); b.addEventListener('click', () => onChange({ ghost: v })); sg3.append(b);
+    }
+    r3.append(sg3);
+  }
 }
 function renderMenuSettings() {
-  buildSettings('menu-settings', { laps: S.laps, pickups: S.pickups }, true, (c) => {
+  buildSettings('menu-settings', { laps: S.laps, pickups: S.pickups, ghost: S.ghost }, true, (c) => {
     if (c.laps != null) S.laps = c.laps;
+    if (c.ghost != null) { S.ghost = c.ghost; store.set('tc_ghost', c.ghost ? '1' : '0'); }
     if (c.pickups) { S.pickups = c.pickups; store.set('tc_pickups', c.pickups); }
     renderMenuSettings();
   });
@@ -243,7 +256,7 @@ function goMenu() {
   if (!S.laps) S.laps = TRACK_DEFS[S.trackId].laps;
   renderMenuSettings();
   buildTrackList('track-list', S.trackId, pickMenuTrack, true);
-  clearOpps(); setCar(me, S.carId, 0);
+  clearOpps(); setCar(me, S.carId, 0); ghostClear();
   me.finished = false; resetItems();
   particles.clear(); skids.clear();
   showScreen('menu');
@@ -383,7 +396,9 @@ function elapsed() { return (performance.now() - S.raceStart) / 1000; }
 function onLapProgress() {
   const N = track.N;
   me.maxP = Math.max(me.maxP, me.st.progress);
-  const lapIdx = Math.floor(me.maxP / N);
+  const fl = Math.floor(me.maxP / N);
+  if (fl >= 0 && fl > ghost.floor) ghostCross(fl);
+  const lapIdx = fl;
   if (lapIdx > me.lapIdx) {
     me.lapIdx = lapIdx;
     const now = performance.now();
@@ -392,7 +407,7 @@ function onLapProgress() {
     const isBest = lt < me.best; me.best = Math.min(me.best, lt);
     if (lapIdx >= S.lapsNow) finishLocal();
     else { sfx.lap(); toast(`Okrążenie ${lapIdx}: ${fmt(lt)}${isBest ? '  · najlepsze' : ''}`, 2400); }
-    $('hud-best').textContent = `Najlepsze: ${fmt(me.best)}`;
+    updateBestText();
     $('hud-lap').textContent = `${Math.min(S.lapsNow, lapIdx + 1)}/${S.lapsNow}`;
   }
 }
@@ -562,6 +577,85 @@ function readInput() {
 function toggleMute() { setMuted(!isMuted()); refreshMute(); }
 function refreshMute() { $('ico-on').classList.toggle('hidden', isMuted()); $('ico-off').classList.toggle('hidden', !isMuted()); }
 
+
+// ======================= Duch najlepszego okrążenia (trening solo) =======================
+const ghost = { vis: null, data: null, pending: null, best: Infinity, floor: -1, rec: null, recStart: 0, recAcc: 0, t0: 0, playing: false, st: { x: 0, z: 0, yaw: 0, vf: 0, vl: 0, steer: 0, accelNow: 0, onGrass: false, brakeLit: false } };
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.34, depthWrite: false });
+const ghostKey = () => 'tc_ghost_' + trackId;
+function ghostClear() {
+  if (ghost.vis) scene.remove(ghost.vis.group);
+  Object.assign(ghost, { vis: null, data: null, pending: null, best: Infinity, floor: -1, rec: null, playing: false });
+}
+function ghostBuild(carId) {
+  if (ghost.vis) scene.remove(ghost.vis.group);
+  const v = buildCar(carId, 1);
+  v.group.traverse((o) => { if (o.isMesh) { if (o.geometry.type === 'PlaneGeometry') o.visible = false; else { o.material = ghostMat; o.castShadow = false; o.receiveShadow = false; } } });
+  v.group.visible = false; scene.add(v.group);
+  ghost.vis = v;
+}
+function ghostSetup() {
+  ghostClear();
+  if (!S.solo) return;
+  let g = null;
+  try { g = JSON.parse(store.get(ghostKey())); } catch { /* brak */ }
+  if (g && g.s?.length > 30 && CAR_DEFS[g.car]) { ghost.data = g; ghost.best = g.time; if (S.ghost) ghostBuild(g.car); }
+  updateBestText();
+}
+function updateBestText() {
+  const parts = [];
+  if (me.best < Infinity) parts.push(`Najlepsze: ${fmt(me.best)}`);
+  if (S.solo && S.ghost && ghost.best < Infinity) parts.push(`Duch: ${fmt(ghost.best)}`);
+  $('hud-best').textContent = parts.join('  ·  ');
+}
+/** wywoływane przy każdym przekroczeniu linii startu/mety (fl = numer przekroczenia, od 0) */
+function ghostCross(fl) {
+  if (!S.solo) return;
+  const now = performance.now();
+  if (ghost.floor >= 0 && ghost.rec && ghost.rec.length > 30) {
+    const lt = (now - ghost.recStart) / 1000;
+    if (lt < ghost.best) {
+      ghost.best = lt;
+      ghost.pending = { time: lt, car: S.carId, s: ghost.rec };
+      store.set(ghostKey(), JSON.stringify(ghost.pending));
+    }
+  }
+  ghost.floor = fl;
+  if (ghost.pending) { ghost.data = ghost.pending; ghost.pending = null; if (S.ghost) ghostBuild(ghost.data.car); }
+  if (fl < S.lapsNow) { ghost.rec = []; ghost.recStart = now; ghost.recAcc = 0; ghost.t0 = now; ghost.playing = !!ghost.data; }
+  else { ghost.rec = null; ghost.playing = false; }
+  updateBestText();
+}
+function ghostRecord(dt) {
+  if (!S.solo || !ghost.rec || !me.st) return;
+  ghost.recAcc += dt;
+  while (ghost.recAcc >= 1 / 30) {
+    ghost.recAcc -= 1 / 30;
+    const s = me.st, r = (v) => Math.round(v * 100) / 100;
+    ghost.rec.push([r(s.x), r(s.z), r(s.yaw), r(s.vf), r(s.steer)]);
+  }
+}
+function ghostPlay(dt) {
+  const g = ghost;
+  if (!g.vis) return;
+  if (!(S.solo && S.ghost && g.playing && g.data)) { g.vis.group.visible = false; return; }
+  const arr = g.data.s, f = ((performance.now() - g.t0) / 1000) * 30, i = Math.floor(f);
+  if (i >= arr.length - 1) { g.vis.group.visible = false; return; }
+  const a = arr[i], b = arr[i + 1], k = f - i, st = g.st;
+  st.x = a[0] + (b[0] - a[0]) * k; st.z = a[1] + (b[1] - a[1]) * k;
+  let dy = b[2] - a[2]; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+  st.yaw = a[2] + dy * k; st.vf = a[3] + (b[3] - a[3]) * k; st.steer = a[4] + (b[4] - a[4]) * k;
+  g.vis.group.visible = true; g.vis.sync(st, dt);
+}
+
+// ======================= Minimapa =======================
+function drawMinimap() {
+  if (!me.st || $('hud').classList.contains('hidden')) return;
+  const dots = [{ x: me.st.x, z: me.st.z, color: CAR_DEFS[S.carId].color, me: true }];
+  for (const o of oppList()) dots.push({ x: o.st.x, z: o.st.z, color: CAR_DEFS[o.carId].color, label: (o.nick || '?').trim()[0]?.toUpperCase() });
+  if (S.solo && S.ghost && ghost.vis?.group.visible) dots.push({ x: ghost.st.x, z: ghost.st.z, ghost: true });
+  minimap.draw(dots, [...items.crates.values()].filter((c) => !c.dying).map((c) => ({ x: c.x, z: c.z, type: c.type })));
+}
+
 // ======================= Przedmioty, broń, nitro =======================
 const soloSpawn = { t: 5, id: 1 };
 function resetItems() {
@@ -715,6 +809,8 @@ function frame(now) {
     if (S.mode === 'racing' || (S.mode === 'finished' && !me.finished && !S.solo)) onLapProgress();
   } else if (racing) for (const o of oppList()) sampleOpp(o, performance.now());
 
+  if (me.st && active) ghostRecord(dt);
+  ghostPlay(dt);
   if (me.st) updateGameplay(dt, active); else if (world) world.tires.update(dt);
 
   // wysyłanie stanu
@@ -752,6 +848,7 @@ function frame(now) {
 
   updateCamera(dt);
   updateHud();
+  drawMinimap();
   updateTags();
   post.composer.render(dt);
 }
@@ -871,5 +968,5 @@ function bindUi() {
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);
   if (S.nick) goMenu(); else { showScreen('nick'); $('inp-nick').focus(); }
-  window.__tc = { S, me, opps, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
+  window.__tc = { S, me, opps, ghost, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
 })();

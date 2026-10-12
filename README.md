@@ -18,7 +18,9 @@ Zmienna `PORT` zmienia port. Ranking trafia do `data/ranking.db`.
 1. Wpisz nick (zapamiętany w LocalStorage), wybierz auto.
 2. **Stwórz wyścig** → skopiuj link i wyślij go znajomym (do 4 graczy w pokoju). Po otwarciu linku wybierają auto i dołączają.
 3. Host wybiera tor w lobby (3 tory: Dolina Sosen, Pustynny Owal, Zimowa Serpentyna). Gdy wszyscy w pokoju (min. 2) klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
-4. **Trening solo** — jazda bez przeciwnika.
+4. **Trening solo** — jazda bez przeciwnika, opcjonalnie z **duchem** swojego najlepszego okrążenia (zapisywany w przeglądarce osobno dla każdego toru).
+
+W trakcie jazdy w rogu ekranu jest **minimapa**: zarys toru, pozycje wszystkich graczy (kolor auta + pierwsza litera nicku), paczki i duch.
 
 Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otworzy drugi gracz
 (adres LAN, np. `http://192.168.0.10:3000`, albo wdrożenie na serwerze). Link w lobby jest budowany z adresu, pod którym otwarto grę.
@@ -48,6 +50,7 @@ Stosy opon przy bandzie rozlatują się po uderzeniu (i lekko zwalniają auto).
 server.js            Express + Socket.IO: pokoje, odliczanie, wynik, ranking (SQLite)
 public/index.html    UI (nick, menu, lobby, HUD, wyniki)
 public/js/main.js    pętla gry, kamera izometryczna (auto-dopasowana do toru), sieć, UI
+public/js/minimap.js minimapa w HUD
 public/js/items.js   paczki, pociski, plamy oleju
 public/js/tires.js   rozbijane opony
 public/js/track.js   definicje 3 torów, oś toru, próbkowanie, zapytania o pozycję (postęp, odległość boczna)
