@@ -179,7 +179,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { gunCharge: 1, weapon: null, shieldT: 0, specIdx: 0, deadAt: 0, hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
+const me = { gunCharge: 1, weapon: null, shieldT: 0, specIdx: 0, deadAt: 0, hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: 0, oil: 0, ammo: 0, mine: 0 }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
 const opps = new Map(); // id gracza -> { id, nick, carId, slot, st, vis, audio, snaps, prevVf, smokeAcc, finished }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -1249,7 +1249,7 @@ function useStock(k) {
 /** mina w wyścigu (Q) */
 function useMine() {
   if (!racingNow() || !me.items.mine) { sfx.empty(); return; }
-  me.items.mine = false; useWeapon('bomb'); updateSlots();
+  me.items.mine--; useWeapon('bomb'); updateSlots();
 }
 /** trafienia pocisków karabinu: moje w rywali i boty, pociski botów we mnie i inne boty */
 function shotHits() {
@@ -1402,7 +1402,7 @@ const currentLoadout = () => (S.solo ? S.loadout : S.room?.settings?.loadout) ||
 function resetItems() {
   items.clear();
   me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.fullKit = currentLoadout() === 'full'; me.stock = isArena() && me.fullKit ? { bomb: 1, rocket: 1, shield: 1, oil: 1 } : { bomb: 0, rocket: 0, shield: 0, oil: 0 }; me.weapon = isArena() ? (me.fullKit ? 'ammo' : 'rocket') : null; me.gunCharge = 1; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
-  me.items = me.fullKit ? { nitro: true, oil: !isArena(), ammo: !isArena(), mine: !isArena() } : { nitro: false, oil: false, ammo: false, mine: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
+  me.items = me.fullKit ? { nitro: 1, oil: +!isArena(), ammo: +!isArena(), mine: +!isArena() } : { nitro: 0, oil: 0, ammo: 0, mine: 0 }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
   if (me.st) { me.st.nitro = false; me.st.slowT = 0; me.st.inOil = false; }
   soloSpawn.t = 5;
   world?.tires.reset();
@@ -1417,29 +1417,34 @@ function spawnCrate(id, type, u, l, ax, az) {
   const idx = Math.floor(u * track.N), q = track.at(idx, l * ROAD_HALF * 0.8);
   items.spawn(id, type, q.x, q.z, track.hy ? track.heightAt(idx) : 0);
 }
+/** zebranie tego samego dodatku drugi raz daje ×2 (maks. 2 zapasy) */
+function stackItem(k, msg) {
+  const had = me.items[k] > 0; me.items[k] = Math.min(2, me.items[k] + 1);
+  toast(had ? `${msg.split(' — ')[0]} ×${me.items[k]}` : msg); updateSlots();
+}
 function applyPickup(type) {
   sfx.pickup(type);
   if (isArena() && me.fullKit && ['bomb', 'rocket', 'shield', 'oil'].includes(type)) { me.stock[type] = Math.min(3, me.stock[type] + 1); toast(`${WEAPON_NAMES[type]} ×${me.stock[type]} — ${STOCK_KEYS[type]}`); updateSlots(); return; }
   if (isArena() && ['bomb', 'rocket', 'ammo', 'shield', 'oil'].includes(type)) { me.weapon = type; toast(`${WEAPON_NAMES[type]} — F`); updateSlots(); return; }
-  if (!isArena() && type === 'bomb') { me.items.mine = true; toast('Mina — Q'); updateSlots(); return; }
-  if (type === 'nitro') { me.items.nitro = true; toast('Nitro — Shift'); }
-  else if (type === 'ammo') { me.items.ammo = true; toast('Naboje — F (strzelasz przez 4 s)'); }
+  if (!isArena() && type === 'bomb') { stackItem('mine', 'Mina — Q'); return; }
+  if (type === 'nitro') { stackItem('nitro', 'Nitro — Shift'); return; }
+  else if (type === 'ammo') { stackItem('ammo', 'Naboje — F (4 s ognia)'); return; }
   else if (type === 'repair') { setHp(me.hp + 40); toast('Naprawa +40'); }
-  else { me.items.oil = true; toast('Olej — E'); }
+  else { stackItem('oil', 'Olej — E'); return; }
   updateSlots();
 }
 const STOCK_KEYS = { bomb: 'Q', oil: 'E', rocket: 'T', shield: 'G' };
 const racingNow = () => S.mode === 'racing' && !me.finished && !me.dead;
 function useNitro() {
   if (!racingNow() || !me.items.nitro || me.nitroT > 0) return;
-  me.items.nitro = false; me.nitroT = 2.5; sfx.nitro(); updateSlots();
+  me.items.nitro--; me.nitroT = 2.5; sfx.nitro(); updateSlots();
 }
 /** F: uruchamia 4-sekundową serię (naboje można trzymać do dowolnego momentu) */
 function fire() {
   if (isArena()) return fireArena();
   if (!racingNow()) return;
   if (!me.items.ammo || me.fireT > 0) { if (!me.fireT) sfx.empty(); return; }
-  me.items.ammo = false; me.fireT = 4; me.fireAcc = 0; updateSlots();
+  me.items.ammo--; me.fireT = 4; me.fireAcc = 0; updateSlots();
 }
 function shootOne() {
   const s = me.st;
@@ -1449,7 +1454,7 @@ function shootOne() {
 function dropOil() {
   if (!racingNow() || !me.items.oil) return;
   const s = me.st, x = s.x - Math.cos(s.yaw) * 3.4, z = s.z - Math.sin(s.yaw) * 3.4;
-  items.dropOil(x, z, 'me'); me.items.oil = false; sfx.oil(); updateSlots();
+  items.dropOil(x, z, 'me'); me.items.oil--; sfx.oil(); updateSlots();
   if (!S.solo) socket?.emit('game:event', { t: 'oil', x, z });
 }
 function onGameEvent(e) {
@@ -1469,7 +1474,8 @@ function updateBar() { $('ammo-bar').style.width = `${me.fireT > 0 ? clamp(me.fi
 function updateSlots() {
   const arena = isArena(), full = !!me.fullKit;
   const cnt = (id, label, n) => { const el = $(id); el.querySelector('span').textContent = n > 0 ? `${label} ×${n}` : label; el.classList.toggle('has', n > 0); };
-  $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
+  { const sp = $('slot-nitro').querySelector('span'); if (sp) sp.textContent = me.items.nitro > 1 ? 'Nitro ×' + me.items.nitro : 'Nitro'; }
+  $('slot-nitro').classList.toggle('has', me.items.nitro > 0 || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
   $('slot-mine').classList.toggle('hidden', !(arena ? full : true));
   $('slot-rocket').classList.toggle('hidden', !(arena && full));
   $('slot-shield').classList.toggle('hidden', !(arena && full));
@@ -1482,7 +1488,7 @@ function updateSlots() {
     $('ammo-bar').style.width = `${gun ? clamp(me.fireT / 4, 0, 1) * 100 : sh ? clamp(me.shieldT / 5, 0, 1) * 100 : 0}%`;
     return;
   }
-  $('slot-oil').classList.remove('hidden'); $('slot-gun').classList.add('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał'; $('slot-oil').querySelector('span').textContent = 'Olej'; $('slot-mine').querySelector('span').textContent = 'Mina';
+  $('slot-oil').classList.remove('hidden'); $('slot-gun').classList.add('hidden'); $('slot-ammo').querySelector('span').textContent = me.items.ammo > 1 ? 'Strzał ×' + me.items.ammo : 'Strzał'; $('slot-oil').querySelector('span').textContent = me.items.oil > 1 ? 'Olej ×' + me.items.oil : 'Olej'; $('slot-mine').querySelector('span').textContent = me.items.mine > 1 ? 'Mina ×' + me.items.mine : 'Mina';
   $('slot-ammo').classList.toggle('has', me.items.ammo || me.fireT > 0);
   $('slot-ammo').classList.toggle('active', me.fireT > 0);
   $('slot-oil').classList.toggle('has', me.items.oil);
@@ -2033,5 +2039,5 @@ function bindUi() {
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);
   if (S.nick) goMenu(); else { showScreen('nick'); $('inp-nick').focus(); }
-  window.__tc = { S, me, opps, ghost, music, replay, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
+  window.__tc = { S, me, opps, ghost, music, replay, items, camera, scene, keys, startSolo, applyPickup, post, get track() { return track; }, get world() { return world; } };
 })();
