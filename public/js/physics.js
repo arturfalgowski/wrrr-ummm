@@ -23,6 +23,7 @@ export class CarState {
     this.brakeLit = false; this.throttle = 0; this.accelNow = 0;
     this.hit = 0;           // siła ostatniego uderzenia (do dźwięku/iskier)
     this.wallContact = false;
+    this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
   }
 
   place(track, p, lateral) {
@@ -54,7 +55,9 @@ export class CarState {
     this.onKerb = ad > ROAD_HALF && ad <= ROAD_HALF + KERB_W;
     this.onGrass = ad > ROAD_HALF + KERB_W;
     const surfGrip = this.onGrass ? 0.5 : 1;
-    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1);
+    this.t += h;
+    if (this.slowT > 0) this.slowT -= h;
+    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1);
 
     // sterowanie — płynne wychylanie kierownicy
     const target = input.steer;
@@ -71,6 +74,7 @@ export class CarState {
     const highDamp = 1 / (1 + (sp / (def.maxSpeed * 1.25)) ** 2 * 1.8);
     let yawRate = this.steer * def.turn * lowSpeed * highDamp * (vf >= 0 ? 1 : -1);
     if (input.hand) yawRate *= 1.25;
+    if (this.inOil) yawRate = yawRate * 0.55 + Math.sin(this.t * 9 + this.x * 0.3) * 1.5 * lowSpeed;
     // samoograniczający się drift: im większy kąt poślizgu, tym mniej skręt go dalej powiększa
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
     if (this.steer * vl < 0) {
@@ -83,11 +87,12 @@ export class CarState {
     vl = -this.vx * s + this.vz * c;
 
     // napęd / hamowanie
-    this.throttle = input.throttle;
+    const thr = Math.max(input.throttle, this.nitro && !input.brake ? 1 : 0);
+    this.throttle = thr;
     this.brakeLit = false;
-    if (input.throttle > 0) {
+    if (thr > 0) {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
-      else vf += def.accel * input.throttle * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
+      else vf += def.accel * (this.nitro ? 2.4 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
     }
     if (input.brake > 0) {
       if (vf > 0.4) { vf = Math.max(0, vf - def.brake * h); this.brakeLit = true; }
@@ -105,6 +110,7 @@ export class CarState {
     let grip = def.grip * surfGrip;
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
     if (input.hand) grip = Math.min(grip, 2.4);
+    if (this.inOil) grip = Math.min(grip, 0.7);
     const speedBefore = Math.hypot(vf, vl);
     vl -= vl * (1 - Math.exp(-grip * h));
     // przekierowanie pędu: boczny poślizg zamienia się w ruch do przodu zamiast po prostu znikać

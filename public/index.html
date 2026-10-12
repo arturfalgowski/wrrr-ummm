@@ -33,8 +33,13 @@
     <div class="speed"><b id="hud-speed">0</b><i>km/h</i></div>
     <div class="bar"><div id="hud-bar"></div></div>
   </div>
+  <div class="hud-items">
+    <div class="slot" id="slot-nitro"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M13 2L5 14h5l-2 8 9-13h-5z" fill="currentColor"/></svg><kbd>Shift</kbd><span>Nitro</span></div>
+    <div class="slot" id="slot-ammo"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2c2 2 3 4 3 7v10H9V9c0-3 1-5 3-7zM8 20h8v2H8z" fill="currentColor"/></svg><kbd>F</kbd><span>Strzał</span><i class="timer"><b id="ammo-bar"></b></i></div>
+    <div class="slot" id="slot-oil"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2s7 7.5 7 12.5A7 7 0 015 14.5C5 9.5 12 2 12 2z" fill="currentColor"/></svg><kbd>E</kbd><span>Olej</span></div>
+  </div>
   <div class="hud-bl" id="hud-help">
-    <kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> hamulec ręczny (drift)
+    <kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej
   </div>
   <div id="countdown"></div>
   <div id="toast"></div>
@@ -65,6 +70,8 @@
     <div class="banner hidden" id="join-banner">Zaproszenie do wyścigu <b id="join-code"></b></div>
     <h3>Wybierz samochód</h3>
     <div class="cars" id="car-list"></div>
+    <h3>Wybierz tor</h3>
+    <div class="tracks" id="track-list"></div>
     <div class="row-btns">
       <button class="btn primary" id="btn-create">Stwórz wyścig</button>
       <button class="btn primary hidden" id="btn-join">Dołącz do wyścigu</button>
@@ -86,6 +93,8 @@
       <input id="lobby-link" readonly>
       <button class="btn small" id="btn-copy">Kopiuj</button>
     </div>
+    <h3>Tor <span class="muted" id="track-note" style="text-transform:none;letter-spacing:0"></span></h3>
+    <div class="tracks" id="lobby-tracks"></div>
     <div class="players" id="lobby-players"></div>
     <div class="row-btns">
       <button class="btn primary" id="btn-ready">Gotowy</button>

@@ -4,22 +4,36 @@ import * as THREE from 'three';
 export const ROAD_HALF = 8;      // połowa szerokości asfaltu
 export const KERB_W = 1.5;       // szerokość pasa krawężnika
 export const BARRIER = 14;       // odległość bariery od osi toru
-export const LAPS = 4;
 
-// Punkty kontrolne [x, z] — tor zamknięty, jazda zgodnie z kolejnością (start na dolnej prostej, w prawo).
-const CONTROL = [
-  [-40, 45], [10, 47], [55, 45], [90, 30], [96, 2], [80, -24], [56, -32],
-  [40, -16], [20, -6], [-4, -16], [-18, -42], [-50, -52], [-86, -40],
-  [-98, -10], [-82, 18], [-64, 34],
-];
-const SCALE = 1.2;
-const START_REF = [0, 46 * SCALE];
+// Definicje torów. Punkty kontrolne [x, z] — tor zamknięty, jazda zgodnie z kolejnością.
+// start: punkt odniesienia linii startu (na prostej), stand: gdzie postawić trybunę.
+export const TRACK_DEFS = {
+  dolina: {
+    name: 'Dolina Sosen', tag: 'Płynne łuki i szybka prosta', laps: 4, scale: 1.2, start: [0, 46], stand: 'inner',
+    points: [[-40, 45], [10, 47], [55, 45], [90, 30], [96, 2], [80, -24], [56, -32], [40, -16], [20, -6], [-4, -16], [-18, -42], [-50, -52], [-86, -40], [-98, -10], [-82, 18], [-64, 34]],
+    theme: 'lato',
+  },
+  owal: {
+    name: 'Pustynny Owal', tag: 'Bardzo szybki, szykana na tyłach', laps: 3, scale: 1.0, start: [0, 60], stand: 'inner',
+    points: [[-90, 60], [-30, 60], [30, 60], [90, 60], [140, 45], [160, 0], [140, -45], [90, -60], [50, -50], [20, -68], [-20, -58], [-70, -62], [-125, -45], [-150, 0], [-125, 45]],
+    theme: 'pustynia',
+  },
+  serpentyna: {
+    name: 'Zimowa Serpentyna', tag: 'Techniczny, ciasne agrafki', laps: 3, scale: 1.15, start: [0, 56], stand: 'outer',
+    points: [[-30, 56], [30, 56], [77, 56], [90, 51], [95, 38], [90, 25], [77, 20], [30, 20], [-34, 20], [-47, 15], [-52, 2], [-47, -11], [-34, -16], [10, -16], [60, -16], [76, -23], [83, -39], [76, -55], [60, -62], [20, -62], [-50, -66], [-100, -52], [-122, -5], [-112, 40], [-85, 58]],
+    theme: 'zima',
+  },
+};
+export const TRACK_IDS = Object.keys(TRACK_DEFS);
 
 const wrapAngle = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
 export class Track {
-  constructor() {
-    const curve = new THREE.CatmullRomCurve3(CONTROL.map(([x, z]) => new THREE.Vector3(x * SCALE, 0, z * SCALE)), true, 'centripetal');
+  constructor(id = 'dolina') {
+    const def = TRACK_DEFS[id];
+    this.id = id; this.def = def; this.laps = def.laps;
+    const SCALE = def.scale, START_REF = [def.start[0], def.start[1] * SCALE];
+    const curve = new THREE.CatmullRomCurve3(def.points.map(([x, z]) => new THREE.Vector3(x * SCALE, 0, z * SCALE)), true, 'centripetal');
     curve.arcLengthDivisions = 4000;
     this.length = curve.getLength();
     const n = Math.round(this.length);

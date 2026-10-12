@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ROAD_HALF, KERB_W, BARRIER } from './track.js';
+import { TireField } from './tires.js';
 
 // deterministyczny generator losowy — ten sam świat u obu graczy
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -64,10 +65,24 @@ function wall(track, off, y0, y1, { pred = () => true, uScale = 4 } = {}) {
   return g;
 }
 
-function asphaltTexture() {
+
+export const THEMES = {
+  lato: { sky: 0xb9c5e4, hemi: [0xcfdcff, 0x7a6a8a, 0.85], sun: [0xffdfb8, 3.1], grass: [95, 156, 73], light: [135, 195, 85], dark: [35, 90, 50], flowers: true,
+    gravel: '#a1694a', gravel2: '#b87a55', gravelA: 'rgba(235,180,130,0.28)', gravelB: 'rgba(80,45,30,0.3)', asphalt: '#58536f',
+    foliage: ['#6b4a33', '#2f7d4a', '#38905a', '#43a468'], trees: 240, rock: 0xa7a5b4, rocks: 70, bush: [0.27, 0.5, 0.3], bushes: 150 },
+  pustynia: { sky: 0xf0d3a8, hemi: [0xffe6c0, 0x9a7a5a, 0.9], sun: [0xffc487, 3.5], grass: [217, 184, 120], light: [236, 206, 150], dark: [190, 150, 90], flowers: false,
+    gravel: '#a9764f', gravel2: '#c28f62', gravelA: 'rgba(255,215,160,0.3)', gravelB: 'rgba(90,55,30,0.3)', asphalt: '#625b6b',
+    foliage: ['#7a5a3a', '#8f8a3e', '#a39a4a', '#b6ab58'], trees: 90, rock: 0xc09270, rocks: 140, bush: [0.12, 0.45, 0.4], bushes: 90 },
+  zima: { sky: 0xcfdcf0, hemi: [0xe2eeff, 0x8f9db8, 1.0], sun: [0xe8f0ff, 2.7], grass: [232, 238, 246], light: [250, 252, 255], dark: [170, 186, 210], flowers: false,
+    gravel: '#8d96a6', gravel2: '#a6aebb', gravelA: 'rgba(255,255,255,0.35)', gravelB: 'rgba(60,70,90,0.28)', asphalt: '#4c4b5e',
+    foliage: ['#5b4331', '#2a6b50', '#3b8062', '#eef5f8'], trees: 260, rock: 0x9aa2b2, rocks: 80, bush: [0.45, 0.2, 0.55], bushes: 70 },
+};
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+function asphaltTexture(base = '#58536f') {
   const rnd = rng(11);
   return canvasTex(512, 512, (x, w, h) => {
-    x.fillStyle = '#58536f'; x.fillRect(0, 0, w, h);
+    x.fillStyle = base; x.fillRect(0, 0, w, h);
     for (let i = 0; i < 90; i++) { // plamy
       const px = rnd() * w, py = rnd() * h, r = 30 + rnd() * 90;
       const g = x.createRadialGradient(px, py, 0, px, py, r);
@@ -89,12 +104,12 @@ function asphaltTexture() {
   });
 }
 
-function grassTile() {
+function grassTile(T) {
   const rnd = rng(5);
   return canvasTex(256, 256, (x, w, h) => {
-    x.fillStyle = '#5f9c49'; x.fillRect(0, 0, w, h);
+    x.fillStyle = rgb(T.grass); x.fillRect(0, 0, w, h);
     for (let i = 0; i < 4000; i++) {
-      x.fillStyle = rnd() > 0.5 ? `rgba(120,185,80,${0.1 + rnd() * 0.14})` : `rgba(40,95,50,${0.1 + rnd() * 0.16})`;
+      x.fillStyle = rnd() > 0.5 ? rgb(T.light, 0.1 + rnd() * 0.14) : rgb(T.dark, 0.1 + rnd() * 0.16);
       const s = 1 + rnd() * 2.5; x.fillRect(rnd() * w, rnd() * h, s, s * (1 + rnd() * 2));
     }
   }, { repeat: [150, 150] });
@@ -125,20 +140,23 @@ function billboardTex(text, bg, fg) {
 }
 
 export function buildWorld(scene, renderer, track) {
-  const world = { time: { value: 0 } };
+  const T = THEMES[track.def.theme];
+  const root = new THREE.Group();
+  scene.add(root);
+  const world = { time: { value: 0 }, root, theme: T };
   const N = track.N;
   const rnd = rng(2024);
 
   // ---------- Światło i środowisko ----------
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.42;
-  const SKY = 0xb9c5e4;
-  scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(SKY, 420, 1500);
-  const hemi = new THREE.HemisphereLight(0xcfdcff, 0x7a6a8a, 0.85);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffdfb8, 3.1);
+  if (!scene.environment) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.42;
+  }
+  world.sky = new THREE.Color(T.sky);
+  const hemi = new THREE.HemisphereLight(T.hemi[0], T.hemi[1], T.hemi[2]);
+  root.add(hemi);
+  const sun = new THREE.DirectionalLight(T.sun[0], T.sun[1]);
   const cx = (track.bounds.minX + track.bounds.maxX) / 2, cz = (track.bounds.minZ + track.bounds.maxZ) / 2;
   sun.position.set(cx - 130, 150, cz + 115);
   sun.target.position.set(cx, 0, cz);
@@ -148,13 +166,13 @@ export function buildWorld(scene, renderer, track) {
   const S = 190;
   Object.assign(sun.shadow.camera, { left: -S, right: S, top: S * 0.78, bottom: -S * 0.78, near: 20, far: 520 });
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
-  scene.add(sun, sun.target);
+  root.add(sun, sun.target);
   world.sun = sun;
 
   // ---------- Teren ----------
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ map: grassTile(), roughness: 1 }));
+  const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ map: grassTile(T), roughness: 1 }));
   far.rotation.x = -Math.PI / 2; far.position.y = -0.06; far.receiveShadow = true;
-  scene.add(far);
+  root.add(far);
 
   const M = 150;
   const gb = { x0: track.bounds.minX - M, x1: track.bounds.maxX + M, z0: track.bounds.minZ - M, z1: track.bounds.maxZ + M };
@@ -162,18 +180,18 @@ export function buildWorld(scene, renderer, track) {
   const PPU = 2560 / Math.max(GW, GH);
   const groundTex = canvasTex(Math.round(GW * PPU), Math.round(GH * PPU), (x, w, h) => {
     const X = (px) => (px - gb.x0) * PPU, Z = (pz) => (pz - gb.z0) * PPU;
-    x.fillStyle = '#5f9c49'; x.fillRect(0, 0, w, h);
+    x.fillStyle = rgb(T.grass); x.fillRect(0, 0, w, h);
     for (let i = 0; i < 500; i++) { // duże plamy odcieni trawy
       const px = rnd() * w, py = rnd() * h, r = 40 + rnd() * 160, dark = rnd() > 0.45;
       const g = x.createRadialGradient(px, py, 0, px, py, r);
-      g.addColorStop(0, dark ? 'rgba(40,100,60,0.16)' : 'rgba(150,205,95,0.15)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      g.addColorStop(0, dark ? rgb(T.dark, 0.16) : rgb(T.light, 0.15)); g.addColorStop(1, 'rgba(0,0,0,0)');
       x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2);
     }
     for (let i = 0; i < 26000; i++) {
-      x.fillStyle = rnd() > 0.5 ? `rgba(135,195,85,${0.1 + rnd() * 0.15})` : `rgba(35,90,50,${0.1 + rnd() * 0.16})`;
+      x.fillStyle = rnd() > 0.5 ? rgb(T.light, 0.1 + rnd() * 0.15) : rgb(T.dark, 0.1 + rnd() * 0.16);
       x.fillRect(rnd() * w, rnd() * h, 1.5 + rnd() * 2, 2 + rnd() * 4);
     }
-    for (let i = 0; i < 1400; i++) { // kwiatki
+    for (let i = 0; i < (T.flowers ? 1400 : 0); i++) { // kwiatki
       x.fillStyle = ['#fff6d8', '#ffd84d', '#ff9fc4', '#ffffff'][rnd() * 4 | 0];
       x.globalAlpha = 0.65; x.beginPath(); x.arc(rnd() * w, rnd() * h, 1.4 + rnd() * 1.4, 0, 6.3); x.fill();
     }
@@ -184,24 +202,24 @@ export function buildWorld(scene, renderer, track) {
     path.closePath();
     x.lineJoin = 'round'; x.lineCap = 'round';
     x.strokeStyle = 'rgba(25,40,25,0.35)'; x.lineWidth = 2 * (BARRIER + 1.6) * PPU; x.stroke(path);
-    x.strokeStyle = '#a1694a'; x.lineWidth = 2 * (BARRIER - 0.2) * PPU; x.stroke(path);
-    x.strokeStyle = '#b87a55'; x.lineWidth = 2 * (ROAD_HALF + KERB_W + 1.4) * PPU; x.stroke(path);
+    x.strokeStyle = T.gravel; x.lineWidth = 2 * (BARRIER - 0.2) * PPU; x.stroke(path);
+    x.strokeStyle = T.gravel2; x.lineWidth = 2 * (ROAD_HALF + KERB_W + 1.4) * PPU; x.stroke(path);
     for (let i = 0; i < 18000; i++) { // ziarenka żwiru
       const k = rnd() * N | 0, off = (ROAD_HALF + 1.5 + rnd() * (BARRIER - ROAD_HALF - 2)) * (rnd() > 0.5 ? 1 : -1);
       const px = X(track.x[k] - track.tz[k] * off), pz = Z(track.z[k] + track.tx[k] * off);
-      x.fillStyle = rnd() > 0.5 ? 'rgba(235,180,130,0.28)' : 'rgba(80,45,30,0.3)';
+      x.fillStyle = rnd() > 0.5 ? T.gravelA : T.gravelB;
       x.fillRect(px, pz, 1.5, 1.5);
     }
   }, { aniso: 8 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(GW, GH), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.96 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set((gb.x0 + gb.x1) / 2, 0, (gb.z0 + gb.z1) / 2);
   ground.receiveShadow = true;
-  scene.add(ground);
+  root.add(ground);
 
   // ---------- Asfalt, krawężniki, linie ----------
   const asphalt = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, 0.02, { vScale: 16 }),
-    new THREE.MeshStandardMaterial({ map: asphaltTexture(), roughness: 0.88, metalness: 0.0 }));
-  asphalt.receiveShadow = true; scene.add(asphalt);
+    new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt), roughness: 0.88, metalness: 0.0 }));
+  asphalt.receiveShadow = true; root.add(asphalt);
 
   // kerby na wewnętrznej stronie zakrętów
   const KT = 0.02;
@@ -215,20 +233,20 @@ export function buildWorld(scene, renderer, track) {
   for (const side of [1, -1]) {
     const g = strip(track, side > 0 ? ROAD_HALF : -ROAD_HALF - KERB_W, side > 0 ? ROAD_HALF + KERB_W : -ROAD_HALF, 0.04,
       { pred: (i) => dil[i] && Math.sign(track.kappa[i]) === side, color: kerbCol });
-    const m = new THREE.Mesh(g, kerbMat); m.receiveShadow = true; scene.add(m);
+    const m = new THREE.Mesh(g, kerbMat); m.receiveShadow = true; root.add(m);
   }
   // linie krawędziowe i przerywana oś
   const lineMat = new THREE.MeshStandardMaterial({ color: 0xf0eef6, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const s of [-1, 1]) {
     const a = s * (ROAD_HALF - 0.75), b = s * (ROAD_HALF - 0.4);
-    const m = new THREE.Mesh(strip(track, Math.min(a, b), Math.max(a, b), 0.03, {}), lineMat); m.receiveShadow = true; scene.add(m);
+    const m = new THREE.Mesh(strip(track, Math.min(a, b), Math.max(a, b), 0.03, {}), lineMat); m.receiveShadow = true; root.add(m);
   }
   const dash = new THREE.Mesh(strip(track, -0.14, 0.14, 0.03, { pred: (i) => Math.floor(i / 5) % 2 === 0 }), lineMat);
-  dash.receiveShadow = true; scene.add(dash);
+  dash.receiveShadow = true; root.add(dash);
   // linia startu
   const finish = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, 0.035, { pred: (i) => i === 0 || i === 1, vScale: 2 }),
     new THREE.MeshStandardMaterial({ map: checkerTex(8, 2), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
-  finish.receiveShadow = true; scene.add(finish);
+  finish.receiveShadow = true; root.add(finish);
   // pola startowe
   const slotTex = canvasTex(256, 160, (x, w, h) => {
     x.strokeStyle = 'rgba(245,243,250,0.9)'; x.lineWidth = 7; x.strokeRect(8, 8, w - 16, h - 16);
@@ -238,7 +256,7 @@ export function buildWorld(scene, renderer, track) {
     const q = track.at(p, lat);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 4.4), new THREE.MeshBasicMaterial({ map: slotTex, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     m.rotation.x = -Math.PI / 2; m.rotation.z = q.yaw; m.position.set(q.x, 0.042, q.z);
-    scene.add(m);
+    root.add(m);
   }
 
   // ---------- Bariery ----------
@@ -250,9 +268,9 @@ export function buildWorld(scene, renderer, track) {
   const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(1, 1, 1), eul = new THREE.Euler();
   for (const side of [-1, 1]) {
     const rail = new THREE.Mesh(wall(track, side * BARRIER, 0.32, 0.98, { uScale: 4 }), railMat);
-    rail.castShadow = true; scene.add(rail);
+    rail.castShadow = true; root.add(rail);
     const cap = new THREE.Mesh(wall(track, side * BARRIER, 0.98, 1.04, {}), new THREE.MeshStandardMaterial({ color: 0x9aa0ae, side: THREE.DoubleSide, roughness: 0.5 }));
-    scene.add(cap);
+    root.add(cap);
     for (let i = 0; i < N; i += 5) {
       const off = side * (BARRIER + 0.18);
       v3.set(track.x[i] - track.tz[i] * off, 0.55, track.z[i] + track.tx[i] * off);
@@ -260,27 +278,23 @@ export function buildWorld(scene, renderer, track) {
       posts.setMatrixAt(pc++, m4.compose(v3, q4, s3));
     }
   }
-  posts.count = pc; posts.castShadow = true; scene.add(posts);
+  posts.count = pc; posts.castShadow = true; root.add(posts);
 
-  // opony w zewnętrznych łukach zakrętów
-  const tireGeo = new THREE.TorusGeometry(0.5, 0.24, 10, 18); tireGeo.rotateX(Math.PI / 2);
-  const tireInst = new THREE.InstancedMesh(tireGeo, new THREE.MeshStandardMaterial({ roughness: 0.85 }), 900);
-  const tireCols = [new THREE.Color('#1c1b22'), new THREE.Color('#ececf2'), new THREE.Color('#d8282e'), new THREE.Color('#1c1b22')];
-  let tc = 0;
+  // opony w zewnętrznych łukach zakrętów (rozbijane przy uderzeniu)
+  const tireCols = ['#1c1b22', '#ececf2', '#d8282e', '#1c1b22'];
+  const tireList = [];
   const outerRun = new Uint8Array(N);
   for (let i = 0; i < N; i++) outerRun[i] = Math.abs(track.kappa[i]) > 0.026 ? 1 : 0;
   for (let i = 0; i < N; i += 2) {
-    if (!outerRun[i] || tc > 880) continue;
+    if (!outerRun[i] || tireList.length > 700) continue;
     const side = -Math.sign(track.kappa[i]);
     const off = side * (BARRIER - 0.95);
     const h = 2 + ((i / 2) % 3 === 0 ? 1 : 0);
     for (let k = 0; k < h; k++) {
-      v3.set(track.x[i] - track.tz[i] * off + (rnd() - 0.5) * 0.12, 0.26 + k * 0.42, track.z[i] + track.tx[i] * off + (rnd() - 0.5) * 0.12);
-      q4.identity(); tireInst.setMatrixAt(tc, m4.compose(v3, q4, s3));
-      tireInst.setColorAt(tc, tireCols[(Math.floor(i / 6) + k) % tireCols.length]); tc++;
+      tireList.push({ x: track.x[i] - track.tz[i] * off + (rnd() - 0.5) * 0.12, y: 0.26 + k * 0.42, z: track.z[i] + track.tx[i] * off + (rnd() - 0.5) * 0.12, color: tireCols[(Math.floor(i / 6) + k) % tireCols.length] });
     }
   }
-  tireInst.count = tc; tireInst.castShadow = true; tireInst.receiveShadow = true; scene.add(tireInst);
+  world.tires = new TireField(root, tireList);
 
   // siatka ochronna na zewnątrz zakrętów
   const fenceTexture = fenceTex();
@@ -289,13 +303,13 @@ export function buildWorld(scene, renderer, track) {
   for (const side of [-1, 1]) {
     const pred = (i) => outerRun[i] && -Math.sign(track.kappa[i]) === side;
     const g = wall(track, side * (BARRIER + 2.4), 0.2, 4.8, { pred, uScale: 3.5 });
-    if (g.attributes.position.count) { const m = new THREE.Mesh(g, fenceMat); m.castShadow = true; scene.add(m); }
+    if (g.attributes.position.count) { const m = new THREE.Mesh(g, fenceMat); m.castShadow = true; root.add(m); }
     for (let i = 0; i < N; i += 7) if (pred(i)) fencePosts.push([track.x[i] - track.tz[i] * side * (BARRIER + 2.4), track.z[i] + track.tx[i] * side * (BARRIER + 2.4)]);
   }
   if (fencePosts.length) {
     const fp = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 5, 6), postMat, fencePosts.length);
     fencePosts.forEach(([x, z], i) => fp.setMatrixAt(i, m4.compose(v3.set(x, 2.5, z), q4.identity(), s3)));
-    fp.castShadow = true; scene.add(fp);
+    fp.castShadow = true; root.add(fp);
   }
 
   // pachołki (biało-czerwone słupki) na początku i końcu każdego kerbu
@@ -312,7 +326,7 @@ export function buildWorld(scene, renderer, track) {
       for (const yy of [0.5, 1.2]) bolR.setMatrixAt(br++, m4.compose(v3.set(px, yy, pz), q4.identity(), s3));
     }
   }
-  bolW.count = bc; bolR.count = br; bolW.castShadow = bolR.castShadow = true; scene.add(bolW, bolR);
+  bolW.count = bc; bolR.count = br; bolW.castShadow = bolR.castShadow = true; root.add(bolW, bolR);
 
   // ---------- Brama startowa ----------
   {
@@ -326,13 +340,14 @@ export function buildWorld(scene, renderer, track) {
     beam.position.set(0, 8.6, 0); beam.castShadow = true; g.add(beam);
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, w * 1.5), new THREE.MeshStandardMaterial({ color: 0x331111, emissive: 0xff2222, emissiveIntensity: 1.4 }));
     bar.position.set(1.0, 8.0, 0); g.add(bar);
-    scene.add(g);
+    root.add(g);
   }
 
   // ---------- Trybuny wewnątrz toru (przy starcie) ----------
   const standAnchor = track.at(34, 0);
+  const outerStand = track.def.stand === 'outer';
   {
-    const g = new THREE.Group(); g.position.set(standAnchor.x, 0, standAnchor.z); g.rotation.y = -standAnchor.yaw;
+    const g = new THREE.Group(); g.position.set(standAnchor.x, 0, standAnchor.z); g.rotation.y = -standAnchor.yaw + (outerStand ? Math.PI : 0);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xcfc8d8, roughness: 0.9 });
     const rows = 6, rowD = 1.7, len = 54;
     const crowd = new THREE.InstancedMesh(new THREE.BoxGeometry(0.62, 0.95, 0.5), new THREE.MeshStandardMaterial({ roughness: 0.8 }), rows * 60);
@@ -368,13 +383,13 @@ export function buildWorld(scene, renderer, track) {
       flag.position.set(x + 1.2, 8.4 + 0.9 * rows, -(BARRIER + 5 + rows * rowD)); flag.castShadow = true; flag.userData.flag = true; g.add(flag);
       (world.flags ||= []).push(flag);
     }
-    scene.add(g);
+    root.add(g);
   }
   function steel1() { return new THREE.MeshStandardMaterial({ color: 0xdfe3ec, metalness: 0.5, roughness: 0.35 }); }
 
   // ---------- Billboardy (zwrócone do kamery) ----------
   const boards = [['NITRO', '#d6242c', '#fff4e6'], ['APEX TIRES', '#1b2a4a', '#ffd84d'], ['SPEEDLINE', '#0f8a9c', '#ffffff'], ['TURBO', '#ff7a1a', '#14141c'], ['DRIFT KING', '#6d3bd0', '#fff4e6'], ['PIT STOP', '#2a7a43', '#ffffff']];
-  const standMid = track.at(34, -24);
+  const standMid = track.at(34, outerStand ? 24 : -24);
   const exclusions = [[standMid.x, standMid.z, 40]];
   const placedBoards = [];
   let bi = 0;
@@ -392,7 +407,7 @@ export function buildWorld(scene, renderer, track) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(11, 3.4, 0.35), new THREE.MeshStandardMaterial({ map: billboardTex(txt, bg, fg), roughness: 0.55 }));
       panel.position.y = 3.5; panel.castShadow = true;
       for (const px of [-4.2, 4.2]) { const pl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.8, 0.3), postMat); pl.position.set(px, 1.9, -0.1); pl.castShadow = true; grp.add(pl); }
-      grp.add(panel); scene.add(grp);
+      grp.add(panel); root.add(grp);
       placedBoards.push([x, z]); exclusions.push([x, z, 9]);
     }
   }
@@ -446,12 +461,12 @@ export function buildWorld(scene, renderer, track) {
       geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       geo = geo.toNonIndexed(); geo.deleteAttribute('uv'); parts.push(geo);
     };
-    add(new THREE.CylinderGeometry(0.28, 0.4, 1.8, 7), 0.9, '#6b4a33');
-    add(new THREE.ConeGeometry(2.5, 3.4, 8), 3.1, '#2f7d4a');
-    add(new THREE.ConeGeometry(1.95, 3.0, 8), 4.7, '#38905a');
-    add(new THREE.ConeGeometry(1.4, 2.6, 8), 6.1, '#43a468');
+    add(new THREE.CylinderGeometry(0.28, 0.4, 1.8, 7), 0.9, T.foliage[0]);
+    add(new THREE.ConeGeometry(2.5, 3.4, 8), 3.1, T.foliage[1]);
+    add(new THREE.ConeGeometry(1.95, 3.0, 8), 4.7, T.foliage[2]);
+    add(new THREE.ConeGeometry(1.4, 2.6, 8), 6.1, T.foliage[3]);
     const geo = mergeGeometries(parts);
-    const spots = scatter(240, BARRIER + 7.5, 60, 5.4);
+    const spots = scatter(T.trees, BARRIER + 7.5, 60, 5.4);
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = world.time;
@@ -469,33 +484,33 @@ export function buildWorld(scene, renderer, track) {
       const s = 0.8 + rnd() * 0.75;
       q4.setFromEuler(eul.set(0, rnd() * 6.28, 0));
       trees.setMatrixAt(i, m4.compose(v3.set(x, 0, z), q4, s3.set(s, s * (0.9 + rnd() * 0.35), s)));
-      trees.setColorAt(i, tint.setHSL(0.36 + rnd() * 0.05, 0.4 + rnd() * 0.2, 0.62 + rnd() * 0.45));
+      trees.setColorAt(i, tint.setScalar(0.8 + rnd() * 0.35));
     });
     s3.set(1, 1, 1);
-    trees.castShadow = true; trees.receiveShadow = true; scene.add(trees);
+    trees.castShadow = true; trees.receiveShadow = true; root.add(trees);
     world.treeSpots = spots;
   }
 
   // ---------- Skały i krzewy ----------
   {
-    const rocks = scatter(70, BARRIER + 5, 70, 7);
-    const rm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xa7a5b4, flatShading: true, roughness: 0.9 }), rocks.length);
+    const rocks = scatter(T.rocks, BARRIER + 5, 70, 7);
+    const rm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: T.rock, flatShading: true, roughness: 0.9 }), rocks.length);
     rocks.forEach(([x, z], i) => {
       const s = 0.8 + rnd() * 1.8;
       q4.setFromEuler(eul.set(rnd() * 0.5, rnd() * 6.28, rnd() * 0.5));
       rm.setMatrixAt(i, m4.compose(v3.set(x, s * 0.35, z), q4, s3.set(s * 1.2, s * 0.8, s)));
     });
-    rm.castShadow = rm.receiveShadow = true; scene.add(rm);
-    const bushes = scatter(150, BARRIER + 4.5, 70, 4.2);
+    rm.castShadow = rm.receiveShadow = true; root.add(rm);
+    const bushes = scatter(T.bushes, BARRIER + 4.5, 70, 4.2);
     const bm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), bushes.length);
     const bc2 = new THREE.Color();
     bushes.forEach(([x, z], i) => {
       const s = 0.6 + rnd() * 0.9;
       bm.setMatrixAt(i, m4.compose(v3.set(x, s * 0.45, z), q4.identity(), s3.set(s * 1.2, s * 0.8, s * 1.1)));
-      bm.setColorAt(i, bc2.setHSL(0.27 + rnd() * 0.1, 0.5, 0.3 + rnd() * 0.15));
+      bm.setColorAt(i, bc2.setHSL(T.bush[0] + rnd() * 0.08, T.bush[1], T.bush[2] + rnd() * 0.15));
     });
     s3.set(1, 1, 1);
-    bm.castShadow = bm.receiveShadow = true; scene.add(bm);
+    bm.castShadow = bm.receiveShadow = true; root.add(bm);
   }
 
   // ---------- Punkty dopasowania kamery ----------

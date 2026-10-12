@@ -17,7 +17,7 @@ Zmienna `PORT` zmienia port. Ranking trafia do `data/ranking.db`.
 
 1. Wpisz nick (zapamiętany w LocalStorage), wybierz auto.
 2. **Stwórz wyścig** → skopiuj link i wyślij drugiemu graczowi. Po otwarciu linku wybiera auto i dołącza.
-3. Gdy obaj klikną **Gotowy** — odliczanie i start. 4 okrążenia, wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
+3. Host wybiera tor w lobby (3 tory: Dolina Sosen, Pustynny Owal, Zimowa Serpentyna). Gdy obaj klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
 4. **Trening solo** — jazda bez przeciwnika.
 
 Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otworzy drugi gracz
@@ -31,7 +31,16 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 | S / ↓ | hamulec / wsteczny |
 | A, D / ← → | skręt |
 | Spacja | hamulec ręczny (drift) |
+| Shift | nitro (2,5 s) |
+| F | strzał (naboje ważne 2 s od zebrania) |
+| E | zrzut plamy oleju |
 | M | wyciszenie |
+
+## Paczki
+
+Na tor spadają (niezbyt często) paczki: **nitro**, **naboje** i **olej**. Trafiony pociskiem rywal traci prędkość.
+Plama oleju odbiera przyczepność każdemu, kto w nią wjedzie — także temu, kto ją zrzucił.
+Stosy opon przy bandzie rozlatują się po uderzeniu (i lekko zwalniają auto).
 
 ## Architektura
 
@@ -39,7 +48,9 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 server.js            Express + Socket.IO: pokoje, odliczanie, wynik, ranking (SQLite)
 public/index.html    UI (nick, menu, lobby, HUD, wyniki)
 public/js/main.js    pętla gry, kamera izometryczna (auto-dopasowana do toru), sieć, UI
-public/js/track.js   oś toru, próbkowanie, zapytania o pozycję (postęp, odległość boczna)
+public/js/items.js   paczki, pociski, plamy oleju
+public/js/tires.js   rozbijane opony
+public/js/track.js   definicje 3 torów, oś toru, próbkowanie, zapytania o pozycję (postęp, odległość boczna)
 public/js/physics.js fizyka arcade: napęd, drift, bariery, zderzenia aut
 public/js/car.js     proceduralne auta (wyciągnięty profil + shader lakieru/pasów GLSL)
 public/js/world.js   asfalt, krawężniki, bariery, trybuny, drzewa, billboardy

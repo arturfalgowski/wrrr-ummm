@@ -130,6 +130,21 @@ export const sfx = {
   lose() { [392, 349, 311, 262].forEach((f, i) => tone({ type: 'triangle', f, dur: 0.32, gain: 0.2, when: i * 0.17 })); },
   click() { tone({ type: 'triangle', f: 520, f2: 760, dur: 0.07, gain: 0.12 }); },
   hover() { tone({ type: 'sine', f: 900, dur: 0.035, gain: 0.04 }); },
+  pickup() { tone({ type: 'sine', f: 660, f2: 1320, dur: 0.18, gain: 0.2 }); tone({ type: 'triangle', f: 990, f2: 1980, dur: 0.22, gain: 0.12, when: 0.07 }); },
+  land() { tone({ type: 'sine', f: 120, f2: 50, dur: 0.18, gain: 0.25 }); },
+  nitro() {
+    if (!ctx) return; const t = ctx.currentTime;
+    const src = noiseSrc(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t); bp.frequency.exponentialRampToValueAtTime(3200, t + 0.5); bp.frequency.exponentialRampToValueAtTime(1200, t + 2.5);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.45, t + 0.15); g.gain.setValueAtTime(0.3, t + 2.0); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    src.connect(bp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 2.7);
+    tone({ type: 'sawtooth', f: 180, f2: 520, dur: 0.6, gain: 0.12 });
+  },
+  shoot() { tone({ type: 'square', f: 900, f2: 140, dur: 0.22, gain: 0.2 }); tone({ type: 'sawtooth', f: 240, f2: 60, dur: 0.18, gain: 0.18 }); },
+  hit() { tone({ type: 'sawtooth', f: 260, f2: 50, dur: 0.4, gain: 0.3 }); this.crash(0.5); },
+  oil() { if (!ctx) return; const t = ctx.currentTime; const src = noiseSrc(); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; const g = ctx.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.4); tone({ type: 'sine', f: 300, f2: 90, dur: 0.25, gain: 0.2 }); },
+  tire(power = 0.5) { tone({ type: 'sine', f: 190, f2: 60, dur: 0.22, gain: 0.35 * power + 0.1 }); tone({ type: 'square', f: 140, f2: 70, dur: 0.1, gain: 0.08 }); },
+  empty() { tone({ type: 'square', f: 200, dur: 0.06, gain: 0.08 }); },
   join() { tone({ type: 'sine', f: 600, dur: 0.1, gain: 0.15 }); tone({ type: 'sine', f: 900, dur: 0.16, gain: 0.15, when: 0.09 }); },
 };
 export const audioReady = () => !!ctx;

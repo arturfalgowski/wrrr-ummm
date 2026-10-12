@@ -9,7 +9,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const LAPS = 4;
+const TRACKS = ['dolina', 'owal', 'serpentyna'];
+const LAPS = { dolina: 4, owal: 3, serpentyna: 3 };
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil'];
 
 // ---------- Baza (ranking) ----------
 const dataDir = path.join(__dirname, 'data');
@@ -53,7 +55,7 @@ const genId = () => {
 const cleanNick = (n) => String(n ?? '').replace(/[<>&"'`]/g, '').trim().slice(0, 14);
 const cleanCar = (c) => (['aurora', 'vortex', 'blaze'].includes(c) ? c : 'aurora');
 const publicRoom = (r) => ({
-  id: r.id, state: r.state, laps: LAPS,
+  id: r.id, state: r.state, track: r.track, laps: LAPS[r.track],
   players: r.players.map((p) => ({ id: p.sid, nick: p.nick, car: p.car, ready: p.ready, slot: p.slot })),
 });
 const clearTimers = (r) => { r.timers.forEach(clearTimeout); r.timers = []; };
@@ -65,17 +67,33 @@ function startCountdown(r) {
   r.winner = null;
   r.times = {};
   r.recorded = false;
+  r.pickups = new Map();
   io.to(r.id).emit('race:prepare', publicRoom(r));
   later(r, 800, () => io.to(r.id).emit('race:count', 3));
   later(r, 1800, () => io.to(r.id).emit('race:count', 2));
   later(r, 2800, () => io.to(r.id).emit('race:count', 1));
-  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); });
+  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
+}
+
+function schedulePickups(r) {
+  const tick = () => {
+    if (r.state !== 'racing') return;
+    if (r.pickups.size < 3) {
+      const id = ++r.pid, type = ITEMS[Math.random() * ITEMS.length | 0];
+      r.pickups.set(id, type);
+      io.to(r.id).emit('pickup:spawn', { id, type, u: Math.random(), l: (Math.random() - 0.5) * 1.3 });
+      later(r, 30000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
+    }
+    later(r, 8000 + Math.random() * 6000, tick);
+  };
+  later(r, 5500, tick);
 }
 
 function endRace(r, winner, reason) {
   if (r.recorded) return;
   r.recorded = true;
   r.state = 'finished';
+  clearTimers(r);
   r.winner = winner.sid;
   const t = r.times[winner.sid] ?? null;
   for (const p of r.players) {
@@ -124,12 +142,12 @@ function leaveRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('ranking:get', (cb) => typeof cb === 'function' && cb(ranking()));
 
-  socket.on('room:create', ({ nick, car } = {}, cb) => {
+  socket.on('room:create', ({ nick, car, track } = {}, cb) => {
     if (typeof cb !== 'function') return;
     leaveRoom(socket);
     nick = cleanNick(nick);
     if (nick.length < 2) return cb({ ok: false, error: 'Nick jest za krótki.' });
-    const r = { id: genId(), state: 'lobby', players: [], timers: [], times: {}, winner: null, recorded: false };
+    const r = { id: genId(), state: 'lobby', track: TRACKS.includes(track) ? track : TRACKS[0], players: [], timers: [], times: {}, winner: null, recorded: false, pickups: new Map(), pid: 0 };
     r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot: 0 });
     rooms.set(r.id, r);
     socket.join(r.id);
@@ -155,6 +173,29 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:leave', () => leaveRoom(socket));
+
+  socket.on('room:track', (track) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || r.players[0]?.sid !== socket.id || r.state === 'racing' || r.state === 'countdown' || !TRACKS.includes(track)) return;
+    r.track = track;
+    io.to(r.id).emit('room:update', publicRoom(r));
+  });
+
+  socket.on('pickup:take', ({ id } = {}) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || r.state !== 'racing' || !r.pickups.has(id)) return;
+    const type = r.pickups.get(id);
+    r.pickups.delete(id);
+    io.to(r.id).emit('pickup:taken', { id, by: socket.id, type });
+  });
+
+  // zdarzenia gry (strzał, olej, trafienie) — przekazywane przeciwnikowi
+  socket.on('game:event', (e) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit'].includes(e.t)) return;
+    const n = (v) => (Number.isFinite(v) ? v : 0);
+    socket.to(r.id).emit('game:event', { t: e.t, x: n(e.x), z: n(e.z), yaw: n(e.yaw), vx: n(e.vx), vz: n(e.vz) });
+  });
 
   socket.on('player:car', (car) => {
     const r = rooms.get(socket.data.roomId);
