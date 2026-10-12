@@ -105,3 +105,7 @@ public/js/audio.js   Web Audio: silnik zależny od obrotów, opony, kolizje, syg
 pokoi, odliczania, kolejności mety i rankingu — nie waliduje fizyki, więc nie jest odporny na oszustwa.
 
 **WebGPU.** Nie użyte — renderer to WebGL (stabilny i szeroko wspierany), zgodnie z założeniem „WebGPU opcjonalnie".
+
+## Menu, pauza, kamera
+- Menu w zakładkach (Auto i wygląd / Tor / Ustawienia), „Trening solo” zawsze dostępny; auto i tor domyślnie losowe.
+- Esc w trybie solo = pauza (suwaki muzyki i efektów, kamera, restart, wyjście). C = kamera zza auta.

@@ -1,5 +1,6 @@
 // Dźwięk w 100% proceduralny (Web Audio API): silnik zależny od obrotów, poślizg, kolizje, sygnały i interfejs.
-let ctx = null, master = null, noiseBuf = null, muted = false;
+let ctx = null, master = null, noiseBuf = null, muted = false, sfxVol = 1;
+try { const v = parseFloat(localStorage.getItem('tc_sfx')); if (Number.isFinite(v)) sfxVol = Math.min(1, Math.max(0, v)); } catch { /* brak storage */ }
 try { muted = localStorage.getItem('tc_muted') === '1'; } catch { /* brak storage */ }
 
 export function initAudio() {
@@ -8,7 +9,7 @@ export function initAudio() {
   if (!AC) return;
   ctx = new AC();
   master = ctx.createGain();
-  master.gain.value = muted ? 0 : 0.7;
+  master.gain.value = muted ? 0 : 0.7 * sfxVol;
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 4;
   master.connect(comp).connect(ctx.destination);
@@ -18,10 +19,16 @@ export function initAudio() {
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
 }
 export function isMuted() { return muted; }
+export const getSfxVolume = () => sfxVol;
+export function setSfxVolume(v) {
+  sfxVol = Math.min(1, Math.max(0, v));
+  try { localStorage.setItem('tc_sfx', String(sfxVol)); } catch { /* ignore */ }
+  if (master && !muted) master.gain.setTargetAtTime(0.7 * sfxVol, ctx.currentTime, 0.03);
+}
 export function setMuted(m) {
   muted = m;
   try { localStorage.setItem('tc_muted', m ? '1' : '0'); } catch { /* ignore */ }
-  if (master) master.gain.setTargetAtTime(m ? 0 : 0.7, ctx.currentTime, 0.05);
+  if (master) master.gain.setTargetAtTime(m ? 0 : 0.7 * sfxVol, ctx.currentTime, 0.05);
 }
 
 const noiseSrc = () => { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; return s; };
@@ -135,6 +142,9 @@ export function setRain(on) {
 }
 
 export const sfx = {
+  tick(p = 0.5) { tone({ type: 'triangle', f: 380 + p * 900, dur: 0.05, gain: 0.1 }); },
+  open() { tone({ type: 'sine', f: 330, f2: 520, dur: 0.14, gain: 0.14 }); tone({ type: 'triangle', f: 660, f2: 990, dur: 0.12, gain: 0.07, when: 0.05 }); },
+  close() { tone({ type: 'sine', f: 520, f2: 300, dur: 0.14, gain: 0.14 }); },
   crash(power = 0.5, pan = 0) {
     if (!ctx) return;
     const p = Math.min(1, power);
