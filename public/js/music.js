@@ -34,7 +34,9 @@ export class Music {
     let i = Math.floor(Math.random() * this.tracks.length);
     if (this.tracks.length > 1 && i === this.last) i = (i + 1 + Math.floor(Math.random() * (this.tracks.length - 1))) % this.tracks.length;
     this.last = i;
+    this.el.preload = 'auto'; // doładuj od razu, żeby po pierwszym kliknięciu grało bez opóźnienia
     this.el.src = `music/${encodeURIComponent(this.tracks[i])}`;
+    this.el.load();
     this.el.volume = this.vol;
     this._play();
   }
