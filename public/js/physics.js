@@ -23,7 +23,7 @@ export class CarState {
     this.brakeLit = false; this.throttle = 0; this.accelNow = 0;
     this.hit = 0;           // siła ostatniego uderzenia (do dźwięku/iskier)
     this.wallContact = false;
-    this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
+    this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
   }
 
   place(track, p, lateral) {
@@ -57,7 +57,7 @@ export class CarState {
     const surfGrip = this.onGrass ? 0.5 : 1;
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
-    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1);
+    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
 
     // sterowanie — płynne wychylanie kierownicy
     const target = input.steer;
@@ -74,6 +74,7 @@ export class CarState {
     const highDamp = 1 / (1 + (sp / (def.maxSpeed * 1.25)) ** 2 * 1.8);
     let yawRate = this.steer * def.turn * lowSpeed * highDamp * (vf >= 0 ? 1 : -1);
     this.hand = !!input.hand && Math.abs(this.vf) > 3;
+    yawRate += this.pull * this.damage * 0.3 * lowSpeed; // uszkodzone auto ściąga na bok
     if (input.hand) yawRate *= 1.45;
     if (this.inOil) yawRate = yawRate * 0.55 + Math.sin(this.t * 9 + this.x * 0.3) * 1.5 * lowSpeed;
     // samoograniczający się drift: im większy kąt poślizgu, tym mniej skręt go dalej powiększa
@@ -93,7 +94,7 @@ export class CarState {
     this.brakeLit = false;
     if (thr > 0) {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
-      else vf += def.accel * (this.nitro ? 2.4 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
+      else vf += def.accel * (1 - 0.35 * this.damage) * (this.nitro ? 2.4 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
     }
     if (input.hand && vf > 3) this.brakeLit = true;
     if (input.brake > 0) {

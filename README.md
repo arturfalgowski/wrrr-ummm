@@ -42,6 +42,8 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 
 Na tor spadają (niezbyt często) paczki: **nitro**, **naboje** i **olej**. Naboje zbierasz i używasz kiedy chcesz — F uruchamia 4-sekundową serię z karabinu; każde trafienie zwalnia rywala.
 Plama oleju odbiera przyczepność każdemu, kto w nią wjedzie — także temu, kto ją zrzucił.
+**Zniszczenia:** auto ma wytrzymałość 0–100% (pasek w HUD i nad autami). Traci ją przy uderzeniach w bandę i opony, zderzeniach z autami oraz trafieniach z karabinu. Uszkodzone auto jest wolniejsze, ściąga na bok, wgniata się, ciemnieje i dymi (poniżej ~22% płonie). Przy 0% wybucha i po 3 s odradza się na torze z pełną wytrzymałością (2 s nietykalności). Paczka **naprawa** (zielony plus) przywraca 40%.
+
 Stosy opon przy bandzie rozlatują się po uderzeniu (i lekko zwalniają auto).
 
 ## Architektura

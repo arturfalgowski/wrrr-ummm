@@ -138,13 +138,16 @@ export function buildCar(id, number, color = null) {
   bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
   body.add(bodyMesh);
   const pickables = [bodyMesh];
+  const dents = [];
+  const regDent = (geo) => dents.push({ geo, orig: Float32Array.from(geo.attributes.position.array), nrm: Float32Array.from(geo.attributes.normal.array) });
+  regDent(bodyGeo);
 
   if (M.cabin) {
     const cabMat = reg(paintMaterial({ paint: def.color, stripe: def.stripe, glass: true, roof: true }), 'cabin');
     const cabGeo = extrudeProfile(M.cabin, M.W * 0.76, M.L, 0.14, 0.12);
     const cab = new THREE.Mesh(cabGeo, cabMat);
     cab.castShadow = true;
-    body.add(cab); pickables.push(cab);
+    body.add(cab); pickables.push(cab); regDent(cabGeo);
   }
   if (M.open) { // kokpit roadstera: fotel, kierowca w kasku, szyba
     const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.3, 1.0), new THREE.MeshStandardMaterial({ color: 0x241a1c, roughness: 0.8 }));
@@ -214,16 +217,39 @@ export function buildCar(id, number, color = null) {
 
   return {
     group, body, wheels, tailMat, def, model: M,
-    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, color: null,
+    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, color: null, stripeC: null, dmg: 0,
     /** zmiana koloru lakieru w locie (bez przebudowy modelu) */
     setColor(paint, stripe) {
-      if (this.color === paint) return; this.color = paint;
+      if (this.color === paint && this.stripeC === stripe) return;
+      this.color = paint; this.stripeC = stripe; this._paint();
+    },
+    /** lakier przypalony wraz ze zniszczeniami */
+    _paint() {
+      const dark = new THREE.Color(0x1b1a1d), burn = this.dmg * 0.62;
+      const pc = new THREE.Color(this.color).lerp(dark, burn), sc = new THREE.Color(this.stripeC).lerp(dark, burn);
       for (const { mat, kind } of paintMats) {
         const u = mat.userData.u;
-        if (kind === 'accent') { mat.color.set(stripe); mat.userData.paint = stripe; mat.userData.stripe = stripe; if (u) { u.uPaint.value.set(stripe); u.uStripe.value.set(stripe); } continue; }
-        if (kind === 'body') mat.color.set(paint);
-        mat.userData.paint = paint; mat.userData.stripe = stripe;
-        if (u) { u.uPaint.value.set(paint); u.uStripe.value.set(stripe); }
+        if (kind === 'accent') { mat.color.copy(sc); mat.userData.paint = mat.userData.stripe = '#' + sc.getHexString(); if (u) { u.uPaint.value.copy(sc); u.uStripe.value.copy(sc); } continue; }
+        if (kind === 'body') mat.color.copy(pc);
+        mat.userData.paint = '#' + pc.getHexString(); mat.userData.stripe = '#' + sc.getHexString();
+        if (u) { u.uPaint.value.copy(pc); u.uStripe.value.copy(sc); }
+      }
+    },
+    /** zniszczenia 0..1: wgniecenia karoserii + przypalony lakier */
+    setDamage(d) {
+      if (Math.abs(d - this.dmg) < 0.012) return;
+      this.dmg = d;
+      if (this.color) this._paint();
+      for (const t of dents) {
+        const pos = t.geo.attributes.position, L = M.L;
+        for (let i = 0; i < pos.count; i++) {
+          const ox = t.orig[i * 3], oy = t.orig[i * 3 + 1], oz = t.orig[i * 3 + 2];
+          const n = Math.sin(ox * 2.3 + oy * 1.7 + 0.6) * Math.cos(oz * 2.9 - ox * 1.1);
+          const front = 1 + 0.9 * Math.min(1, Math.max(0, (ox - 0.15 * L) / (0.35 * L)));
+          const k = d * 0.2 * (0.3 + 0.7 * Math.max(0, n)) * front;
+          pos.setXYZ(i, ox - t.nrm[i * 3] * k, oy - t.nrm[i * 3 + 1] * k - d * 0.05 * Math.max(0, (ox / L)), oz - t.nrm[i * 3 + 2] * k);
+        }
+        pos.needsUpdate = true; t.geo.computeVertexNormals();
       }
     },
     /** Aktualizacja wizualna na podstawie stanu fizycznego. */

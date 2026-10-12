@@ -6,6 +6,7 @@ export const ITEM_TYPES = {
   nitro: { name: 'Nitro', color: '#27c7ff', dark: '#0b4fa8' },
   ammo: { name: 'Naboje', color: '#ffb02e', dark: '#c4440a' },
   oil: { name: 'Olej', color: '#a46bff', dark: '#2a1458' },
+  repair: { name: 'Naprawa', color: '#3ddc84', dark: '#0b6b3a' },
 };
 
 const texCache = {};
@@ -25,6 +26,8 @@ function crateTexture(type) {
       x.save(); x.translate(128 + dx, 138); x.beginPath();
       x.moveTo(-17, 62); x.lineTo(-17, -20); x.quadraticCurveTo(-17, -62, 0, -76); x.quadraticCurveTo(17, -62, 17, -20); x.lineTo(17, 62); x.closePath(); x.fill(); x.restore();
     }
+  } else if (type === 'repair') {
+    x.fillRect(100, 48, 56, 160); x.fillRect(48, 100, 160, 56);
   } else {
     x.beginPath(); x.moveTo(128, 34); x.bezierCurveTo(128, 34, 52, 118, 52, 160); x.bezierCurveTo(52, 204, 86, 226, 128, 226); x.bezierCurveTo(170, 226, 204, 204, 204, 160); x.bezierCurveTo(204, 118, 128, 34, 128, 34); x.fill();
     x.fillStyle = 'rgba(80,40,160,0.6)'; x.beginPath(); x.ellipse(104, 168, 16, 28, 0.4, 0, 6.3); x.fill();

@@ -15,7 +15,7 @@ const LAPS = { dolina: 4, owal: 3, serpentyna: 3 };
 const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 const freeColor = (r, pref) => (COLORS.includes(pref) && !r.players.some((p) => p.color === pref) ? pref : COLORS.find((c) => !r.players.some((p) => p.color === c)));
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
-const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil'];
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'];
 
 // ---------- Baza (ranking) ----------
 const dataDir = path.join(__dirname, 'data');

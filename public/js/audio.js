@@ -155,6 +155,13 @@ export const sfx = {
   hit() { tone({ type: 'sawtooth', f: 260, f2: 50, dur: 0.4, gain: 0.3 }); this.crash(0.5); },
   oil() { if (!ctx) return; const t = ctx.currentTime; const src = noiseSrc(); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; const g = ctx.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 0.4); tone({ type: 'sine', f: 300, f2: 90, dur: 0.25, gain: 0.2 }); },
   tire(power = 0.5) { tone({ type: 'sine', f: 190, f2: 60, dur: 0.22, gain: 0.35 * power + 0.1 }); tone({ type: 'square', f: 140, f2: 70, dur: 0.1, gain: 0.08 }); },
+  explode() {
+    if (!ctx) return; const t = ctx.currentTime;
+    const src = noiseSrc(); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(120, t + 1.2);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
+    src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 1.4);
+    tone({ type: 'sine', f: 110, f2: 28, dur: 0.9, gain: 0.9 });
+  },
   empty() { tone({ type: 'square', f: 200, dur: 0.06, gain: 0.08 }); },
   join() { tone({ type: 'sine', f: 600, dur: 0.1, gain: 0.15 }); tone({ type: 'sine', f: 900, dur: 0.16, gain: 0.15, when: 0.09 }); },
 };

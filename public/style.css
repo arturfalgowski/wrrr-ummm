@@ -217,3 +217,11 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 .swatch.taken::after { content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 2px; background: #fff; transform: translateX(-50%) rotate(45deg); }
 .seg.wide { display: grid; grid-template-columns: repeat(3, 1fr); }
 .seg.wide button { padding: 9px 6px; }
+
+/* ---------- Zniszczenia ---------- */
+.hplabel { margin-top: 10px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #fff; opacity: .85; font-weight: 700; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+.hpbar div { transition: width .15s, background .2s; }
+.hpbar.low { animation: hplow .4s ease-in-out infinite alternate; }
+@keyframes hplow { to { box-shadow: 0 0 14px #ff4f6e; } }
+.tag .hpb { display: block; width: 34px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); overflow: hidden; margin-left: 2px; }
+.tag .hpb u { display: block; height: 100%; width: 100%; background: #5be3a1; }
