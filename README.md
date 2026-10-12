@@ -46,6 +46,8 @@ Utwory z `public/music/` (mp3) losują się na starcie menu i każdego poziomu; 
 | F | karabin: seria przez 4 s (naboje trzymasz do dowolnej chwili) |
 | E | zrzut plamy oleju |
 | R | (arena) karabin: seria 2 s, ładuje się sam co 6 s |
+| Q | mina (w wyścigu; na arenie w pełnym zestawie) |
+| T / G | (arena, pełny zestaw) rakieta / tarcza |
 | M | wyciszenie |
 
 ## Arena (tryb walki)
@@ -55,6 +57,10 @@ Wygrywa ostatni żywy — 0% wytrzymałości oznacza eliminację bez odradzania 
 Na arenę spadają paczki z bronią; masz **jeden slot na broń** (nowa zastępuje starą), używasz jej klawiszem **F**:
 bomba (mina za autem), rakieta (naprowadzana na najbliższego), karabin (seria 4 s), tarcza (5 s), olej. Do tego nitro (Shift) i naprawa.
 Tryb wybierasz w menu (host w lobby); solo gra się z 1–3 botami.
+
+## Wyposażenie startowe
+
+W ustawieniach (menu, a w multiplayerze host w lobby) opcja **Start z wyposażeniem**: *Standardowy* albo *Pełny*. W wyścigu pełny zestaw to nitro, olej, karabin i mina; na arenie nitro oraz osobne zapasy rakiety, miny, tarczy i oleju (Q/E/T/G) obok slotu F i karabinu na R. Miny są też w paczkach (w wyścigu — Q).
 
 ## Paczki
 

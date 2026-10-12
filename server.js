@@ -16,7 +16,7 @@ const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff'
 const freeColor = (r, pref) => (COLORS.includes(pref) && !r.players.some((p) => p.color === pref) ? pref : COLORS.find((c) => !r.players.some((p) => p.color === c)));
 const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
-const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'];
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair', 'bomb', 'bomb'];
 const ARENA_ITEMS = ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'];
 const ARENA_R = 80;
 
@@ -66,6 +66,7 @@ const cleanNick = (n) => String(n ?? '').replace(/[<>&"'`]/g, '').trim().slice(0
 const cleanSettings = (s, track) => ({
   laps: Number.isInteger(s?.laps) && s.laps >= 1 && s.laps <= 10 ? s.laps : LAPS[track],
   pickups: s?.pickups in PICKUP_MODES ? s.pickups : 'normal',
+  loadout: s?.loadout === 'full' ? 'full' : 'normal',
 });
 const cleanCar = (c) => (['aurora', 'vortex', 'blaze'].includes(c) ? c : 'aurora');
 const publicRoom = (r) => ({

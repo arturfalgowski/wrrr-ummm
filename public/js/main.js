@@ -110,7 +110,7 @@ window.addEventListener('resize', resize);
 const S = {
   nick: store.get('tc_nick', ''),
   carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'aurora',
-  game: store.get('tc_game') === 'arena' ? 'arena' : 'race', bots: 3,
+  game: store.get('tc_game') === 'arena' ? 'arena' : 'race', bots: 3, loadout: store.get('tc_loadout') === 'full' ? 'full' : 'normal',
   color: CAR_COLORS.includes(store.get('tc_color')) ? store.get('tc_color') : '#e0457b',
   trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'dolina',
   ghost: store.get('tc_ghost') !== '0', laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
@@ -193,7 +193,7 @@ function resetRace() {
   $('hud-lap').textContent = `1/${S.lapsNow}`;
   $('chip-pos').classList.toggle('hidden', !opps.size);
   $('hud-lap').parentElement.classList.toggle('hidden', isArena());
-  $('hud-help').innerHTML = isArena() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>F</kbd> broń (na start rakieta) &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro' : '<kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej';
+  $('hud-help').innerHTML = isArena() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>F</kbd> broń &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro &nbsp; (pełny zestaw: <kbd>Q</kbd> mina <kbd>E</kbd> olej <kbd>T</kbd> rakieta <kbd>G</kbd> tarcza)' : '<kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej &nbsp; <kbd>Q</kbd> mina';
   $('chip-pos').querySelector('.lbl').textContent = isArena() ? 'Żywi' : 'Pozycja';
 }
 
@@ -263,6 +263,13 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
   };
   if (vals.laps !== undefined) stepper('Okrążenia', 'laps', 1, 10);
   if (vals.bots !== undefined) stepper('Boty przeciwników (solo)', 'bots', 1, 3);
+  if (vals.loadout !== undefined) {
+    const rl = row('Start z wyposażeniem'), sgl = document.createElement('div'); sgl.className = 'seg';
+    for (const [v, t] of [['normal', 'Standardowy'], ['full', 'Pełny']]) {
+      const b = document.createElement('button'); b.textContent = t; b.disabled = !canEdit; b.classList.toggle('sel', vals.loadout === v); b.addEventListener('click', () => onChange({ loadout: v })); sgl.append(b);
+    }
+    rl.append(sgl);
+  }
   const r2 = row('Paczki');
   const sg = document.createElement('div'); sg.className = 'seg';
   for (const [v, t] of [['off', 'Brak'], ['rare', 'Rzadko'], ['normal', 'Normalnie'], ['often', 'Często']]) {
@@ -281,7 +288,8 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
 }
 function renderMenuSettings() {
   const arena = S.game === 'arena';
-  buildSettings('menu-settings', arena ? { bots: S.bots, pickups: S.pickups } : { laps: S.laps, pickups: S.pickups, ghost: S.ghost }, true, (c) => {
+  buildSettings('menu-settings', arena ? { bots: S.bots, pickups: S.pickups, loadout: S.loadout } : { laps: S.laps, pickups: S.pickups, loadout: S.loadout, ghost: S.ghost }, true, (c) => {
+    if (c.loadout) { S.loadout = c.loadout; store.set('tc_loadout', c.loadout); }
     if (c.laps != null) S.laps = c.laps;
     if (c.bots != null) S.bots = c.bots;
     if (c.ghost != null) { S.ghost = c.ghost; store.set('tc_ghost', c.ghost ? '1' : '0'); }
@@ -398,7 +406,7 @@ function renderLobby() {
   const mine = r.players.find((x) => x.id === S.you);
   const isHost = mine?.slot === 0;
   buildTrackList('lobby-tracks', r.track, (id) => socket?.emit('room:track', id), isHost);
-  buildSettings('lobby-settings', r.mode === 'arena' ? { pickups: r.settings.pickups } : r.settings, isHost, (c) => socket?.emit('room:settings', c));
+  buildSettings('lobby-settings', r.mode === 'arena' ? { pickups: r.settings.pickups, loadout: r.settings.loadout } : r.settings, isHost, (c) => socket?.emit('room:settings', c));
   $('track-note').textContent = isHost ? '— wybierasz jako gospodarz' : '— wybiera gospodarz';
   const wantTrack = r.mode === 'arena' ? 'arena' : r.track;
   const trackChanged = wantTrack !== trackId;
@@ -453,7 +461,7 @@ const emitAck = (ev, data) => new Promise((res) => socket.timeout(5000).emit(ev,
 
 async function createRoom() {
   if (!connect()) return;
-  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups }, color: S.color, mode: S.game });
+  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups, loadout: S.loadout }, color: S.color, mode: S.game });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   S.room = r.room; S.you = r.you; S.solo = false;
   enterLobby();
@@ -726,7 +734,10 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') useNitro();
     else if (e.code === 'KeyF') fire();
     else if (e.code === 'KeyR') fireGun();
-    else if (e.code === 'KeyE') dropOil();
+    else if (e.code === 'KeyE') { if (isArena()) useStock('oil'); else dropOil(); }
+    else if (e.code === 'KeyQ') { if (isArena()) useStock('bomb'); else useMine(); }
+    else if (e.code === 'KeyT') useStock('rocket');
+    else if (e.code === 'KeyG') useStock('shield');
   }
   if (!audioReady()) initAudio();
 });
@@ -873,7 +884,7 @@ function hitMe() { me.st.vx *= 0.93; me.st.vz *= 0.93; me.st.slowT = 1.3; damage
 function knock(st, x, z, hv, vv) {
   const dx = st.x - x, dz = st.z - z, d = Math.hypot(dx, dz) || 1;
   st.vx += (dx / d) * hv; st.vz += (dz / d) * hv;
-  if (isArena()) { st.air = true; st.vy = Math.max(st.vy || 0, vv); }
+  if (isArena() || st.y !== undefined) { st.air = true; st.vy = Math.max(st.vy || 0, vv); if (st.y === undefined) st.y = 0; }
 }
 function damageBot(o, amount) {
   if (o.dead || o.shieldT > 0 || amount <= 0.2) return;
@@ -893,7 +904,7 @@ function blast(x, z, r, dmg) {
   }
 }
 function emitEvent(e) { if (!S.solo) socket?.emit('game:event', e); }
-function detonateBomb(b) { b.dead = true; blast(b.x, b.z, 8, 45); emitEvent({ t: 'boom', id: b.id, x: b.x, z: b.z, r: 8, dmg: 45 }); }
+function detonateBomb(b) { const dmg = isArena() ? 45 : 30; b.dead = true; blast(b.x, b.z, 8, dmg); emitEvent({ t: 'boom', id: b.id, x: b.x, z: b.z, r: 8, dmg }); }
 function detonateRocket(r) { r.dead = true; blast(r.x, r.z, 6.5, 34); emitEvent({ t: 'boom', id: r.id, x: r.x, z: r.z, r: 6.5, dmg: 34 }); }
 
 function nearestEnemy(st, exceptId) {
@@ -912,11 +923,9 @@ function fireGun() {
   if (me.gunCharge < 1 || me.fireT > 0) { sfx.empty(); return; }
   me.gunCharge = 0; me.fireT = 2; me.fireAcc = 0; updateSlots();
 }
-function fireArena() {
-  if (!racingNow()) return;
-  const w = me.weapon, s = me.st, cs = Math.cos(s.yaw), sn = Math.sin(s.yaw);
-  if (!w || me.fireT > 0) { sfx.empty(); return; }
-  if (w === 'bomb') { const id = nextId(), x = s.x - cs * 3.2, z = s.z - sn * 3.2; items.dropBomb(id, x, z, 'me'); emitEvent({ t: 'bomb', id, x, z }); sfx.oil(); }
+function useWeapon(w) {
+  const s = me.st, cs = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+  if (w === 'bomb') { const id = nextId(), x = s.x - cs * 3.2, z = s.z - sn * 3.2; items.dropBomb(id, x, z, 'me', isArena() ? undefined : (track.hy ? track.heightAt(s.idx) : 0)); emitEvent({ t: 'bomb', id, x, z }); sfx.oil(); }
   else if (w === 'rocket') {
     const tgt = nearestEnemy(s), id = nextId(), x = s.x + cs * 3.2, z = s.z + sn * 3.2;
     items.launchRocket(id, x, z, s.yaw, 'me', tgt ? () => (tgt.dead ? null : tgt.st) : null); sfx.rocket();
@@ -924,7 +933,22 @@ function fireArena() {
   } else if (w === 'ammo') { me.fireT = 4; me.fireAcc = 0; }
   else if (w === 'shield') { me.shieldT = 5; sfx.shield(); }
   else if (w === 'oil') { const x = s.x - cs * 3.4, z = s.z - sn * 3.4; items.dropOil(x, z, 'me'); emitEvent({ t: 'oil', x, z }); sfx.oil(); }
-  me.weapon = null; updateSlots();
+}
+function fireArena() {
+  if (!racingNow()) return;
+  const w = me.weapon;
+  if (!w || me.fireT > 0) { sfx.empty(); return; }
+  useWeapon(w); me.weapon = null; updateSlots();
+}
+/** zestaw „Pełny”: osobne zapasy broni na własnych klawiszach (Q mina, E olej, T rakieta, G tarcza) */
+function useStock(k) {
+  if (!isArena() || !racingNow() || !(me.stock?.[k] > 0) || (k === 'shield' && me.shieldT > 0)) { sfx.empty(); return; }
+  me.stock[k]--; useWeapon(k); updateSlots();
+}
+/** mina w wyścigu (Q) */
+function useMine() {
+  if (!racingNow() || !me.items.mine) { sfx.empty(); return; }
+  me.items.mine = false; useWeapon('bomb'); updateSlots();
 }
 /** trafienia pocisków karabinu: moje w rywali i boty, pociski botów we mnie i inne boty */
 function shotHits() {
@@ -946,14 +970,16 @@ function shotHits() {
   }
 }
 function updateArenaCombat(dt) {
-  if (!isArena() || S.mode !== 'racing') return;
+  if (S.mode !== 'racing') return;
   const actors = [];
   if (!me.dead) actors.push(me);
   for (const o of oppList()) if (o.bot && !o.dead) actors.push(o);
   for (const b of items.bombs) {
     if (b.dead || b.age < 0.8) continue;
-    for (const a of actors) { if (Math.hypot(a.st.x - b.x, a.st.z - b.z) < 3.6 && Math.abs((a.st.y || 0) - heightAt(b.x, b.z)) < 3) { detonateBomb(b); break; } }
+    const bgh = b.gh !== undefined ? b.gh : heightAt(b.x, b.z);
+    for (const a of actors) { if (Math.hypot(a.st.x - b.x, a.st.z - b.z) < 3.6 && Math.abs((a.st.y || 0) - bgh) < 3) { detonateBomb(b); break; } }
   }
+  if (!isArena()) return;
   for (const r of items.rockets) {
     if (r.dead || r.owner.startsWith('opp:')) continue;
     const ownerBot = r.owner.startsWith('bot:') ? r.owner.slice(4) : null;
@@ -1009,7 +1035,7 @@ function showResultsArenaSolo(won) {
 function spawnBots() {
   const colors = CAR_COLORS.filter((c) => c !== S.color);
   for (let i = 0; i < S.bots; i++) {
-    const o = { id: 'bot' + i, bot: true, nick: BOT_NAMES[i], carId: ['vortex', 'blaze', 'aurora'][i % 3], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { t: 0, target: null, stuck: 0, rev: 0, revSteer: 1, cd: 2 + Math.random() * 3 } };
+    const o = { id: 'bot' + i, bot: true, nick: BOT_NAMES[i], carId: ['vortex', 'blaze', 'aurora'][i % 3], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: currentLoadout() === 'full' ? 'rocket' : null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { t: 0, target: null, stuck: 0, rev: 0, revSteer: 1, cd: 2 + Math.random() * 3 } };
     opps.set(o.id, o); setCar(o, o.carId, o.slot, colors[i % colors.length]); o.st.hp = 100;
   }
 }
@@ -1071,10 +1097,11 @@ function refreshOpp(o) { return o.bot ? true : sampleOpp(o, performance.now()); 
 
 // ======================= Przedmioty, broń, nitro =======================
 const soloSpawn = { t: 5, id: 1 };
+const currentLoadout = () => (S.solo ? S.loadout : S.room?.settings?.loadout) || 'normal';
 function resetItems() {
   items.clear();
-  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.weapon = isArena() ? 'rocket' : null; me.gunCharge = 1; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
-  me.items = { nitro: false, oil: false, ammo: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
+  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.fullKit = currentLoadout() === 'full'; me.stock = isArena() && me.fullKit ? { bomb: 1, rocket: 1, shield: 1, oil: 1 } : { bomb: 0, rocket: 0, shield: 0, oil: 0 }; me.weapon = isArena() ? (me.fullKit ? 'ammo' : 'rocket') : null; me.gunCharge = 1; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
+  me.items = me.fullKit ? { nitro: true, oil: !isArena(), ammo: !isArena(), mine: !isArena() } : { nitro: false, oil: false, ammo: false, mine: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
   if (me.st) { me.st.nitro = false; me.st.slowT = 0; me.st.inOil = false; }
   soloSpawn.t = 5;
   world?.tires.reset();
@@ -1091,13 +1118,16 @@ function spawnCrate(id, type, u, l, ax, az) {
 }
 function applyPickup(type) {
   sfx.pickup();
+  if (isArena() && me.fullKit && ['bomb', 'rocket', 'shield', 'oil'].includes(type)) { me.stock[type] = Math.min(3, me.stock[type] + 1); toast(`${WEAPON_NAMES[type]} ×${me.stock[type]} — ${STOCK_KEYS[type]}`); updateSlots(); return; }
   if (isArena() && ['bomb', 'rocket', 'ammo', 'shield', 'oil'].includes(type)) { me.weapon = type; toast(`${WEAPON_NAMES[type]} — F`); updateSlots(); return; }
+  if (!isArena() && type === 'bomb') { me.items.mine = true; toast('Mina — Q'); updateSlots(); return; }
   if (type === 'nitro') { me.items.nitro = true; toast('Nitro — Shift'); }
   else if (type === 'ammo') { me.items.ammo = true; toast('Naboje — F (strzelasz przez 4 s)'); }
   else if (type === 'repair') { setHp(me.hp + 40); toast('Naprawa +40'); }
   else { me.items.oil = true; toast('Olej — E'); }
   updateSlots();
 }
+const STOCK_KEYS = { bomb: 'Q', oil: 'E', rocket: 'T', shield: 'G' };
 const racingNow = () => S.mode === 'racing' && !me.finished && !me.dead;
 function useNitro() {
   if (!racingNow() || !me.items.nitro || me.nitroT > 0) return;
@@ -1124,7 +1154,7 @@ function dropOil() {
 function onGameEvent(e) {
   if (e.t === 'shoot') items.shoot(e.x, e.z, e.yaw, e.vx, e.vz, 'opp:' + e.from);
   else if (e.t === 'oil') items.dropOil(e.x, e.z, 'opp');
-  else if (e.t === 'bomb') items.dropBomb(e.id, e.x, e.z, 'opp:' + e.from);
+  else if (e.t === 'bomb') items.dropBomb(e.id, e.x, e.z, 'opp:' + e.from, isArena() ? undefined : (track.hy ? track.heightAt(track.query(e.x, e.z, -1).idx) : 0));
   else if (e.t === 'rocket') items.launchRocket(e.id, e.x, e.z, e.yaw, 'opp:' + e.from, () => entityById(e.to)?.st || null);
   else if (e.t === 'boom') { items.removeBomb(e.id); items.rockets.filter((r) => r.id === e.id).forEach((r) => { r.dead = true; }); blast(e.x, e.z, e.r, e.dmg); }
   else if (e.t === 'hit' && e.to !== S.you) items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
@@ -1135,21 +1165,26 @@ function onGameEvent(e) {
 }
 function updateBar() { $('ammo-bar').style.width = `${me.fireT > 0 ? clamp(me.fireT / 4, 0, 1) * 100 : clamp(me.shieldT / 5, 0, 1) * 100}%`; }
 function updateSlots() {
-  if (isArena()) {
+  const arena = isArena(), full = !!me.fullKit;
+  const cnt = (id, label, n) => { const el = $(id); el.querySelector('span').textContent = n > 0 ? `${label} ×${n}` : label; el.classList.toggle('has', n > 0); };
+  $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
+  $('slot-mine').classList.toggle('hidden', !(arena ? full : true));
+  $('slot-rocket').classList.toggle('hidden', !(arena && full));
+  $('slot-shield').classList.toggle('hidden', !(arena && full));
+  if (arena) {
     const sh = me.shieldT > 0, gun = me.fireT > 0;
-    $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
-    $('slot-oil').classList.add('hidden'); $('slot-gun').classList.remove('hidden'); $('slot-gun').classList.toggle('has', me.gunCharge >= 1 && me.fireT <= 0);
+    $('slot-oil').classList.toggle('hidden', !full); $('slot-gun').classList.remove('hidden'); $('slot-gun').classList.toggle('has', me.gunCharge >= 1 && me.fireT <= 0);
+    if (full) { cnt('slot-oil', 'Olej', me.stock.oil); cnt('slot-mine', 'Mina', me.stock.bomb); cnt('slot-rocket', 'Rakieta', me.stock.rocket); cnt('slot-shield', 'Tarcza', me.stock.shield); }
     $('slot-ammo').classList.toggle('has', !!me.weapon || sh || gun); $('slot-ammo').classList.toggle('active', sh || gun);
     $('slot-ammo').querySelector('span').textContent = gun ? 'Ogień!' : sh ? 'Tarcza!' : (WEAPON_NAMES[me.weapon] || 'Broń');
     $('ammo-bar').style.width = `${gun ? clamp(me.fireT / 4, 0, 1) * 100 : sh ? clamp(me.shieldT / 5, 0, 1) * 100 : 0}%`;
     return;
   }
-  $('slot-oil').classList.remove('hidden'); $('slot-gun').classList.add('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał';
-  $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0);
-  $('slot-nitro').classList.toggle('active', me.nitroT > 0);
+  $('slot-oil').classList.remove('hidden'); $('slot-gun').classList.add('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał'; $('slot-oil').querySelector('span').textContent = 'Olej'; $('slot-mine').querySelector('span').textContent = 'Mina';
   $('slot-ammo').classList.toggle('has', me.items.ammo || me.fireT > 0);
   $('slot-ammo').classList.toggle('active', me.fireT > 0);
   $('slot-oil').classList.toggle('has', me.items.oil);
+  $('slot-mine').classList.toggle('has', !!me.items.mine);
   $('ammo-bar').style.width = `${clamp(me.fireT / 4, 0, 1) * 100}%`;
 }
 const puff = (x, z, n = 3) => { for (let i = 0; i < n; i++) { tmpC.setRGB(0.2, 0.2, 0.22); particles.emit(x, 0.5, z, (Math.random() - 0.5) * 4, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 4, 0.6, 0.8, 2.2, tmpC, 0.5, 1.5); } };
@@ -1188,7 +1223,7 @@ function updateGameplay(dt, active) {
       soloSpawn.t = (arena ? 5 + Math.random() * 3 : 8 + Math.random() * 5) * ({ off: 1, rare: 1.8, normal: 1, often: 0.5 }[S.pickups]);
       if (S.pickups !== 'off' && items.crates.size < (arena ? 5 : 3)) {
         if (arena) { const a = Math.random() * 6.28, rad = Math.sqrt(Math.random()) * ARENA_R * 0.82; spawnCrate(soloSpawn.id++, ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'][Math.random() * 11 | 0], 0, 0, Math.cos(a) * rad, Math.sin(a) * rad); }
-        else spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'][Math.random() * 7 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
+        else spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair', 'bomb', 'bomb'][Math.random() * 9 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
       }
     }
     for (const c of items.crates.values()) if (c.landed && !c.dying && c.age > 30) items.remove(c.id, false);

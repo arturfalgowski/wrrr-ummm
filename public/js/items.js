@@ -163,15 +163,15 @@ export class Items {
   }
 
   /* ---------- bomby i rakiety (arena) ---------- */
-  dropBomb(id, x, z, owner) {
+  dropBomb(id, x, z, owner, gh) {
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 12), new THREE.MeshStandardMaterial({ color: 0x1d1d22, metalness: 0.6, roughness: 0.35 }));
     const light = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshStandardMaterial({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 3 }));
     light.position.y = 0.78; g.add(body, light);
-    const gy = this.ground ? this.ground(x, z) : 0;
+    const gy = gh !== undefined ? gh : this.ground ? this.ground(x, z) : 0;
     g.position.set(x, gy + 0.75, z); body.castShadow = true;
     this.parent.add(g);
-    const b = { id, x, z, mesh: g, light, age: 0, owner, dead: false };
+    const b = { id, x, z, mesh: g, light, age: 0, owner, dead: false, gh };
     this.bombs.push(b); return b;
   }
   removeBomb(id) { const b = this.bombs.find((q) => q.id === id); if (b) b.dead = true; return b; }
@@ -190,7 +190,7 @@ export class Items {
     const gr = (x, z) => (this.ground ? this.ground(x, z) : 0);
     for (const b of this.bombs) {
       b.age += dt;
-      b.mesh.position.y = gr(b.x, b.z) + 0.75;
+      b.mesh.position.y = (b.gh !== undefined ? b.gh : gr(b.x, b.z)) + 0.75;
       b.light.material.emissiveIntensity = b.age > 0.8 ? (Math.sin(b.age * (6 + b.age * 0.4)) > 0 ? 4 : 0.3) : 1;
     }
     this.bombs = this.bombs.filter((b) => { if (b.dead) { this.parent.remove(b.mesh); return false; } return true; });

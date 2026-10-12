@@ -266,3 +266,7 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 .rm-row .st.ok { background: rgba(91,227,161,.2); color: var(--good); }
 .rm-row.me { outline: 1px solid rgba(255,79,139,.5); }
 @media (max-width: 820px) { .chat { bottom: 120px; } }
+#slot-mine.has { background: rgba(200,50,40,.75); box-shadow: 0 0 22px rgba(255,74,58,.6); }
+#slot-rocket.has { background: rgba(200,60,140,.75); box-shadow: 0 0 22px rgba(255,95,162,.6); }
+#slot-shield.has { background: rgba(70,80,190,.75); box-shadow: 0 0 22px rgba(160,170,255,.6); }
+.hud-items { gap: 7px; } .slot { width: 66px; }
