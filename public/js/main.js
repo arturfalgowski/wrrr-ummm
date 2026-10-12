@@ -1,4 +1,4 @@
-// Turbo Circuit — sterowanie grą: renderer, kamera izometryczna, pętla gry, UI, multiplayer.
+// Wrrr Ummm — sterowanie grą: renderer, kamera izometryczna, pętla gry, UI, multiplayer.
 import * as THREE from 'three';
 import { Track, LAPS } from './track.js';
 import { CarState, CAR_DEFS, carVsCar } from './physics.js';

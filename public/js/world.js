@@ -356,7 +356,7 @@ export function buildWorld(scene, renderer, track) {
     crowd.count = heads.count = ci; crowd.castShadow = heads.castShadow = true;
     g.add(crowd, heads);
     // tylny baner i maszty z flagami
-    const back = new THREE.Mesh(new THREE.BoxGeometry(len, 4.5, 0.5), new THREE.MeshStandardMaterial({ map: billboardTex('TURBO CIRCUIT', '#2a2f55', '#ffd84d'), roughness: 0.6 }));
+    const back = new THREE.Mesh(new THREE.BoxGeometry(len, 4.5, 0.5), new THREE.MeshStandardMaterial({ map: billboardTex('WRRR UMMM', '#2a2f55', '#ffd84d'), roughness: 0.6 }));
     back.position.set(0, 0.9 * rows + 2.3, -(BARRIER + 5 + rows * rowD + 0.2)); back.castShadow = true; back.rotation.y = Math.PI;
     // PlaneBox: tekst na ściance +Z (skierowanej do toru) — obracamy, by czytelny od strony toru
     back.rotation.y = 0;

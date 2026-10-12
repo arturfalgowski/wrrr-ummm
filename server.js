@@ -1,4 +1,4 @@
-// Turbo Circuit — serwer: statyczne pliki, pokoje wyścigów (Socket.IO) i ranking (SQLite).
+// Wrrr Ummm — serwer: statyczne pliki, pokoje wyścigów (Socket.IO) i ranking (SQLite).
 import express from 'express';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -199,5 +199,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Turbo Circuit działa: http://localhost:${PORT}`);
+  console.log(`Wrrr Ummm działa: http://localhost:${PORT}`);
 });

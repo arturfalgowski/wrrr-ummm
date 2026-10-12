@@ -1,4 +1,4 @@
-# Turbo Circuit
+# Wrrr Ummm
 
 Wyścigi 3D dla dwóch graczy w przeglądarce. Three.js (WebGL) + Node.js + Socket.IO + SQLite.
 Wszystkie modele, tekstury, efekty i dźwięki są generowane w kodzie — brak zewnętrznych plików graficznych i audio.
