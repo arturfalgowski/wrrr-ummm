@@ -2,11 +2,11 @@
 import { ROAD_HALF, KERB_W, BARRIER } from './track.js';
 
 export const CAR_DEFS = {
-  aurora: { name: 'Aurora', tag: 'Uniwersalny roadster', color: '#e0457b', stripe: '#fff4e6',
+  aurora: { name: 'Pantera', tag: 'Uniwersalny roadster', color: '#e0457b', stripe: '#fff4e6',
     maxSpeed: 44, accel: 22, brake: 46, grip: 7.6, turn: 2.35, stats: [0.62, 0.62, 0.72] },
-  vortex: { name: 'Vortex', tag: 'Szybkie GT, trudne w ślizgu', color: '#19b6c9', stripe: '#0c2a44',
+  vortex: { name: 'Tornado', tag: 'Szybkie GT, trudne w ślizgu', color: '#19b6c9', stripe: '#0c2a44',
     maxSpeed: 50, accel: 19, brake: 44, grip: 6.4, turn: 2.05, stats: [0.9, 0.5, 0.52] },
-  blaze: { name: 'Blaze', tag: 'Zwinny i dynamiczny', color: '#ff7a1a', stripe: '#1a1a24',
+  blaze: { name: 'Szerszeń', tag: 'Zwinny i dynamiczny', color: '#ff7a1a', stripe: '#1a1a24',
     maxSpeed: 41, accel: 27, brake: 48, grip: 9.0, turn: 2.7, stats: [0.42, 0.88, 0.9] },
 };
 

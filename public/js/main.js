@@ -71,6 +71,7 @@ const S = {
   nick: store.get('tc_nick', ''),
   carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'aurora',
   trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'dolina',
+  laps: 0, lapsNow: 4, pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal',
   mode: 'menu', // menu | lobby | countdown | racing | finished
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
@@ -114,7 +115,7 @@ function resetRace() {
   particles.clear(); skids.clear(); resetItems();
   $('hud-best').textContent = '';
   $('hud-time').textContent = '0:00.00';
-  $('hud-lap').textContent = `1/${track.laps}`;
+  $('hud-lap').textContent = `1/${S.lapsNow}`;
   $('chip-pos').classList.toggle('hidden', !opp.present);
 }
 
@@ -161,6 +162,43 @@ function buildCarList() {
   lg.textContent = 'paski: prędkość · przyspieszenie · przyczepność'; wrap.append(lg);
   markCar();
 }
+const previewCache = {};
+function trackPreview(id) {
+  if (previewCache[id]) return previewCache[id];
+  const t = new Track(id), W = 120, H = 66, pad = 8;
+  const b = t.bounds, sc = Math.min((W - 2 * pad) / (b.maxX - b.minX), (H - 2 * pad) / (b.maxZ - b.minZ));
+  const ox = (W - (b.maxX - b.minX) * sc) / 2, oz = (H - (b.maxZ - b.minZ) * sc) / 2;
+  const P = (i) => [ox + (t.x[i % t.N] - b.minX) * sc, oz + (t.z[i % t.N] - b.minZ) * sc];
+  let d = '';
+  for (let i = 0; i < t.N; i += 4) { const [x, y] = P(i); d += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`; }
+  d += 'Z';
+  const [sx, sy] = P(0), nx = -t.tz[0], nz = t.tx[0];
+  const line = `M${(sx - nx * 4.5).toFixed(1)} ${(sy - nz * 4.5).toFixed(1)}L${(sx + nx * 4.5).toFixed(1)} ${(sy + nz * 4.5).toFixed(1)}`;
+  return (previewCache[id] = `<svg class="prev" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="7.5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#d9d4f5" stroke-width="4.6" stroke-linejoin="round"/><path d="${line}" stroke="#ff4f8b" stroke-width="2.6" stroke-linecap="round"/></svg>`);
+}
+function buildSettings(wrapId, vals, canEdit, onChange) {
+  const w = $(wrapId); w.textContent = '';
+  const row = (label) => { const r = document.createElement('div'); r.className = 'set'; const l = document.createElement('span'); l.textContent = label; r.append(l); w.append(r); return r; };
+  const r1 = row('Okrążenia');
+  const st = document.createElement('div'); st.className = 'step';
+  const mk = (txt, delta) => { const b = document.createElement('button'); b.textContent = txt; b.disabled = !canEdit || (delta < 0 ? vals.laps <= 1 : vals.laps >= 10); b.addEventListener('click', () => onChange({ laps: vals.laps + delta })); return b; };
+  const n = document.createElement('b'); n.textContent = vals.laps;
+  st.append(mk('−', -1), n, mk('+', 1)); r1.append(st);
+  const r2 = row('Paczki');
+  const sg = document.createElement('div'); sg.className = 'seg';
+  for (const [v, t] of [['off', 'Brak'], ['rare', 'Rzadko'], ['normal', 'Normalnie'], ['often', 'Często']]) {
+    const b = document.createElement('button'); b.textContent = t; b.disabled = !canEdit; b.classList.toggle('sel', vals.pickups === v);
+    b.addEventListener('click', () => onChange({ pickups: v })); sg.append(b);
+  }
+  r2.append(sg);
+}
+function renderMenuSettings() {
+  buildSettings('menu-settings', { laps: S.laps, pickups: S.pickups }, true, (c) => {
+    if (c.laps != null) S.laps = c.laps;
+    if (c.pickups) { S.pickups = c.pickups; store.set('tc_pickups', c.pickups); }
+    renderMenuSettings();
+  });
+}
 const THEME_SW = { lato: ['#5f9c49', '#a1694a'], pustynia: ['#d9b878', '#a9764f'], zima: ['#e8eef6', '#8d96a6'] };
 function buildTrackList(wrapId, selected, onPick, canPick) {
   const wrap = $(wrapId); wrap.textContent = '';
@@ -168,14 +206,14 @@ function buildTrackList(wrapId, selected, onPick, canPick) {
     const d = TRACK_DEFS[id]; const b = document.createElement('button'); b.className = 'track' + (id === selected ? ' sel' : '');
     const sw = THEME_SW[d.theme];
     b.disabled = !canPick;
-    b.innerHTML = `<div class="sw" style="background:linear-gradient(90deg,${sw[0]} 55%,${sw[1]} 55%)"></div><b></b><small></small>`;
-    b.querySelector('b').textContent = d.name; b.querySelector('small').textContent = `${d.tag} · ${d.laps} okr.`;
+    b.innerHTML = `<div class="pv" style="background:${sw[0]}">${trackPreview(id)}</div><b></b><small></small>`;
+    b.querySelector('b').textContent = d.name; b.querySelector('small').textContent = d.tag;
     b.addEventListener('click', () => onPick(id));
     wrap.append(b);
   }
 }
 function pickMenuTrack(id) {
-  S.trackId = id; store.set('tc_track', id);
+  S.trackId = id; store.set('tc_track', id); S.laps = TRACK_DEFS[id].laps; renderMenuSettings();
   buildTrackList('track-list', id, pickMenuTrack, true);
   if (S.mode === 'menu') { toast('Ładowanie toru…', 800); setTimeout(() => { useTrack(id); setCar(me, S.carId, 0); }, 30); }
 }
@@ -189,6 +227,8 @@ function goMenu() {
   $('menu-nick').textContent = S.nick;
   $('menu-err').textContent = '';
   useTrack(S.trackId);
+  if (!S.laps) S.laps = TRACK_DEFS[S.trackId].laps;
+  renderMenuSettings();
   buildTrackList('track-list', S.trackId, pickMenuTrack, true);
   opp.present = false; setCar(opp, null); setCar(me, S.carId, 0);
   me.finished = false; resetItems();
@@ -223,6 +263,7 @@ function renderLobby() {
   const mine = r.players.find((x) => x.id === S.you);
   const isHost = mine?.slot === 0;
   buildTrackList('lobby-tracks', r.track, (id) => socket?.emit('room:track', id), isHost);
+  buildSettings('lobby-settings', r.settings, isHost, (c) => socket?.emit('room:settings', c));
   $('track-note').textContent = isHost ? '— wybierasz jako gospodarz' : '— wybiera gospodarz';
   if (r.track !== trackId) { useTrack(r.track); me.carIdShown = null; opp.carId = null; opp.slotShown = null; }
   const btn = $('btn-ready');
@@ -271,7 +312,7 @@ const emitAck = (ev, data) => new Promise((res) => socket.timeout(5000).emit(ev,
 
 async function createRoom() {
   if (!connect()) return;
-  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId });
+  const r = await emitAck('room:create', { nick: S.nick, car: S.carId, track: S.trackId, settings: { laps: S.laps, pickups: S.pickups } });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   S.room = r.room; S.you = r.you; S.solo = false;
   enterLobby();
@@ -299,6 +340,7 @@ function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 function startPrepare() {
   clearTimers();
   useTrack(S.solo ? S.trackId : S.room.track);
+  S.lapsNow = S.solo ? S.laps : S.room.settings.laps;
   resetRace();
   setMode('countdown');
   showScreen(null);
@@ -335,10 +377,10 @@ function onLapProgress() {
     const lt = (now - me.lapStart) / 1000; me.lapStart = now;
     me.lapTimes.push(lt);
     const isBest = lt < me.best; me.best = Math.min(me.best, lt);
-    if (lapIdx >= track.laps) finishLocal();
+    if (lapIdx >= S.lapsNow) finishLocal();
     else { sfx.lap(); toast(`Okrążenie ${lapIdx}: ${fmt(lt)}${isBest ? '  · najlepsze' : ''}`, 2400); }
     $('hud-best').textContent = `Najlepsze: ${fmt(me.best)}`;
-    $('hud-lap').textContent = `${Math.min(track.laps, lapIdx + 1)}/${track.laps}`;
+    $('hud-lap').textContent = `${Math.min(S.lapsNow, lapIdx + 1)}/${S.lapsNow}`;
   }
 }
 function finishLocal() {
@@ -580,8 +622,8 @@ function updateGameplay(dt, active) {
   if (S.solo && S.mode === 'racing') {
     soloSpawn.t -= dt;
     if (soloSpawn.t <= 0) {
-      soloSpawn.t = 8 + Math.random() * 5;
-      if (items.crates.size < 3) spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil'][Math.random() * 5 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
+      soloSpawn.t = (8 + Math.random() * 5) * ({ off: 1, rare: 1.8, normal: 1, often: 0.5 }[S.pickups]);
+      if (S.pickups !== 'off' && items.crates.size < 3) spawnCrate(soloSpawn.id++, ['nitro', 'nitro', 'ammo', 'ammo', 'oil'][Math.random() * 5 | 0], Math.random(), (Math.random() - 0.5) * 1.3);
     }
     for (const c of items.crates.values()) if (c.landed && !c.dying && c.age > 30) items.remove(c.id, false);
   }
@@ -751,7 +793,7 @@ function updateHud() {
   if (S.mode === 'racing' && !me.finished) setText('hud-time', fmt(elapsed()));
   else if (me.finished) setText('hud-time', fmt(me.finishTime));
   if (opp.present && opp.st) { const first = me.st.progress >= opp.st.progress; setText('hud-pos', `${first ? 1 : 2}/2`); }
-  setText('hud-lap', `${clamp(me.lapIdx + 1, 1, track.laps)}/${track.laps}`);
+  setText('hud-lap', `${clamp(me.lapIdx + 1, 1, S.lapsNow)}/${S.lapsNow}`);
 }
 
 // ======================= Start =======================

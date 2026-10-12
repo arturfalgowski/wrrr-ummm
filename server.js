@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const TRACKS = ['dolina', 'owal', 'serpentyna'];
 const LAPS = { dolina: 4, owal: 3, serpentyna: 3 };
+const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
 const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil'];
 
 // ---------- Baza (ranking) ----------
@@ -53,9 +54,13 @@ const genId = () => {
   return s;
 };
 const cleanNick = (n) => String(n ?? '').replace(/[<>&"'`]/g, '').trim().slice(0, 14);
+const cleanSettings = (s, track) => ({
+  laps: Number.isInteger(s?.laps) && s.laps >= 1 && s.laps <= 10 ? s.laps : LAPS[track],
+  pickups: s?.pickups in PICKUP_MODES ? s.pickups : 'normal',
+});
 const cleanCar = (c) => (['aurora', 'vortex', 'blaze'].includes(c) ? c : 'aurora');
 const publicRoom = (r) => ({
-  id: r.id, state: r.state, track: r.track, laps: LAPS[r.track],
+  id: r.id, state: r.state, track: r.track, settings: r.settings,
   players: r.players.map((p) => ({ id: p.sid, nick: p.nick, car: p.car, ready: p.ready, slot: p.slot })),
 });
 const clearTimers = (r) => { r.timers.forEach(clearTimeout); r.timers = []; };
@@ -76,6 +81,8 @@ function startCountdown(r) {
 }
 
 function schedulePickups(r) {
+  const mul = PICKUP_MODES[r.settings.pickups];
+  if (!mul) return;
   const tick = () => {
     if (r.state !== 'racing') return;
     if (r.pickups.size < 3) {
@@ -84,7 +91,7 @@ function schedulePickups(r) {
       io.to(r.id).emit('pickup:spawn', { id, type, u: Math.random(), l: (Math.random() - 0.5) * 1.3 });
       later(r, 30000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
     }
-    later(r, 8000 + Math.random() * 6000, tick);
+    later(r, (8000 + Math.random() * 6000) * mul, tick);
   };
   later(r, 5500, tick);
 }
@@ -142,12 +149,12 @@ function leaveRoom(socket) {
 io.on('connection', (socket) => {
   socket.on('ranking:get', (cb) => typeof cb === 'function' && cb(ranking()));
 
-  socket.on('room:create', ({ nick, car, track } = {}, cb) => {
+  socket.on('room:create', ({ nick, car, track, settings } = {}, cb) => {
     if (typeof cb !== 'function') return;
     leaveRoom(socket);
     nick = cleanNick(nick);
     if (nick.length < 2) return cb({ ok: false, error: 'Nick jest za krótki.' });
-    const r = { id: genId(), state: 'lobby', track: TRACKS.includes(track) ? track : TRACKS[0], players: [], timers: [], times: {}, winner: null, recorded: false, pickups: new Map(), pid: 0 };
+    const r = { id: genId(), state: 'lobby', track: TRACKS.includes(track) ? track : TRACKS[0], settings: cleanSettings(settings, TRACKS.includes(track) ? track : TRACKS[0]), players: [], timers: [], times: {}, winner: null, recorded: false, pickups: new Map(), pid: 0 };
     r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot: 0 });
     rooms.set(r.id, r);
     socket.join(r.id);
@@ -178,6 +185,14 @@ io.on('connection', (socket) => {
     const r = rooms.get(socket.data.roomId);
     if (!r || r.players[0]?.sid !== socket.id || r.state === 'racing' || r.state === 'countdown' || !TRACKS.includes(track)) return;
     r.track = track;
+    r.settings.laps = LAPS[track];
+    io.to(r.id).emit('room:update', publicRoom(r));
+  });
+
+  socket.on('room:settings', (st) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || r.players[0]?.sid !== socket.id || r.state === 'racing' || r.state === 'countdown') return;
+    r.settings = cleanSettings({ ...r.settings, ...st }, r.track);
     io.to(r.id).emit('room:update', publicRoom(r));
   });
 
