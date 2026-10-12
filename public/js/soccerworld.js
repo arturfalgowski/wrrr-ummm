@@ -35,11 +35,15 @@ function netTex() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 function ballTex() {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
-  const g = c.getContext('2d'); g.fillStyle = '#f5f5f7'; g.fillRect(0, 0, 256, 128);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#d9dde8'); g.fillStyle = gr; g.fillRect(0, 0, 512, 256);
+  // sześciokątne łaty w kolorze akcentu i czarne pięciokąty (jak klasyczna piłka)
+  const pent = (x, y, R, col) => { g.fillStyle = col; g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * R, y + Math.sin(a) * R); } g.closePath(); g.fill(); };
+  const pts = [[64, 60], [192, 180], [320, 56], [448, 184], [256, 128], [40, 220], [472, 40], [140, 20], [380, 236]];
+  g.strokeStyle = 'rgba(30,30,50,0.35)'; g.lineWidth = 3;
+  for (const [x, y] of pts) { for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 5; g.beginPath(); g.moveTo(x + Math.cos(a) * 30, y + Math.sin(a) * 30); g.lineTo(x + Math.cos(a) * 62, y + Math.sin(a) * 62); g.stroke(); } pent(x, y, 30, '#14141c'); }
   g.fillStyle = '#16161c';
-  const pts = [[32, 32], [96, 90], [160, 30], [224, 92], [128, 64], [20, 110], [236, 20]];
-  for (const [x, y] of pts) { g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * 15, y + Math.sin(a) * 15); } g.closePath(); g.fill(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
@@ -85,20 +89,22 @@ export function buildSoccerWorld(scene, renderer) {
   }
 
   // ---- bramki ----
-  const netT = netTex();
+  const netT = netTex(); const goalGlow = [];
   for (const s of [-1, 1]) {
     const col = s > 0 ? TEAM_COLORS.blue : TEAM_COLORS.red; // kolor broniącej drużyny
     const frame = new THREE.MeshStandardMaterial({ color: 0xf4f4f7, roughness: 0.4, metalness: 0.2 });
-    const glow = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.9, roughness: 0.5 });
+    const glow = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.9, roughness: 0.5 }); goalGlow.push(glow);
+    const sign = (() => { const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 512, 128); g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 96, 512, 32); g.fillStyle = '#fff'; g.font = '900 78px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s > 0 ? 'NIEBIESCY' : 'CZERWONI', 256, 56); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+    const sg = new THREE.Mesh(new THREE.PlaneGeometry(GW * 2.2, GW * 0.55), new THREE.MeshBasicMaterial({ map: sign })); sg.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2; sg.position.set(s * (HX + GD + 0.6), GH + 3.4, 0); root.add(sg);
     for (const t of [-1, 1]) {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, GH, 12), frame); p.position.set(s * HX, GH / 2, t * GW); p.castShadow = true; root.add(p);
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, GH, 14), frame); p.position.set(s * HX, GH / 2, t * GW); p.castShadow = true; root.add(p);
       const p2 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, GH, 12), frame); p2.position.set(s * (HX + GD), GH / 2, t * GW); root.add(p2);
       const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, GD, 10), frame); rail.rotation.z = Math.PI / 2; rail.position.set(s * (HX + GD / 2), GH, t * GW); root.add(rail);
     }
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, GW * 2, 12), frame); bar.rotation.x = Math.PI / 2; bar.position.set(s * HX, GH, 0); bar.castShadow = true; root.add(bar);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, GW * 2, 14), frame); bar.rotation.x = Math.PI / 2; bar.position.set(s * HX, GH, 0); bar.castShadow = true; root.add(bar);
     const bar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, GW * 2, 12), frame); bar2.rotation.x = Math.PI / 2; bar2.position.set(s * (HX + GD), GH, 0); root.add(bar2);
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, GW * 2), glow); strip.position.set(s * (HX + GD + 0.3), GH + 0.5, 0); root.add(strip);
-    const netMat = () => new THREE.MeshBasicMaterial({ map: netT.clone(), transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 });
+    const netMat = () => new THREE.MeshBasicMaterial({ map: netT.clone(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 });
     const mk = (w, h, setup) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), netMat()); m.material.map.needsUpdate = true; m.material.map.repeat.set(w / 2.2, h / 2.2); setup(m); root.add(m); };
     mk(GW * 2, GH, (m) => { m.rotation.y = Math.PI / 2; m.position.set(s * (HX + GD), GH / 2, 0); });             // tył
     mk(GD, GH, (m) => { m.position.set(s * (HX + GD / 2), GH / 2, GW); }); mk(GD, GH, (m) => { m.position.set(s * (HX + GD / 2), GH / 2, -GW); }); // boki
@@ -133,19 +139,29 @@ export function buildSoccerWorld(scene, renderer) {
   }
 
   // ---- piłka ----
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(BR, 32, 20), new THREE.MeshStandardMaterial({ map: ballTex(), roughness: 0.45, metalness: 0.05 }));
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(BR, 40, 26), new THREE.MeshPhysicalMaterial({ map: ballTex(), roughness: 0.28, metalness: 0.0, clearcoat: 1, clearcoatRoughness: 0.12, emissive: 0xffffff, emissiveIntensity: 0.06 }));
   ball.castShadow = true; ball.receiveShadow = false; root.add(ball);
+  const aura = new THREE.Mesh(new THREE.SphereGeometry(BR * 1.28, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }));
+  root.add(aura);
   const blob = new THREE.Mesh(new THREE.CircleGeometry(BR * 1.1, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.06; root.add(blob);
   world.ball = ball;
   world.setBall = (b) => {
-    ball.position.set(b.rx, b.ry, b.rz);
+    ball.position.set(b.rx, b.ry, b.rz); aura.position.copy(ball.position);
     const sp = Math.hypot(b.vx, b.vz);
+    aura.material.opacity = Math.min(0.55, Math.max(0, (sp - 16) / 40)); aura.scale.setScalar(1 + Math.min(0.25, sp / 200));
     if (sp > 0.3) { ball.rotation.y = Math.atan2(-b.vz, b.vx); ball.rotation.z = -b.spin; }
     blob.position.set(b.rx, 0.06, b.rz); const k = Math.max(0.45, 1 - (b.ry - BR) / 16); blob.scale.setScalar(k); blob.material.opacity = 0.3 * k;
   };
 
   world.tires = { update() {}, collide() { return 0; }, reset() {} };
-  world.update = (t) => { world.time.value = t; };
+  world.flash = { t: 0 };
+  world.goalFlash = () => { world.flash.t = 3.2; };
+  world.update = (t) => {
+    const dt = Math.min(0.1, t - (world._lt ?? t)); world._lt = t; world.time.value = t;
+    const f = world.flash; if (f.t > 0) f.t -= dt;
+    const k = f.t > 0 ? 0.9 + Math.abs(Math.sin(t * 14)) * 3.2 : 0.9;
+    for (const m of goalGlow) m.emissiveIntensity = k;
+  };
   return world;
 }

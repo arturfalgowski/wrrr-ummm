@@ -60,7 +60,7 @@ export function soccerStep(car, input, dt) {
 export function makeBall() { return { x: 0, y: BR, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: BR, rz: 0, spin: 0, hitT: 0, lastHit: 0 }; }
 export function resetBall(b) { Object.assign(b, { x: 0, y: BR, z: 0, vx: 0, vy: 0, vz: 0, rx: 0, ry: BR, rz: 0, lastHit: 0 }); }
 
-const GRAV = 24, MAXV = 56;
+const GRAV = 20, MAXV = 62;
 /**
  * Krok piłki. `cars` — stany aut, z którymi piłka ma się zderzać (u hosta wszystkie, u reszty pusta lista).
  * Zwraca { goal: 'red'|'blue'|null, hit: siła ostatniego uderzenia auta, wall: siła odbicia od bandy }.
@@ -78,7 +78,7 @@ export function stepBall(b, dt, cars) {
     }
     const onGround = b.y <= BR + 0.05;
     const inNet = Math.abs(b.x) > HX + BR * 0.4; // siatka mocno hamuje piłkę
-    const drag = Math.exp(-(inNet ? 2.6 : onGround ? 0.42 : 0.06) * h); b.vx *= drag; b.vz *= drag;
+    const drag = Math.exp(-(inNet ? 2.6 : onGround ? 0.3 : 0.05) * h); b.vx *= drag; b.vz *= drag;
     // słupki
     if (b.y < GH + 0.3) for (const [px, pz] of POSTS) {
       let dx = b.x - px, dz = b.z - pz; const d = Math.hypot(dx, dz), min = BR + POST_R;
@@ -106,7 +106,7 @@ export function stepBall(b, dt, cars) {
           b.x = cx + dx * min; b.z = cz + dz * min;
           const rel = (b.vx - c.vx) * dx + (b.vz - c.vz) * dz;
           if (rel < 0) {
-            const j = -(1 + 0.45) * rel;
+            const j = -(1 + 0.5 + Math.min(0.2, -rel / 250)) * rel;
             b.vx += dx * j; b.vz += dz * j;
             b.vy += clamp(-rel * 0.16, 0, 9) * (b.y < BR + 0.6 ? 1 : 0.3);
             out.hit = Math.max(out.hit, -rel);
@@ -157,6 +157,7 @@ export function soccerBotInput(bot, ball, st, dt, role) {
   const dClose = Math.hypot(ball.x - st.x, ball.z - st.z);
   const inp = { throttle: dClose < 12 && Math.abs(ang) > 0.5 ? 0.55 : 1, brake: 0, steer: clamp(ang * 2.4, -1, 1), hand: false };
   if (Math.abs(ang) > 2 && st.speed > 9) { inp.throttle = 0; inp.brake = 1; }
+  inp.boost = dClose > 26 && Math.abs(ang) < 0.3;
   const ai = bot.ai;
   if (st.speed < 2.5) ai.stuck += dt; else ai.stuck = 0;
   if (ai.stuck > 1.0) { ai.rev = 0.8; ai.stuck = 0; ai.revSteer = Math.random() < 0.5 ? -1 : 1; }

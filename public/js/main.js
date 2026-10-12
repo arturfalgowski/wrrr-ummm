@@ -209,12 +209,23 @@ function applyCustom(who) {
   const cu = who === me ? (myRoomPlayer()?.custom ?? S.custom) : (who.custom ?? S.custom);
   who.vis.setCustom({ ...cu, nick: who === me ? myNick() : who.nick || '' });
 }
+const ringGeo = new THREE.RingGeometry(2.9, 3.7, 40);
+/** piłka: kolorowy pierścień pod autem w barwach drużyny */
+function setTeamRing(who) {
+  const v = who.vis; if (!v) return;
+  if (!v.teamRing) {
+    v.teamRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    v.teamRing.rotation.x = -Math.PI / 2; v.teamRing.position.y = 0.08; v.group.add(v.teamRing);
+  }
+  v.teamRing.visible = isSoccer() && !!who.team;
+  if (who.team) v.teamRing.material.color.set(TEAM_COLORS[who.team]);
+}
 function setCar(who, carId, slot, color) {
   if (who.vis) scene.remove(who.vis.group);
   if (!carId) { who.vis = null; who.st = null; return; }
   who.vis = getVis(carId, slot);
   applyCustom(who);
-  who.color = isSoccer() && who.team ? TEAM_COLORS[who.team] : (color || S.color); who.dead = false; who.vis.group.visible = true; who.vis.setDamage(0); who.vis.setColor(who.color, stripeFor(who.color));
+  who.color = isSoccer() && who.team ? TEAM_COLORS[who.team] : (color || S.color); who.dead = false; who.vis.group.visible = true; who.vis.setDamage(0); who.vis.setColor(who.color, stripeFor(who.color)); setTeamRing(who);
   who.st = new CarState(CAR_DEFS[carId]);
   if (isSoccer()) placeAtSpawn(who);
   else if (isArena()) {
@@ -238,6 +249,11 @@ function teamIdxOf(who) {
 function placeAtSpawn(who) {
   const [x, z, yaw] = soccerSpawn(who.team || 'red', teamIdxOf(who)), st = who.st;
   Object.assign(st, { x, z, yaw, y: 0, vx: 0, vz: 0, vf: 0, vl: 0, steer: 0, air: false, vy: 0, vyT: 0 });
+}
+/** arena: uderzenie rywala przodem nie rani, rani dopiero trafienie z boku lub z tyłu */
+function frontHit(a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
+  return (dx * Math.cos(a.yaw) + dz * Math.sin(a.yaw)) / d > 0.6;
 }
 function stepCar(st, inp, dt) { if (isSoccer()) soccerStep(st, inp, dt); else if (isArena()) arenaStep(st, inp, dt); else { st.step(track, inp, dt); trackHeightStep(st, track, dt); } }
 /** nachylenie auta względem terenu (tylko arena) */
@@ -294,7 +310,7 @@ function resetRace() {
   $('chip-pos').classList.toggle('hidden', !opps.size || isSoccer());
   resetSoccer();
   $('hud-lap').parentElement.classList.toggle('hidden', isArena());
-  $('hud-help').innerHTML = isSoccer() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; wbij piłkę do bramki przeciwnika' + (attacksOn() ? ' &nbsp; <kbd>F</kbd> broń &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro' : '') : isArena() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>F</kbd> broń &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro &nbsp; (pełny zestaw: <kbd>Q</kbd> mina <kbd>E</kbd> olej <kbd>T</kbd> rakieta <kbd>G</kbd> tarcza)' : '<kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej &nbsp; <kbd>Q</kbd> mina';
+  $('hud-help').innerHTML = isSoccer() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; wbij piłkę do bramki przeciwnika &nbsp; <kbd>Shift</kbd> nitro (ładuje się samo)' + (attacksOn() ? ' &nbsp; <kbd>F</kbd> broń &nbsp; <kbd>R</kbd> karabin' : '') : isArena() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; uderzenie przodem nie rani &nbsp; <kbd>F</kbd> broń &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro &nbsp; (pełny zestaw: <kbd>Q</kbd> mina <kbd>E</kbd> olej <kbd>T</kbd> rakieta <kbd>G</kbd> tarcza)' : '<kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej &nbsp; <kbd>Q</kbd> mina';
   $('chip-pos').querySelector('.lbl').textContent = isArena() ? 'Żywi' : 'Pozycja';
 }
 
@@ -1436,8 +1452,8 @@ function botUpdate(o, dt) {
   stepCar(st, inp, dt);
   if (st.landHit > 0) damageBot(o, st.landHit * 0.5);
   if (st.hit > 3 && o.hitCd <= 0) { damageBot(o, (st.hit - 3) * 0.3); o.hitCd = 0.2; if (st.hit > 8) sparks(st.x, st.z, st.hit); }
-  if (!me.dead) { const h = carVsCar(st, me.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.6); o.hitCd = 0.15; } }
-  for (const q of oppList()) if (q !== o && !q.dead) { const h = carVsCar(st, q.st); if (h > 1.5 && o.hitCd <= 0) { damageBot(o, h * 0.2); o.hitCd = 0.15; } }
+  if (!me.dead) { const h = carVsCar(st, me.st); if (h > 1.5 && o.hitCd <= 0) { if (!frontHit(st, me.st)) damageBot(o, h * 0.6); o.hitCd = 0.15; } }
+  for (const q of oppList()) if (q !== o && !q.dead) { const h = carVsCar(st, q.st); if (h > 1.5 && o.hitCd <= 0) { if (!frontHit(st, q.st)) damageBot(o, h * 0.2); o.hitCd = 0.15; } }
   const c = items.touch(st.x, st.z, 3.2);
   if (c && !c.requested) { c.requested = true; botApply(o, c.type); items.remove(c.id); }
   // broń
@@ -1485,6 +1501,7 @@ function stackItem(k, msg) {
 }
 function applyPickup(type) {
   sfx.pickup(type);
+  if (isSoccer() && type === 'nitro') { soc.boost = 100; toast('Nitro — pełny zbiornik'); return; }
   if (isArena() && me.fullKit && ['bomb', 'rocket', 'shield', 'oil'].includes(type)) { me.stock[type] = Math.min(3, me.stock[type] + 1); toast(`${WEAPON_NAMES[type]} ×${me.stock[type]} — ${STOCK_KEYS[type]}`); updateSlots(); return; }
   if (isArena() && ['bomb', 'rocket', 'ammo', 'shield', 'oil'].includes(type)) { me.weapon = type; toast(`${WEAPON_NAMES[type]} — F`); updateSlots(); return; }
   if (!isArena() && type === 'bomb') { stackItem('mine', 'Mina — Q'); return; }
@@ -1497,6 +1514,7 @@ function applyPickup(type) {
 const STOCK_KEYS = { bomb: 'Q', oil: 'E', rocket: 'T', shield: 'G' };
 const racingNow = () => S.mode === 'racing' && !me.finished && !me.dead;
 function useNitro() {
+  if (isSoccer()) return;
   if (!racingNow() || !me.items.nitro || me.nitroT > 0) return;
   me.items.nitro--; me.nitroT = 2.5; sfx.nitro(); updateSlots();
 }
@@ -1570,7 +1588,7 @@ function updateGameplay(dt, active) {
   for (const o of oppList()) world.tires.collide(o.st, 1.3, (x, z) => puff(x, z, 2));
   // olej i nitro
   me.st.inOil = items.inOil(me.st.x, me.st.z);
-  if (me.nitroT > 0) { me.nitroT -= dt; me.st.nitro = me.nitroT > 0; if (me.nitroT <= 0) updateSlots(); } else me.st.nitro = false;
+  if (me.nitroT > 0) { me.nitroT -= dt; me.st.nitro = me.nitroT > 0; if (me.nitroT <= 0) updateSlots(); } else me.st.nitro = isSoccer() && soc.boosting;
   if (me.fireT > 0) {
     if (me.finished) me.fireT = 0;
     else {
@@ -1883,7 +1901,7 @@ function frame(now) {
     for (const o of oppList()) {
       if (refreshOpp(o) && !o.dead) {
         const h = carVsCar(me.st, o.st);
-        if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((me.st.x + o.st.x) / 2, (me.st.z + o.st.z) / 2, h); me.hitCd = 0.15; damage(h * 0.7); }
+        if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((me.st.x + o.st.x) / 2, (me.st.z + o.st.z) / 2, h); me.hitCd = 0.15; if (isArena() && frontHit(me.st, o.st)) { if (!me._frontTip || performance.now() - me._frontTip > 6000) { me._frontTip = performance.now(); toast('Uderzenie przodem nie rani — chroń tył i boki', 2200); } } else damage(h * 0.7); }
       }
     }
     me.hitCd -= dt;
@@ -1953,7 +1971,8 @@ function frame(now) {
 
 // ======================= Piłka samochodowa =======================
 const ball = makeBall();
-const soc = { red: 0, blue: 0, left: 0, over: false, pause: false, pauseT: 0, ended: false };
+const soc = { red: 0, blue: 0, left: 0, over: false, pause: false, pauseT: 0, ended: false, boost: 100, boosting: false, boostIdle: 0 };
+let ballCd = 0;
 let ballAcc = 0, bannerTimer = null;
 const fmtClock = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 const timeLimitNow = () => (S.solo ? S.timeLimit : S.room?.settings?.timeLimit ?? 0);
@@ -1971,14 +1990,16 @@ function resetSoccer() {
   $('goal-banner').classList.add('hidden');
   const noAtk = on && !attacksOn();
   $('hud').querySelector('.hud-items').classList.toggle('hidden', noAtk);
+  $('boost-wrap').classList.toggle('hidden', !on);
   $('hud').querySelectorAll('.hplabel, .hpbar').forEach((e) => e.classList.toggle('hidden', noAtk));
   if (!on) return;
-  Object.assign(soc, { red: 0, blue: 0, left: timeLimitNow(), over: false, pause: false, pauseT: 0, ended: false });
+  Object.assign(soc, { red: 0, blue: 0, left: timeLimitNow(), over: false, pause: false, pauseT: 0, ended: false, boost: 100, boosting: false, boostIdle: 0 });
   resetBall(ball); ballAcc = 0;
   replay.done = true; // powtórka po meczu nie obejmuje piłki — pomijamy
   soccerHud();
 }
 function soccerHud() {
+  $('boost-fill').style.width = `${soc.boost}%`; $('boost-wrap').classList.toggle('on', soc.boosting);
   setText('soc-red', String(soc.red)); setText('soc-blue', String(soc.blue));
   const lim = timeLimitNow();
   setText('soc-time', soc.over ? 'DOGRYWKA' : lim > 0 ? fmtClock(soc.left) : '∞');
@@ -1997,6 +2018,8 @@ function soccerBotUpdate(o, dt) {
   if (o.dead || !o.st) return;
   const st = o.st;
   const inp = soc.pause || soc.ended ? { throttle: 0, brake: 0.25, steer: 0, hand: false } : soccerBotInput(o, ball, st, dt, teamIdxOf(o));
+  const ai = o.ai; ai.boost ??= 100; ai.idle ??= 0;
+  if (inp.boost && ai.boost > 0) { ai.boost -= 40 * dt; st.nitro = true; ai.idle = 0.8; } else { st.nitro = false; ai.idle -= dt; if (ai.idle <= 0) ai.boost = Math.min(100, ai.boost + 18 * dt); }
   soccerStep(st, inp, dt);
   if (!me.dead) carVsCar(st, me.st);
   for (const q of oppList()) if (q !== o && !q.dead) carVsCar(st, q.st);
@@ -2008,7 +2031,7 @@ function soccerScoreMsg(m) {
   if (m.scorer) {
     soc.pause = true; soc.pauseT = 3.6;
     showBanner(`GOL! ${TEAM_NAMES[m.scorer]}`, TEAM_COLORS[m.scorer], 3200);
-    sfx.goal(); goalFx(m.scorer);
+    sfx.goal(); goalFx(m.scorer); world.goalFlash?.();
   } else if (m.over) showBanner('DOGRYWKA — złoty gol!', '#ffd84d', 3200);
   soccerHud();
 }
@@ -2048,10 +2071,20 @@ function soccerFrame(dt) {
       }
     }
   }
+  const wantBoost = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && !me.dead && S.mode === 'racing' && !soc.pause;
+  if (wantBoost && soc.boost > 0) { soc.boost = Math.max(0, soc.boost - 40 * dt); soc.boosting = true; soc.boostIdle = 0.8; }
+  else { soc.boosting = false; soc.boostIdle -= dt; if (soc.boostIdle <= 0) soc.boost = Math.min(100, soc.boost + 18 * dt); }
+  ballCd -= dt;
   const cars = [];
   if (!soc.pause && !soc.ended) { if (!me.dead) cars.push(me.st); if (host) for (const o of oppList()) if (!o.dead) cars.push(o.st); }
   const out = stepBall(ball, dt, cars);
-  if (out.hit > 2.5) sfx.kick(out.hit / 36);
+  if (out.hit > 2.5) {
+    sfx.kick(out.hit / 36);
+    if (out.hit > 5 && ballCd <= 0) {
+      ballCd = 0.2; sparks(ball.x, ball.z, out.hit * 1.2);
+      if (!me.dead && Math.hypot(me.st.x - ball.x, me.st.z - ball.z) < BR + 4.5) { me.st.vx *= 0.965; me.st.vz *= 0.965; }
+    }
+  }
   else if (out.wall > 7 || out.ground > 6) sfx.bounce(Math.max(out.wall, out.ground) / 32);
   if (out.goal && host && !soc.pause && !soc.ended) {
     soc.pause = true; soc.pauseT = 3.6;
@@ -2071,6 +2104,8 @@ function soccerFrame(dt) {
 /** wygładzenie i rysowanie piłki (także w menu/lobby) + HUD */
 function soccerIdle(dt) {
   smoothBall(ball, dt); world.setBall?.(ball);
+  const sp = Math.hypot(ball.vx, ball.vz);
+  if (sp > 20 && S.mode === 'racing') { tmpC.set(sp > 38 ? '#ffb347' : '#ffffff'); particles.emit(ball.rx, ball.ry, ball.rz, -ball.vx * 0.04, 0.4, -ball.vz * 0.04, 0.45, 1.3, 0.2, tmpC, 0.55, 1.5, 0); }
   if (S.mode === 'racing' || S.mode === 'finished') soccerHud();
 }
 function showResultsSoccer(d) {
