@@ -155,7 +155,7 @@ function renderRanking(list) {
   }
 }
 async function loadRanking() {
-  try { renderRanking(await (await fetch('/api/ranking')).json()); } catch { /* serwer niedostępny */ }
+  try { renderRanking(await (await fetch('api/ranking')).json()); } catch { /* serwer niedostępny */ }
 }
 
 function buildCarList() {
@@ -189,7 +189,7 @@ function goMenu() {
 function renderLobby() {
   const r = S.room; if (!r) return;
   $('lobby-code').textContent = r.id;
-  $('lobby-link').value = `${location.origin}/?room=${r.id}`;
+  $('lobby-link').value = `${location.origin}${location.pathname}?room=${r.id}`;
   const two = r.players.length === 2;
   $('copyrow').classList.toggle('hidden', two);
   $('lobby-hint').textContent = two ? 'Obaj gracze są w pokoju. Gdy oboje klikniecie „Gotowy”, ruszy odliczanie.' : 'Wyślij ten link drugiemu graczowi:';
@@ -226,7 +226,7 @@ function renderLobby() {
 function connect() {
   if (socket) return socket;
   if (typeof io === 'undefined') { $('menu-err').textContent = 'Brak połączenia z serwerem gry (uruchom: npm start).'; return null; }
-  socket = io();
+  socket = io({ path: location.pathname.replace(/[^/]*$/, '') + 'socket.io' });
   socket.on('connect_error', () => { $('menu-err').textContent = 'Nie można połączyć się z serwerem.'; });
   socket.on('disconnect', () => { if (S.room) { toast('Utracono połączenie z serwerem', 3500); goMenu(); } });
   socket.on('room:update', (room) => {

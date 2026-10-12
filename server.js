@@ -198,6 +198,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => leaveRoom(socket));
 });
 
-server.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
   console.log(`Wrrr Ummm działa: http://localhost:${PORT}`);
 });
