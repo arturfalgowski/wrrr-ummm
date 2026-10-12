@@ -23,6 +23,8 @@ const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
 const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair', 'bomb', 'bomb'];
 const ARENA_ITEMS = ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'];
 const ARENA_R = 80;
+const SOC_HX = 70, SOC_HZ = 44; // połowa długości i szerokości boiska (zgodne z public/js/soccer.js)
+const MODES = ['race', 'arena', 'soccer'];
 const POINTS = [10, 6, 4, 2];
 const TOURNAMENT_ROUNDS = 3;
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
@@ -53,9 +55,9 @@ const qRec = db.prepare(`
 const qSecond = db.prepare('UPDATE stats SET second = second + 1 WHERE nick = ? AND mode = ?');
 const qTop = db.prepare('SELECT nick, wins, second, races, best_time AS best FROM stats WHERE mode = ? ORDER BY wins DESC, second DESC, races ASC, nick LIMIT 10');
 const qProfile = db.prepare('SELECT mode, wins, second, races, best_time AS best, last_played AS last FROM stats WHERE nick = ?');
-const ranking = () => ({ race: qTop.all('race'), arena: qTop.all('arena') });
+const ranking = () => ({ race: qTop.all('race'), arena: qTop.all('arena'), soccer: qTop.all('soccer') });
 const profile = (nick) => {
-  const out = { nick, race: null, arena: null };
+  const out = { nick, race: null, arena: null, soccer: null };
   for (const row of qProfile.all(nick)) out[row.mode] = row;
   return out;
 };
@@ -67,7 +69,7 @@ const io = new Server(server, { transports: ['websocket', 'polling'] });
 
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three')));
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/api/ranking', (req, res) => { const r = ranking(); res.json(req.query.mode === 'arena' ? r.arena : req.query.mode === 'all' ? r : r.race); });
+app.get('/api/ranking', (req, res) => { const r = ranking(); res.json(req.query.mode === 'arena' ? r.arena : req.query.mode === 'soccer' ? r.soccer : req.query.mode === 'all' ? r : r.race); });
 app.get('/api/profile', (req, res) => res.json(profile(String(req.query.nick ?? '').slice(0, 14))));
 app.get('/api/music', (_req, res) => {
   try { res.json(fs.readdirSync(path.join(__dirname, 'public/music')).filter((f) => !f.startsWith('.') && /\.(mp3|ogg|m4a|wav)$/i.test(f)).sort()); } catch { res.json([]); }
@@ -93,6 +95,9 @@ const cleanSettings = (s, track) => ({
   tournament: !!s?.tournament,
   bots: Number.isInteger(s?.bots) && s.bots >= 0 && s.bots <= 3 ? s.bots : 0,
   public: s?.public === undefined ? true : !!s.public,
+  timeLimit: [0, 90, 180, 300, 600].includes(s?.timeLimit) ? s.timeLimit : 180,
+  goalLimit: [0, 3, 5, 7, 10].includes(s?.goalLimit) ? s.goalLimit : 5,
+  attacks: !!s?.attacks,
 });
 const cleanCustom = (c, prev = {}) => ({
   num: Number.isInteger(c?.num) && c.num >= 1 && c.num <= 99 ? c.num : (prev.num ?? 1 + (Math.random() * 99 | 0)),
@@ -103,9 +108,13 @@ const cleanCustom = (c, prev = {}) => ({
 });
 const freeColor = (r, pref) => (COLORS.includes(pref) && !r.players.some((p) => p.color === pref) ? pref : COLORS.find((c) => !r.players.some((p) => p.color === c)));
 
-/** boty uczestniczą tylko w wyścigach; liczba ograniczona wolnymi miejscami */
+/** drużyna z mniejszą liczbą graczy (piłka) */
+const teamCount = (r, t) => r.players.filter((p) => p.team === t).length;
+const smallerTeam = (r) => (teamCount(r, 'red') <= teamCount(r, 'blue') ? 'red' : 'blue');
+
+/** boty uczestniczą w wyścigach i piłce; liczba ograniczona wolnymi miejscami */
 function activeBots(r) {
-  if (r.mode !== 'race') return [];
+  if (r.mode !== 'race' && r.mode !== 'soccer') return [];
   const n = Math.max(0, Math.min(r.settings.bots, MAX_CARS - r.players.length));
   if (r.botsCache?.length === n && r.botsCache.every((b, i) => b.slot === r.players.length + i)) return r.botsCache;
   const used = new Set(r.players.map((p) => p.color));
@@ -114,9 +123,13 @@ function activeBots(r) {
     sid: `bot${i}`, nick: BOT_NAMES[i], car: CARS[(i + 1) % 3], color: colors[(i * 3) % colors.length] || COLORS[i],
     custom: cleanCustom({ num: 40 + i * 11 }), slot: r.players.length + i, bot: true, progress: 0, finishTime: null,
   }));
+  if (r.mode === 'soccer') { // boty uzupełniają słabszą drużynę
+    const cnt = { red: teamCount(r, 'red'), blue: teamCount(r, 'blue') };
+    for (const b of r.botsCache) { b.team = cnt.red <= cnt.blue ? 'red' : 'blue'; cnt[b.team]++; }
+  }
   return r.botsCache;
 }
-const publicPlayer = (p) => ({ id: p.sid, nick: p.nick, car: p.car, color: p.color, custom: p.custom, ready: !!p.ready, slot: p.slot, bot: !!p.bot });
+const publicPlayer = (p) => ({ id: p.sid, nick: p.nick, car: p.car, color: p.color, custom: p.custom, ready: !!p.ready, slot: p.slot, bot: !!p.bot, team: p.team || null });
 const publicRoom = (r) => ({
   id: r.id, state: r.state, mode: r.mode, track: r.track, settings: r.settings, env: r.env || null,
   players: r.players.map(publicPlayer), bots: activeBots(r).map(publicPlayer), spectators: r.spectators.size,
@@ -148,7 +161,7 @@ function startCountdown(r) {
   clearTimers(r);
   r.state = 'countdown';
   r.winner = null; r.times = {}; r.recorded = false; r.finalized = false;
-  r.pickups = new Map();
+  r.pickups = new Map(); r.soccer = null;
   r.alive = new Set(r.players.map((p) => p.sid)); r.elim = []; r.order = []; r.afterRace = false;
   for (const p of r.players) p.progress = 0;
   for (const b of activeBots(r)) { b.progress = 0; b.finishTime = null; }
@@ -162,19 +175,20 @@ function startCountdown(r) {
   later(r, 800, () => io.to(r.id).emit('race:count', 3));
   later(r, 1800, () => io.to(r.id).emit('race:count', 2));
   later(r, 2800, () => io.to(r.id).emit('race:count', 1));
-  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
+  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); if (r.mode === 'soccer') startSoccerClock(r); });
 }
 
 function schedulePickups(r) {
   const mul = PICKUP_MODES[r.settings.pickups];
-  if (!mul) return;
-  const arena = r.mode === 'arena';
+  if (!mul || (r.mode === 'soccer' && !r.settings.attacks)) return;
+  const soccer = r.mode === 'soccer', arena = r.mode === 'arena' || soccer;
   const tick = () => {
     if (r.state !== 'racing') return;
     if (r.pickups.size < (arena ? 5 : 3)) {
       const id = ++r.pid, type = pick(arena ? ARENA_ITEMS : ITEMS);
       r.pickups.set(id, type);
-      if (arena) { const a = Math.random() * Math.PI * 2, rad = Math.sqrt(Math.random()) * ARENA_R * 0.82; io.to(r.id).emit('pickup:spawn', { id, type, x: Math.cos(a) * rad, z: Math.sin(a) * rad }); }
+      if (soccer) io.to(r.id).emit('pickup:spawn', { id, type, x: (Math.random() * 2 - 1) * SOC_HX * 0.8, z: (Math.random() * 2 - 1) * SOC_HZ * 0.8 });
+      else if (arena) { const a = Math.random() * Math.PI * 2, rad = Math.sqrt(Math.random()) * ARENA_R * 0.82; io.to(r.id).emit('pickup:spawn', { id, type, x: Math.cos(a) * rad, z: Math.sin(a) * rad }); }
       else io.to(r.id).emit('pickup:spawn', { id, type, u: Math.random(), l: (Math.random() - 0.5) * 1.3 });
       later(r, 30000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
     }
@@ -195,6 +209,49 @@ function arenaEliminate(r, sid) {
     r.times[winner.sid] = r.times[winner.sid] ?? null;
     endRace(r, winner, 'finish');
   }
+}
+
+// ---------- Piłka samochodowa ----------
+const GOAL_PAUSE = 3600;
+function startSoccerClock(r) {
+  r.soccer = { red: 0, blue: 0, over: false, pause: false, left: r.settings.timeLimit };
+  io.to(r.id).emit('soccer:score', { red: 0, blue: 0, left: r.soccer.left, over: false });
+  const tick = () => {
+    if (r.state !== 'racing' || !r.soccer || r.soccer.ending) return;
+    const s = r.soccer;
+    if (r.settings.timeLimit > 0 && !s.pause && !s.over) {
+      s.left--;
+      if (s.left <= 0) {
+        if (s.red === s.blue) { s.over = true; io.to(r.id).emit('soccer:score', { red: s.red, blue: s.blue, left: 0, over: true }); }
+        else return endSoccer(r, s.red > s.blue ? 'red' : 'blue', 'time');
+      } else if (s.left % 5 === 0) io.to(r.id).emit('soccer:time', { left: s.left });
+    }
+    later(r, 1000, tick);
+  };
+  later(r, 1000, tick);
+}
+function soccerGoal(r, team) {
+  const s = r.soccer;
+  if (!s || r.state !== 'racing' || s.pause || !['red', 'blue'].includes(team)) return;
+  s[team]++;
+  const lim = r.settings.goalLimit;
+  if (s.over || (lim > 0 && s[team] >= lim)) { s.ending = true; io.to(r.id).emit('soccer:score', { red: s.red, blue: s.blue, left: s.left, over: s.over, scorer: team }); return later(r, 1800, () => endSoccer(r, team, s.over ? 'golden' : 'goals')); }
+  s.pause = true;
+  io.to(r.id).emit('soccer:score', { red: s.red, blue: s.blue, left: s.left, over: s.over, scorer: team });
+  later(r, GOAL_PAUSE, () => { s.pause = false; io.to(r.id).emit('soccer:kickoff'); });
+}
+function endSoccer(r, team, reason) {
+  if (r.recorded) return;
+  r.recorded = true; r.afterRace = true; r.state = 'finished'; clearTimers(r);
+  r.winner = team;
+  const now = Date.now();
+  for (const p of r.players) { p.ready = false; qRec.run(p.nick, 'soccer', p.team === team ? 1 : 0, null, now); }
+  io.to(r.id).emit('room:update', publicRoom(r));
+  io.to(r.id).emit('race:end', {
+    reason, winner: team, mode: 'soccer', score: { red: r.soccer?.red ?? 0, blue: r.soccer?.blue ?? 0 }, order: [], times: {},
+    players: r.players.map(publicPlayer), bots: activeBots(r).map(publicPlayer), final: null, tournament: null, ranking: ranking(),
+  });
+  io.emit('ranking', ranking());
 }
 
 /** kolejność końcowa wyścigu: ukończone wg czasu, reszta wg postępu */
@@ -270,9 +327,15 @@ function leaveRoom(socket) {
   r.players.forEach((p, i) => { p.slot = i; });
   r.botsCache = null;
   if (r.mode === 'arena' && r.state === 'racing' && !r.recorded && r.alive.has(gone.sid)) arenaEliminate(r, gone.sid);
-  if (r.state === 'racing' && !r.recorded) {
+  if (r.mode === 'soccer') {
+    if (!r.players.some((p) => p.team === 'red') || !r.players.some((p) => p.team === 'blue')) { // jedna drużyna została bez ludzi
+      const left = r.players[0].team;
+      if (r.state === 'racing' && !r.recorded && !activeBots(r).length) { endSoccer(r, left, 'left'); io.to(id).emit('room:left', { nick: gone.nick }); return; }
+    }
+  }
+  if (r.state === 'racing' && !r.recorded && r.mode !== 'soccer') {
     if (r.players.length < 2 && !activeBots(r).length) { r.times[r.players[0].sid] = r.times[r.players[0].sid] ?? null; endRace(r, r.players[0], 'left'); }
-  } else {
+  } else if (!(r.mode === 'soccer' && r.state === 'racing')) {
     clearTimers(r);
     if (r.state !== 'finished') r.state = 'lobby';
     r.players.forEach((p) => { p.ready = false; });
@@ -297,11 +360,11 @@ io.on('connection', (socket) => {
     if (nick.length < 2) return cb({ ok: false, error: 'Nick jest za krótki.' });
     const tr = TRACKS.includes(track) ? track : TRACKS[0];
     const r = {
-      id: genId(), state: 'lobby', mode: mode === 'arena' ? 'arena' : 'race', alive: new Set(), elim: [], order: [], track: tr,
+      id: genId(), state: 'lobby', mode: MODES.includes(mode) ? mode : 'race', soccer: null, alive: new Set(), elim: [], order: [], track: tr,
       settings: cleanSettings(settings, tr), players: [], spectators: new Set(), timers: [], times: {}, winner: null, recorded: false,
       pickups: new Map(), pid: 0, tournament: null, env: null, afterRace: false, finalized: false, botsCache: null,
     };
-    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), custom: cleanCustom(custom), ready: false, slot: 0, progress: 0 });
+    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), custom: cleanCustom(custom), ready: false, slot: 0, progress: 0, team: 'red' });
     rooms.set(r.id, r);
     socket.join(r.id);
     socket.data.roomId = r.id;
@@ -325,7 +388,7 @@ io.on('connection', (socket) => {
     if (lockedState(r)) return cb({ ok: false, error: 'Wyścig już trwa. Możesz dołączyć jako obserwator.' });
     for (let n = 2; r.players.some((p) => p.nick.toLowerCase() === nick.toLowerCase()); n++) nick = `${nick.replace(/ \(\d\)$/, '').slice(0, 11)} (${n})`;
     const slot = [0, 1, 2, 3].find((s) => !r.players.some((p) => p.slot === s));
-    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), custom: cleanCustom(custom), ready: false, slot, progress: 0 });
+    r.players.push({ sid: socket.id, nick, car: cleanCar(car), color: freeColor(r, color), custom: cleanCustom(custom), ready: false, slot, progress: 0, team: smallerTeam(r) });
     r.botsCache = null;
     socket.join(r.id);
     socket.data.roomId = r.id;
@@ -354,7 +417,7 @@ io.on('connection', (socket) => {
 
   socket.on('room:mode', (mode) => {
     const r = rooms.get(socket.data.roomId);
-    if (!r || !isHost(r, socket) || lockedState(r) || !['race', 'arena'].includes(mode)) return;
+    if (!r || !isHost(r, socket) || lockedState(r) || !MODES.includes(mode)) return;
     r.mode = mode; r.botsCache = null; r.tournament = null;
     io.to(r.id).emit('room:update', publicRoom(r));
   });
@@ -413,6 +476,25 @@ io.on('connection', (socket) => {
     io.to(r.id).emit('room:update', publicRoom(r));
   });
 
+  socket.on('player:team', (team) => {
+    const { r, p } = me();
+    if (!p || lockedState(r) || !['red', 'blue'].includes(team) || p.team === team) return;
+    if (teamCount(r, team) >= 2) return;
+    p.team = team; r.botsCache = null;
+    io.to(r.id).emit('room:update', publicRoom(r));
+  });
+
+  // piłka: host symuluje fizykę i przesyła stan; gol zgłasza host, serwer liczy wynik i czas
+  socket.on('soccer:ball', (b) => {
+    const { r } = me();
+    if (!r || r.mode !== 'soccer' || !isHost(r, socket) || r.state !== 'racing' || !Array.isArray(b) || b.length !== 6 || !b.every(Number.isFinite)) return;
+    socket.to(r.id).volatile.emit('soccer:ball', b);
+  });
+  socket.on('soccer:goal', ({ team } = {}) => {
+    const { r } = me();
+    if (r && r.mode === 'soccer' && isHost(r, socket)) soccerGoal(r, team);
+  });
+
   socket.on('player:color', (color) => {
     const { r, p } = me();
     if (!p || lockedState(r) || !COLORS.includes(color)) return;
@@ -439,7 +521,9 @@ io.on('connection', (socket) => {
     if (r.state === 'finished' && p.ready) r.state = 'lobby';
     io.to(r.id).emit('room:update', publicRoom(r));
     const cars = r.players.length + activeBots(r).length;
-    if (cars >= 2 && r.players.every((x) => x.ready)) startCountdown(r);
+    const bots = activeBots(r), teamsOk = r.mode !== 'soccer' || (['red', 'blue'].every((t) => [...r.players, ...bots].some((x) => x.team === t)));
+    if (cars >= 2 && r.players.every((x) => x.ready) && !teamsOk) io.to(r.id).emit('chat', { sys: true, text: 'Piłka: potrzeba aut w obu drużynach (zmień drużynę lub dodaj boty).' });
+    if (cars >= 2 && teamsOk && r.players.every((x) => x.ready)) startCountdown(r);
   });
 
   // Stan samochodu — relay do pozostałych (nieautorytatywny, bez walidacji fizyki).

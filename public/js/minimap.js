@@ -8,12 +8,17 @@ export class Minimap {
   }
 
   setArena(R, obstacles) {
-    this.arena = { R, obstacles }; this.track = null;
+    this.arena = { R, obstacles }; this.track = null; this.soccer = null;
     this.b = { minX: -R, maxX: R, minZ: -R, maxZ: R }; this.pts = [[0, 0]];
   }
 
+  setSoccer(hx, hz, gw, gd) {
+    this.soccer = { hx, hz, gw, gd }; this.arena = null; this.track = null;
+    this.b = { minX: -hx - gd, maxX: hx + gd, minZ: -hz, maxZ: hz }; this.pts = [[0, 0]];
+  }
+
   setTrack(track) {
-    this.arena = null;
+    this.arena = null; this.soccer = null;
     this.track = track;
     const b = track.bounds;
     this.b = b;
@@ -41,7 +46,13 @@ export class Minimap {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, this.w, this.h);
     g.lineJoin = 'round'; g.lineCap = 'round';
-    if (this.arena) {
+    if (this.soccer) {
+      const { hx, hz, gw, gd } = this.soccer, [x0, y0] = this._p(-hx, -hz), [x1, y1] = this._p(hx, hz);
+      g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 5.5; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+      const [mx, my] = this._p(0, 0), [, ty] = this._p(0, -hz), [, by] = this._p(0, hz);
+      g.beginPath(); g.moveTo(mx, ty); g.lineTo(mx, by); g.moveTo(mx + 9 * this.s, my); g.arc(mx, my, 9 * this.s, 0, Math.PI * 2); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,.55)'; g.stroke();
+      for (const s of [-1, 1]) { const [gx0, gy0] = this._p(s * hx, -gw), [gx1, gy1] = this._p(s * (hx + gd), gw); g.beginPath(); g.rect(Math.min(gx0, gx1), gy0, Math.abs(gx1 - gx0), gy1 - gy0); g.strokeStyle = s > 0 ? '#2f6bff' : '#e53935'; g.lineWidth = 2; g.stroke(); }
+    } else if (this.arena) {
       const [cx, cy] = this._p(0, 0), R = this.arena.R * this.s;
       g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 5.5; g.stroke(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
       g.beginPath(); g.arc(cx, cy, 12 * this.s, 0, Math.PI * 2); g.setLineDash([3, 3]); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1; g.stroke(); g.setLineDash([]);
@@ -70,6 +81,7 @@ export class Minimap {
       g.beginPath(); g.arc(px, py, d.me ? 6 : 5.5, 0, Math.PI * 2);
       if (d.ghost) { g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1.5; g.setLineDash([2, 2]); g.stroke(); g.setLineDash([]); continue; }
       g.fillStyle = d.color; g.fill();
+      if (d.ball) { g.lineWidth = 2; g.strokeStyle = '#111'; g.stroke(); continue; }
       g.lineWidth = d.me ? 2.5 : 1.5; g.strokeStyle = d.me ? '#fff' : 'rgba(0,0,0,.6)'; g.stroke();
       if (d.label) { g.fillStyle = '#fff'; g.font = '700 8px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(d.label, px, py + 0.5); }
     }

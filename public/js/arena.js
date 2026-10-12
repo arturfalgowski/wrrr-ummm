@@ -28,7 +28,11 @@ function rampH(x, z, r) {
 }
 export function rampMask(x, z) { let m = 0; for (const r of RAMPS) { const dx = x - r.cx, dz = z - r.cz, c = Math.cos(r.ang), s = Math.sin(r.ang); const u = dx * c + dz * s, v = -dx * s + dz * c; if (u > -0.5 && u < r.L + 0.5 && Math.abs(v) < r.W / 2 + 0.3) m = 1; } return m; }
 
+let flat = false;
+/** boisko piłkarskie korzysta z tej samej fizyki wysokości — tam teren jest płaski */
+export const setFlat = (v) => { flat = v; };
 export function heightAt(x, z) {
+  if (flat) return 0;
   let h = 0;
   for (const g of HILLS) h += gauss(x, z, g[0], g[1], g[2], g[3]);
   for (const g of PITS) h += gauss(x, z, g[0], g[1], g[2], g[3]);

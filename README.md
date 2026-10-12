@@ -1,6 +1,6 @@
 # Wrrr Ummm
 
-Wyścigi 3D dla 2–4 graczy w przeglądarce. Three.js (WebGL) + Node.js + Socket.IO + SQLite.
+Wyścigi, arena i piłka samochodowa 3D dla 1–4 graczy w przeglądarce. Three.js (WebGL) + Node.js + Socket.IO + SQLite.
 Wszystkie modele, tekstury, efekty i dźwięki są generowane w kodzie — brak zewnętrznych plików graficznych i audio.
 
 ## Uruchomienie
@@ -109,3 +109,9 @@ pokoi, odliczania, kolejności mety i rankingu — nie waliduje fizyki, więc ni
 ## Menu, pauza, kamera
 - Menu w zakładkach (Auto i wygląd / Tor / Ustawienia), „Trening solo” zawsze dostępny; auto i tor domyślnie losowe.
 - Esc w trybie solo = pauza (suwaki muzyki i efektów, kamera, restart, wyjście). C = kamera zza auta.
+
+## Piłka samochodowa
+- Tryb „Piłka”: duża piłka, dwie bramki, boisko z zieloną murawą; drużyny czerwoni/niebiescy (do 2 graczy w drużynie, boty uzupełniają składy).
+- Ustawienia: limit czasu (brak / 1:30 / 3 / 5 / 10 min), limit goli (brak / 3 / 5 / 7 / 10), ataki (bronie, bomby, rakiety, nitro — domyślnie wyłączone), boty, pogoda i pora dnia. Remis po czasie = dogrywka na złotego gola.
+- Multiplayer: piłkę symuluje gospodarz pokoju (`soccer:ball`), serwer liczy wynik i czas (`soccer:score`, `soccer:goal`, `soccer:kickoff`).
+- Kod: `public/js/soccer.js` (boisko, fizyka piłki, bot), `public/js/soccerworld.js` (wizualizacja).

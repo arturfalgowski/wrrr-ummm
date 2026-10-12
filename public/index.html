@@ -64,6 +64,8 @@
     <div class="hplabel">Wytrzymałość</div>
     <div class="bar hpbar"><div id="hud-hp"></div></div>
   </div>
+  <div id="soc-hud" class="hidden"><div class="t red"><span>Czerwoni</span><b id="soc-red">0</b></div><div class="mid"><b id="soc-time">3:00</b><small id="soc-info"></small></div><div class="t blue"><b id="soc-blue">0</b><span>Niebiescy</span></div></div>
+  <div id="goal-banner" class="hidden"></div>
   <canvas id="minimap"></canvas>
   <div class="hud-items">
     <div class="slot" id="slot-nitro"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M13 2L5 14h5l-2 8 9-13h-5z" fill="currentColor"/></svg><kbd>Shift</kbd><span>Nitro</span></div>
@@ -97,7 +99,7 @@
 <section id="scr-nick" class="screen center hidden">
   <div class="card narrow">
     <div class="logo">WRRR<span>UMMM</span></div>
-    <p class="muted">Wyścigi dla dwóch graczy w przeglądarce. Wpisz nick, pod którym trafisz do rankingu.</p>
+    <p class="muted">Wyścigi, areny i piłka samochodowa w przeglądarce, solo albo do 4 graczy. Wpisz nick, pod którym trafisz do rankingu.</p>
     <form id="form-nick" autocomplete="off">
       <input id="inp-nick" maxlength="14" placeholder="Twój nick" spellcheck="false" autofocus>
       <button class="btn primary" type="submit">Jedziemy</button>
@@ -145,7 +147,7 @@
   </div>
   <div class="card rank">
     <h3>Ranking</h3>
-    <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button></div>
+    <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button><button data-m="soccer">Piłka</button></div>
     <ol id="rank-menu" class="ranklist"></ol>
     <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
   </div>
@@ -153,13 +155,14 @@
 
 <section id="scr-lobby" class="screen left hidden">
   <div class="card wide">
-    <h3>Wyścig <b id="lobby-code" class="code"></b></h3>
+    <h3><span id="lobby-title">Wyścig</span> <b id="lobby-code" class="code"></b></h3>
     <p class="muted" id="lobby-hint">Wyślij ten link drugiemu graczowi:</p>
     <div class="copyrow" id="copyrow">
       <input id="lobby-link" readonly>
       <button class="btn small" id="btn-copy">Kopiuj</button>
     </div>
     <div class="players" id="lobby-players"></div>
+    <div id="lobby-team-section" class="hidden"><h3>Drużyna</h3><div class="seg wide" id="lobby-team"></div></div>
     <h3>Twoje auto <span class="muted" style="text-transform:none;letter-spacing:0">— podgląd widzisz obok; kolory innych graczy są zablokowane</span></h3>
     <div class="seg wide" id="lobby-cars"></div>
     <div class="swatches" id="lobby-colors"></div>

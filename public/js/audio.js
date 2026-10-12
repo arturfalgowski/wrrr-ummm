@@ -161,6 +161,23 @@ export const sfx = {
     else tone({ type: 'square', f: 440, dur: 0.22, gain: 0.2, attack: 0.01 });
   },
   lap() { tone({ type: 'triangle', f: 660, dur: 0.12, gain: 0.2 }); tone({ type: 'triangle', f: 990, dur: 0.18, gain: 0.2, when: 0.1 }); },
+  kick(power = 0.5) {
+    if (!ctx) return; const p = Math.min(1, power), t = ctx.currentTime;
+    tone({ type: 'sine', f: 190 + 80 * p, f2: 70, dur: 0.16, gain: 0.3 * (0.4 + p) });
+    const src = noiseSrc(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.25 * p, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t); src.stop(t + 0.1);
+  },
+  bounce(power = 0.5) { if (!ctx) return; const p = Math.min(1, power); tone({ type: 'sine', f: 150, f2: 90, dur: 0.1, gain: 0.18 * p }); },
+  goal() {
+    if (!ctx) return; const t = ctx.currentTime;
+    const src = noiseSrc(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 0.6;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.001, t); g.gain.linearRampToValueAtTime(0.32, t + 0.5); g.gain.linearRampToValueAtTime(0.28, t + 2.0); g.gain.exponentialRampToValueAtTime(0.001, t + 3.4);
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t); src.stop(t + 3.5);
+    [392, 523, 659].forEach((f, i) => tone({ type: 'sawtooth', f, dur: 0.9, gain: 0.07, when: 0.1 + i * 0.02 }));
+    [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'square', f, dur: 0.22, gain: 0.1, when: 0.9 + i * 0.12 }));
+  },
+  whistle() { tone({ type: 'sine', f: 2500, f2: 2900, dur: 0.45, gain: 0.12 }); tone({ type: 'sine', f: 2560, dur: 0.45, gain: 0.08, when: 0.02 }); },
   win() { [523, 659, 784, 1047].forEach((f, i) => tone({ type: 'square', f, dur: 0.28, gain: 0.14, when: i * 0.13 })); tone({ type: 'triangle', f: 1047, dur: 0.9, gain: 0.18, when: 0.55 }); },
   lose() { [392, 349, 311, 262].forEach((f, i) => tone({ type: 'triangle', f, dur: 0.32, gain: 0.2, when: i * 0.17 })); },
   click() { tone({ type: 'triangle', f: 520, f2: 760, dur: 0.07, gain: 0.12 }); },
