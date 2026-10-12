@@ -276,6 +276,11 @@ function resetRace() {
 // ======================= Ekrany =======================
 const SCREENS = ['nick', 'menu', 'lobby', 'spec', 'results'];
 function showScreen(name) {
+  // powtórka odpala się sama przed tabelą wyników; wyniki pojawiają się po jej końcu lub pominięciu
+  if (name === 'results') {
+    if (replay.on) return;
+    if (!replay.done && !S.spectator && replay.buf.length >= 25) { replay.done = true; startReplay(true); return; }
+  }
   for (const s of SCREENS) $(`scr-${s}`).classList.toggle('hidden', s !== name);
   const inRace = name === null;
   $('hud').classList.toggle('hidden', !(inRace || name === 'results'));
@@ -285,7 +290,7 @@ function toast(msg, ms = 2200) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms);
 }
-function setMode(m) { S.mode = m; updateChatUi(); if (typeof setRainAudio === 'function') setRainAudio(); }
+function setMode(m) { if (replay.on && m === 'finished') { replay.prevMode = m; return; } S.mode = m; updateChatUi(); if (typeof setRainAudio === 'function') setRainAudio(); }
 
 let rankData = { race: [], arena: [] }, rankTab = 'race';
 const fmtShort = (t) => (t == null ? '—' : fmt(t));
@@ -723,7 +728,7 @@ function enterLobby() {
 function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 function startPrepare() {
   clearTimers();
-  musicStart(); replay.buf = []; closeReplay(true);
+  musicStart(); replay.buf = []; replay.done = false; closeReplay(true);
   const trackIdNow = S.solo ? (S.game === 'arena' ? 'arena' : S.trackId) : (S.room.mode === 'arena' ? 'arena' : S.room.track);
   const arenaNow = S.solo ? S.game === 'arena' : S.room.mode === 'arena';
   useTrack(arenaNow ? 'arena' : S.solo ? S.trackId : S.room.track);
@@ -1640,7 +1645,7 @@ function raceBotUpdate(o, dt) {
 const packState = (s, o) => { const r = (v) => Math.round(v * 100) / 100; return [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.progress), s.throttle || 0, s.brakeLit ? 1 : 0, s.onGrass ? 1 : 0, o.finishT != null ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, 100, 0, Math.round((s.y || 0) * 10) / 10, 0]; };
 
 // ======================= Powtórka =======================
-const replay = { buf: [], on: false, pos: 0, cam: 0, lastRec: 0, prevMode: null, segT: 0 };
+const replay = { buf: [], on: false, auto: false, done: false, pos: 0, cam: 0, lastRec: 0, prevMode: null, segT: 0 };
 function recordReplay(now) {
   if (now - replay.lastRec < 66) return; replay.lastRec = now;
   const cars = [];
@@ -1651,10 +1656,10 @@ function recordReplay(now) {
   while (replay.buf.length > 200) replay.buf.shift();
 }
 const replayEnt = (id) => (id === 'me' ? me : opps.get(id));
-function startReplay() {
-  if (replay.buf.length < 25) { toast('Brak nagrania do powtórki', 1800); return; }
-  replay.on = true; replay.prevMode = S.mode; replay.pos = 0; replay.cam = 0; replay.segT = 0;
-  $('replay-cam').textContent = 'Kamera: auto';
+function startReplay(auto = false) {
+  if (replay.buf.length < 25) return;
+  replay.on = true; replay.auto = auto; replay.prevMode = S.mode; replay.pos = 0; replay.cam = 0; replay.segT = 0;
+  $('replay-cam').textContent = 'Kamera: auto'; $('replay-close').textContent = 'Pomiń powtórkę';
   setMode('replay'); showScreen(null);
   $('hud').classList.add('hidden'); $('replay-ui').classList.remove('hidden');
 }
@@ -1669,7 +1674,7 @@ function stepReplay(dt) {
   const buf = replay.buf; if (buf.length < 2) return;
   const dur = (buf[buf.length - 1].t - buf[0].t) / 1000;
   replay.pos += dt * 0.6; replay.segT += dt;
-  if (replay.pos >= dur) { replay.pos = 0; replay.segT = 0; }
+  if (replay.pos >= dur) { if (replay.auto) { closeReplay(false); return; } replay.pos = 0; replay.segT = 0; }
   const t = buf[0].t + replay.pos * 1000;
   let i = 0; while (i < buf.length - 2 && buf[i + 1].t < t) i++;
   const A = buf[i], B = buf[i + 1], k = clamp((t - A.t) / Math.max(1, B.t - A.t), 0, 1);
@@ -1981,7 +1986,7 @@ function bindUi() {
   $('rooms-close').addEventListener('click', closeRooms); $('rooms-refresh').addEventListener('click', refreshRooms);
   $('rooms-modal').addEventListener('click', (e) => { if (e.target === $('rooms-modal')) closeRooms(); });
   $('btn-spec-leave').addEventListener('click', goMenu);
-  $('btn-replay').addEventListener('click', startReplay); $('replay-close').addEventListener('click', () => closeReplay(false));
+  $('replay-close').addEventListener('click', () => closeReplay(false));
   $('replay-cam').addEventListener('click', () => { replay.cam = (replay.cam + 1) % 4; $('replay-cam').textContent = ['Kamera: auto', 'Kamera: pościg', 'Kamera: z góry', 'Kamera: z boku'][replay.cam]; });
   $('btn-mute').addEventListener('click', toggleMute);
   refreshMute(); music.setMuted(isMuted());
@@ -2039,5 +2044,5 @@ function bindUi() {
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);
   if (S.nick) goMenu(); else { showScreen('nick'); $('inp-nick').focus(); }
-  window.__tc = { S, me, opps, ghost, music, replay, items, camera, scene, keys, startSolo, applyPickup, post, get track() { return track; }, get world() { return world; } };
+  window.__tc = { S, me, opps, ghost, music, replay, items, camera, scene, keys, startSolo, finishLocal, applyPickup, post, get track() { return track; }, get world() { return world; } };
 })();
