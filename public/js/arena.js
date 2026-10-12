@@ -6,8 +6,8 @@ const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const gauss = (x, z, cx, cz, s, H) => H * Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / (2 * s * s));
 
-const HILLS = [[17, 17, 8, 6.5], [-17, 17, 8, 6.5], [-17, -17, 8, 6.5], [17, -17, 8, 6.5]];
-const PITS = [[33, 0, 8, -5], [-33, 0, 8, -5], [0, 33, 8, -5], [0, -33, 8, -5]];
+const HILLS = [];   // arena oczyszczona: zostają tylko hopki
+const PITS = [];
 // rampy: start (cx,cz), kierunek najazdu `ang`, długość L, szerokość W, wysokość H — na końcu ostry uskok (skok)
 export const RAMPS = [
   { cx: -62, cz: -4, ang: 0, L: 16, W: 11, H: 4.6 },
@@ -15,8 +15,8 @@ export const RAMPS = [
   { cx: 62, cz: 4, ang: Math.PI, L: 16, W: 11, H: 4.6 },
   { cx: -4, cz: 62, ang: -Math.PI / 2, L: 16, W: 11, H: 4.6 },
 ];
-export const OBSTACLES = [[38, 18, 2.2], [-38, 18, 2.2], [38, -18, 2.2], [-38, -18, 2.2], [18, 38, 2.2], [-18, 38, 2.2], [18, -38, 2.2], [-18, -38, 2.2]];
-export const PLATFORM = { r: 12, H: 2.6 };
+export const OBSTACLES = [];
+export const PLATFORM = { r: 12, H: 0 };
 /** pola startowe 4 graczy: [x, z, yaw] */
 export const SPAWNS = [45, 135, 225, 315].map((deg) => { const a = (deg * Math.PI) / 180; return [Math.cos(a) * 58, Math.sin(a) * 58, a + Math.PI]; });
 
