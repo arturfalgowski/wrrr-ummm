@@ -1,6 +1,6 @@
 # Wrrr Ummm
 
-Wyścigi 3D dla dwóch graczy w przeglądarce. Three.js (WebGL) + Node.js + Socket.IO + SQLite.
+Wyścigi 3D dla 2–4 graczy w przeglądarce. Three.js (WebGL) + Node.js + Socket.IO + SQLite.
 Wszystkie modele, tekstury, efekty i dźwięki są generowane w kodzie — brak zewnętrznych plików graficznych i audio.
 
 ## Uruchomienie
@@ -16,8 +16,8 @@ Zmienna `PORT` zmienia port. Ranking trafia do `data/ranking.db`.
 ## Jak grać
 
 1. Wpisz nick (zapamiętany w LocalStorage), wybierz auto.
-2. **Stwórz wyścig** → skopiuj link i wyślij drugiemu graczowi. Po otwarciu linku wybiera auto i dołącza.
-3. Host wybiera tor w lobby (3 tory: Dolina Sosen, Pustynny Owal, Zimowa Serpentyna). Gdy obaj klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
+2. **Stwórz wyścig** → skopiuj link i wyślij go znajomym (do 4 graczy w pokoju). Po otwarciu linku wybierają auto i dołączają.
+3. Host wybiera tor w lobby (3 tory: Dolina Sosen, Pustynny Owal, Zimowa Serpentyna). Gdy wszyscy w pokoju (min. 2) klikną **Gotowy** — odliczanie i start. Wygrywa pierwszy na mecie. **Rewanż** w oknie wyników.
 4. **Trening solo** — jazda bez przeciwnika.
 
 Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otworzy drugi gracz

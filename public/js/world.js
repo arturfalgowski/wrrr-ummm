@@ -252,7 +252,7 @@ export function buildWorld(scene, renderer, track) {
     x.strokeStyle = 'rgba(245,243,250,0.9)'; x.lineWidth = 7; x.strokeRect(8, 8, w - 16, h - 16);
     x.clearRect(w - 8, 30, 20, h - 60);
   });
-  for (const [p, lat] of [[-6, -3.6], [-13, 3.6]]) {
+  for (const [p, lat] of [[-6, -3.6], [-13, 3.6], [-20, -3.6], [-27, 3.6]]) {
     const q = track.at(p, lat);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 4.4), new THREE.MeshBasicMaterial({ map: slotTex, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     m.rotation.x = -Math.PI / 2; m.rotation.z = q.yaw; m.position.set(q.x, 0.042, q.z);

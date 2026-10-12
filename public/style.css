@@ -186,8 +186,8 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 @media (max-width: 480px) { .tracks { grid-template-columns: 1fr; } }
 
 /* ---------- Podgląd toru i ustawienia ---------- */
-.track .pv { border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
-.track .pv .prev { display: block; width: 100%; height: auto; background: rgba(20,17,38,.12); max-height: 120px; }
+.track .pv { border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: rgba(0,0,0,.28); }
+.track .pv .prev { display: block; width: 100%; height: auto; max-height: 120px; }
 .card.wide { width: min(600px, 94vw); }
 .settings { display: grid; gap: 10px; }
 .set { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }

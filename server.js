@@ -133,15 +133,14 @@ function leaveRoom(socket) {
   if (idx < 0) return;
   const [gone] = r.players.splice(idx, 1);
   if (!r.players.length) { clearTimers(r); rooms.delete(id); return; }
-  const left = r.players[0];
-  left.slot = 0;
+  r.players.forEach((p, i) => { p.slot = i; });
   if (r.state === 'racing' && !r.recorded) {
-    r.times[left.sid] = r.times[left.sid] ?? null;
-    endRace(r, left, 'left');
+    if (r.players.length < 2) { r.times[r.players[0].sid] = r.times[r.players[0].sid] ?? null; endRace(r, r.players[0], 'left'); }
+  } else {
+    clearTimers(r);
+    if (r.state !== 'finished') r.state = 'lobby';
+    r.players.forEach((p) => { p.ready = false; });
   }
-  clearTimers(r);
-  if (r.state !== 'finished') r.state = 'lobby';
-  left.ready = false;
   io.to(id).emit('room:left', { nick: gone.nick });
   io.to(id).emit('room:update', publicRoom(r));
 }
@@ -169,10 +168,11 @@ io.on('connection', (socket) => {
     nick = cleanNick(nick);
     if (nick.length < 2) return cb({ ok: false, error: 'Nick jest za krótki.' });
     if (!r) return cb({ ok: false, error: 'Nie znaleziono takiego wyścigu. Link mógł wygasnąć.' });
-    if (r.players.length >= 2) return cb({ ok: false, error: 'Ten wyścig ma już dwóch graczy.' });
+    if (r.players.length >= 4) return cb({ ok: false, error: 'Ten wyścig ma już czterech graczy.' });
     if (r.state === 'racing' || r.state === 'countdown') return cb({ ok: false, error: 'Wyścig już trwa.' });
-    if (r.players[0].nick.toLowerCase() === nick.toLowerCase()) nick = `${nick.slice(0, 11)} (2)`;
-    r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot: 1 });
+    for (let n = 2; r.players.some((p) => p.nick.toLowerCase() === nick.toLowerCase()); n++) nick = `${nick.replace(/ \(\d\)$/, '').slice(0, 11)} (${n})`;
+    const slot = [0, 1, 2, 3].find((s) => !r.players.some((p) => p.slot === s));
+    r.players.push({ sid: socket.id, nick, car: cleanCar(car), ready: false, slot });
     socket.join(r.id);
     socket.data.roomId = r.id;
     cb({ ok: true, room: publicRoom(r), you: socket.id });
@@ -209,7 +209,7 @@ io.on('connection', (socket) => {
     const r = rooms.get(socket.data.roomId);
     if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit'].includes(e.t)) return;
     const n = (v) => (Number.isFinite(v) ? v : 0);
-    socket.to(r.id).emit('game:event', { t: e.t, x: n(e.x), z: n(e.z), yaw: n(e.yaw), vx: n(e.vx), vz: n(e.vz) });
+    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, x: n(e.x), z: n(e.z), yaw: n(e.yaw), vx: n(e.vx), vz: n(e.vz) });
   });
 
   socket.on('player:car', (car) => {
@@ -227,14 +227,14 @@ io.on('connection', (socket) => {
     p.ready = !!ready;
     if (r.state === 'finished' && p.ready) { r.state = 'lobby'; }
     io.to(r.id).emit('room:update', publicRoom(r));
-    if (r.players.length === 2 && r.players.every((x) => x.ready)) startCountdown(r);
+    if (r.players.length >= 2 && r.players.every((x) => x.ready)) startCountdown(r);
   });
 
   // Stan samochodu — relay do przeciwnika (nieautorytatywny, bez walidacji fizyki).
   socket.on('race:state', (s) => {
     const r = rooms.get(socket.data.roomId);
     if (!r || (r.state !== 'racing' && r.state !== 'finished' && r.state !== 'countdown')) return;
-    socket.to(r.id).volatile.emit('race:opp', s);
+    socket.to(r.id).volatile.emit('race:opp', socket.id, s);
   });
 
   socket.on('race:finish', ({ time } = {}) => {

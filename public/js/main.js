@@ -77,17 +77,19 @@ const S = {
   raceStart: 0, results: null, resultSounded: false,
 };
 const me = { items: { nitro: false, oil: false, ammoT: 0 }, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
-const opp = { st: null, vis: null, audio: null, present: false, nick: '', carId: null, snaps: [], prevVf: 0, smokeAcc: 0 };
+const opps = new Map(); // id gracza -> { id, nick, carId, slot, st, vis, audio, snaps, prevVf, smokeAcc, finished }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
 const keys = new Set();
 let socket = null;
 let timers = [];
 
-const gridPos = (slot) => (slot === 0 ? [-6, -3.6] : [-13, 3.6]);
+const GRID = [[-6, -3.6], [-13, 3.6], [-20, -3.6], [-27, 3.6]];
+const gridPos = (slot) => GRID[slot] || GRID[0];
+const CAR_NUM = [7, 11, 23, 5];
 function getVis(carId, slot) {
   const k = `${carId}:${slot}`;
-  if (!visCache.has(k)) visCache.set(k, buildCar(carId, slot === 0 ? 7 : 11));
+  if (!visCache.has(k)) visCache.set(k, buildCar(carId, CAR_NUM[slot] ?? 7));
   return visCache.get(k);
 }
 function setCar(who, carId, slot) {
@@ -102,21 +104,34 @@ function setCar(who, carId, slot) {
 }
 function mySlot() { const p = S.room?.players.find((x) => x.id === S.you); return p ? p.slot : 0; }
 
+function clearOpps() {
+  for (const o of opps.values()) { if (o.vis) scene.remove(o.vis.group); o.audio?.stop(); }
+  opps.clear();
+}
+/** Synchronizuje rywali z listą graczy w pokoju; force=true ustawia auta od nowa na polach startowych. */
+function syncOpps(force = false) {
+  const list = (S.room?.players || []).filter((p) => p.id !== S.you);
+  for (const [id, o] of [...opps]) if (!list.some((p) => p.id === id)) { if (o.vis) scene.remove(o.vis.group); o.audio?.stop(); opps.delete(id); }
+  for (const p of list) {
+    let o = opps.get(p.id);
+    if (!o) { o = { id: p.id, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, nitroOn: false }; opps.set(p.id, o); }
+    o.nick = p.nick;
+    if (force || !o.vis || o.carId !== p.car || o.slot !== p.slot) { o.carId = p.car; o.slot = p.slot; setCar(o, p.car, p.slot); }
+    if (force) o.snaps = [];
+  }
+}
+const oppList = () => [...opps.values()].filter((o) => o.st);
 function resetRace() {
   const slot = S.solo ? 0 : mySlot();
   setCar(me, S.carId, slot);
-  if (!S.solo && S.room) {
-    const o = S.room.players.find((x) => x.id !== S.you);
-    if (o) { opp.present = true; opp.nick = o.nick; opp.carId = o.car; setCar(opp, o.car, 1 - slot); }
-  } else { opp.present = false; setCar(opp, null); }
-  opp.snaps = [];
+  if (!S.solo && S.room) syncOpps(true); else clearOpps();
   me.lapIdx = 0; me.maxP = me.st.progress; me.best = Infinity; me.lapTimes = []; me.finished = false; me.finishTime = 0;
   S.results = null; S.resultSounded = false;
   particles.clear(); skids.clear(); resetItems();
   $('hud-best').textContent = '';
   $('hud-time').textContent = '0:00.00';
   $('hud-lap').textContent = `1/${S.lapsNow}`;
-  $('chip-pos').classList.toggle('hidden', !opp.present);
+  $('chip-pos').classList.toggle('hidden', !opps.size);
 }
 
 // ======================= Ekrany =======================
@@ -172,9 +187,7 @@ function trackPreview(id) {
   let d = '';
   for (let i = 0; i < t.N; i += 4) { const [x, y] = P(i); d += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`; }
   d += 'Z';
-  const [sx, sy] = P(0), nx = -t.tz[0], nz = t.tx[0];
-  const line = `M${(sx - nx * 4.5).toFixed(1)} ${(sy - nz * 4.5).toFixed(1)}L${(sx + nx * 4.5).toFixed(1)} ${(sy + nz * 4.5).toFixed(1)}`;
-  return (previewCache[id] = `<svg class="prev" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="7.5" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#d9d4f5" stroke-width="4.6" stroke-linejoin="round"/><path d="${line}" stroke="#ff4f8b" stroke-width="2.6" stroke-linecap="round"/></svg>`);
+  return (previewCache[id] = `<svg class="prev" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`);
 }
 function buildSettings(wrapId, vals, canEdit, onChange) {
   const w = $(wrapId); w.textContent = '';
@@ -206,7 +219,7 @@ function buildTrackList(wrapId, selected, onPick, canPick) {
     const d = TRACK_DEFS[id]; const b = document.createElement('button'); b.className = 'track' + (id === selected ? ' sel' : '');
     const sw = THEME_SW[d.theme];
     b.disabled = !canPick;
-    b.innerHTML = `<div class="pv" style="background:${sw[0]}">${trackPreview(id)}</div><b></b><small></small>`;
+    b.innerHTML = `<div class="pv">${trackPreview(id)}</div><b></b><small></small>`;
     b.querySelector('b').textContent = d.name; b.querySelector('small').textContent = d.tag;
     b.addEventListener('click', () => onPick(id));
     wrap.append(b);
@@ -230,7 +243,7 @@ function goMenu() {
   if (!S.laps) S.laps = TRACK_DEFS[S.trackId].laps;
   renderMenuSettings();
   buildTrackList('track-list', S.trackId, pickMenuTrack, true);
-  opp.present = false; setCar(opp, null); setCar(me, S.carId, 0);
+  clearOpps(); setCar(me, S.carId, 0);
   me.finished = false; resetItems();
   particles.clear(); skids.clear();
   showScreen('menu');
@@ -241,11 +254,11 @@ function renderLobby() {
   const r = S.room; if (!r) return;
   $('lobby-code').textContent = r.id;
   $('lobby-link').value = `${location.origin}${location.pathname}?room=${r.id}`;
-  const two = r.players.length === 2;
-  $('copyrow').classList.toggle('hidden', two);
-  $('lobby-hint').textContent = two ? 'Obaj gracze są w pokoju. Gdy oboje klikniecie „Gotowy”, ruszy odliczanie.' : 'Wyślij ten link drugiemu graczowi:';
+  const two = r.players.length >= 2, full = r.players.length >= 4;
+  $('copyrow').classList.toggle('hidden', full);
+  $('lobby-hint').textContent = (two ? `W pokoju: ${r.players.length}/4. Gdy wszyscy klikną „Gotowy”, ruszy odliczanie. ` : 'Potrzebny co najmniej jeden rywal. ') + (full ? '' : 'Link do zaproszenia (do 4 graczy):');
   const box = $('lobby-players'); box.textContent = '';
-  for (let s = 0; s < 2; s++) {
+  for (let s = 0; s < 4; s++) {
     const p = r.players.find((x) => x.slot === s);
     const row = document.createElement('div'); row.className = 'player' + (p ? '' : ' empty');
     if (p) {
@@ -256,7 +269,7 @@ function renderLobby() {
       const sm = document.createElement('small'); sm.textContent = d.name; nm.append(sm);
       const st = row.querySelector('.st'); st.textContent = p.ready ? 'Gotowy' : 'Czeka'; st.classList.toggle('ok', p.ready);
     } else {
-      row.innerHTML = '<span class="dot"></span><span class="nm">Czekam na drugiego gracza…</span>';
+      row.innerHTML = '<span class="dot"></span><span class="nm">Wolne miejsce…</span>';
     }
     box.append(row);
   }
@@ -265,7 +278,8 @@ function renderLobby() {
   buildTrackList('lobby-tracks', r.track, (id) => socket?.emit('room:track', id), isHost);
   buildSettings('lobby-settings', r.settings, isHost, (c) => socket?.emit('room:settings', c));
   $('track-note').textContent = isHost ? '— wybierasz jako gospodarz' : '— wybiera gospodarz';
-  if (r.track !== trackId) { useTrack(r.track); me.carIdShown = null; opp.carId = null; opp.slotShown = null; }
+  const trackChanged = r.track !== trackId;
+  if (trackChanged) { useTrack(r.track); me.carIdShown = null; }
   const btn = $('btn-ready');
   btn.disabled = !two;
   btn.classList.toggle('on', !!mine?.ready);
@@ -273,9 +287,7 @@ function renderLobby() {
   // auta w tle (showroom)
   const slot = mySlot();
   if (!me.vis || me.carIdShown !== mine?.car || me.slotShown !== slot) { setCar(me, mine?.car || S.carId, slot); me.carIdShown = mine?.car; me.slotShown = slot; }
-  const o = r.players.find((x) => x.id !== S.you);
-  if (o) { if (opp.carId !== o.car || !opp.vis || opp.slotShown !== 1 - slot) { opp.present = true; opp.nick = o.nick; opp.carId = o.car; opp.slotShown = 1 - slot; setCar(opp, o.car, 1 - slot); } }
-  else { opp.present = false; opp.carId = null; setCar(opp, null); }
+  syncOpps(trackChanged);
 }
 
 // ======================= Multiplayer =======================
@@ -289,6 +301,7 @@ function connect() {
     const had = S.room?.players.length || 0;
     S.room = room;
     if (S.mode === 'lobby') renderLobby();
+    else if (S.mode !== 'menu') for (const [id, o] of [...opps]) if (!room.players.some((p) => p.id === id)) { if (o.vis) scene.remove(o.vis.group); o.audio?.stop(); opps.delete(id); }
     if (room.players.length > had && had) sfx.join();
     if (S.mode === 'finished' && S.results) updateResultsButtons();
   });
@@ -299,7 +312,7 @@ function connect() {
   });
   socket.on('race:count', (n) => countTick(String(n)));
   socket.on('race:go', () => goRace());
-  socket.on('race:opp', (a) => { if (Array.isArray(a) && a.length >= 13) opp.snaps.push({ t: performance.now(), a }); if (opp.snaps.length > 40) opp.snaps.shift(); });
+  socket.on('race:opp', (id, a) => { const o = opps.get(id); if (!o || !Array.isArray(a) || a.length < 13) return; o.snaps.push({ t: performance.now(), a }); if (o.snaps.length > 40) o.snaps.shift(); });
   socket.on('race:end', (data) => { S.results = data; if (S.mode === 'racing' || S.mode === 'finished' || S.mode === 'countdown') { setMode('finished'); showResultsMP(); } });
   socket.on('ranking', (list) => renderRanking(list));
   socket.on('pickup:spawn', (p) => { if (S.mode === 'racing' || S.mode === 'countdown') spawnCrate(p.id, p.type, p.u, p.l); });
@@ -328,7 +341,7 @@ async function joinRoom() {
 }
 function enterLobby() {
   setMode('lobby');
-  me.carIdShown = null; opp.carId = null;
+  me.carIdShown = null; clearOpps();
   renderLobby();
   showScreen('lobby');
   $('lobby-err').textContent = '';
@@ -416,13 +429,14 @@ function showResultsMP() {
   $('res-title').className = 'res-title' + (won ? '' : ' lose');
   $('res-title').textContent = won ? 'Wygrana!' : 'Porażka';
   const w = d.players.find((p) => p.id === d.winner);
-  $('res-sub').textContent = d.reason === 'left' ? 'Przeciwnik opuścił wyścig.' : `${w ? w.nick : 'Gracz'} wygrywa wyścig.`;
+  $('res-sub').textContent = d.reason === 'left' ? 'Pozostali gracze opuścili wyścig.' : `${w ? w.nick : 'Gracz'} wygrywa wyścig.`;
   const t = $('res-table'); t.textContent = '';
   const head = document.createElement('tr'); head.innerHTML = '<th>Kierowca</th><th>Czas</th>'; t.append(head);
-  const order = [...d.players].sort((a, b) => (a.id === d.winner ? -1 : b.id === d.winner ? 1 : 0));
-  for (const p of order) {
+  const rank = (p) => (p.id === d.winner ? -1 : d.times[p.id] != null ? d.times[p.id] : 1e9);
+  const order = [...d.players].sort((a, b) => rank(a) - rank(b));
+  for (const [i, p] of order.entries()) {
     const tr = document.createElement('tr'); if (p.id === d.winner) tr.className = 'win';
-    const a = document.createElement('td'); a.textContent = `${p.id === d.winner ? '1. ' : '2. '}${p.nick}${p.id === S.you ? ' (Ty)' : ''}`;
+    const a = document.createElement('td'); a.textContent = `${i + 1}. ${p.nick}${p.id === S.you ? ' (Ty)' : ''}`;
     const b = document.createElement('td');
     const tm = d.times[p.id];
     b.textContent = tm != null ? fmt(tm) : (p.id === S.you && !me.finished ? 'jedziesz…' : d.reason === 'left' ? '—' : 'w trasie…');
@@ -435,16 +449,16 @@ function showResultsMP() {
 }
 function updateResultsButtons() {
   const b = $('btn-rematch');
-  const two = S.room && S.room.players.length === 2;
+  const two = S.room && S.room.players.length >= 2;
   const mine = S.room?.players.find((p) => p.id === S.you);
   b.disabled = !two || !!mine?.ready;
-  if (!two) b.textContent = 'Przeciwnik wyszedł';
-  else if (mine?.ready) b.textContent = 'Czekam na przeciwnika…';
+  if (!two) b.textContent = 'Brak rywali';
+  else if (mine?.ready) b.textContent = 'Czekam na pozostałych…';
   else b.textContent = 'Rewanż';
 }
 
 // ======================= Opiekun przeciwnika (interpolacja) =======================
-function sampleOpp(now, dt) {
+function sampleOpp(opp, now) {
   const sn = opp.snaps; const st = opp.st;
   if (!sn.length || !st) return false;
   const rt = now - 110;
@@ -454,13 +468,13 @@ function sampleOpp(now, dt) {
     a = b = sn[sn.length - 1].a;
     const ex = Math.min(0.15, (rt - sn[sn.length - 1].t) / 1000);
     st.x = a[0] + a[3] * ex; st.z = a[1] + a[4] * ex; st.yaw = a[2];
-    return applyOpp(a, a, 0, true, ex);
+    return applyOpp(opp, a, a, 0, true, ex);
   } else {
     for (let i = sn.length - 2; i >= 0; i--) if (sn[i].t <= rt) { a = sn[i].a; b = sn[i + 1].a; f = (rt - sn[i].t) / Math.max(1, sn[i + 1].t - sn[i].t); break; }
   }
-  return applyOpp(a, b, f, false, 0);
+  return applyOpp(opp, a, b, f, false, 0);
 }
-function applyOpp(a, b, f, ex, exT) {
+function applyOpp(opp, a, b, f, ex, exT) {
   const st = opp.st; const L = (i) => a[i] + (b[i] - a[i]) * f;
   if (!ex) {
     st.x = L(0); st.z = L(1);
@@ -587,12 +601,13 @@ function dropOil() {
   if (!S.solo) socket?.emit('game:event', { t: 'oil', x, z });
 }
 function onGameEvent(e) {
-  if (e.t === 'shoot') items.shoot(e.x, e.z, e.yaw, e.vx, e.vz, 'opp');
+  if (e.t === 'shoot') items.shoot(e.x, e.z, e.yaw, e.vx, e.vz, 'opp:' + e.from);
   else if (e.t === 'oil') items.dropOil(e.x, e.z, 'opp');
+  else if (e.t === 'hit' && e.to !== S.you) items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   else if (e.t === 'hit' && me.st) {
     me.st.vx *= 0.4; me.st.vz *= 0.4; me.st.slowT = 2.2;
     sparks(me.st.x, me.st.z, 14); sfx.hit(); toast('Trafiony!', 1400);
-    items.shots.filter((x) => x.owner === 'opp').forEach((x) => items.killShot(x));
+    items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   }
 }
 function updateSlots() {
@@ -613,7 +628,7 @@ function updateGameplay(dt, active) {
   me.tireCd -= dt;
   const nb = world.tires.collide(me.st, 1.3, (x, z) => puff(x, z));
   if (nb && me.tireCd <= 0) { me.st.vx *= 0.85; me.st.vz *= 0.85; me.tireCd = 0.35; sfx.tire(Math.min(1, me.st.speed / 40)); }
-  if (opp.present && opp.st) world.tires.collide(opp.st, 1.3, (x, z) => puff(x, z, 2));
+  for (const o of oppList()) world.tires.collide(o.st, 1.3, (x, z) => puff(x, z, 2));
   // olej i nitro
   me.st.inOil = items.inOil(me.st.x, me.st.z);
   if (me.nitroT > 0) { me.nitroT -= dt; me.st.nitro = me.nitroT > 0; if (me.nitroT <= 0) updateSlots(); } else me.st.nitro = false;
@@ -634,14 +649,15 @@ function updateGameplay(dt, active) {
       if (S.solo) { applyPickup(c.type); items.remove(c.id); } else socket?.emit('pickup:take', { id: c.id });
     }
   }
-  // trafienia własnych pocisków w przeciwnika (rozstrzyga strzelający)
-  if (opp.present && opp.st) {
-    for (const sh of items.shots) {
-      if (sh.owner !== 'me' || sh.life <= 0) continue;
-      const cs = Math.cos(opp.st.yaw), sn = Math.sin(opp.st.yaw);
-      if ([0, 1.5, -1.5].some((o) => Math.hypot(sh.x - (opp.st.x + cs * o), sh.z - (opp.st.z + sn * o)) < 2.1)) {
-        items.killShot(sh); sparks(opp.st.x, opp.st.z, 14); sfx.hit();
-        if (!S.solo) socket?.emit('game:event', { t: 'hit' });
+  // trafienia własnych pocisków w rywali (rozstrzyga strzelający)
+  for (const sh of items.shots) {
+    if (sh.owner !== 'me' || sh.life <= 0) continue;
+    for (const o of oppList()) {
+      const cs = Math.cos(o.st.yaw), sn = Math.sin(o.st.yaw);
+      if ([0, 1.5, -1.5].some((d) => Math.hypot(sh.x - (o.st.x + cs * d), sh.z - (o.st.z + sn * d)) < 2.1)) {
+        items.killShot(sh); sparks(o.st.x, o.st.z, 14); sfx.hit();
+        if (!S.solo) socket?.emit('game:event', { t: 'hit', to: o.id });
+        break;
       }
     }
   }
@@ -669,7 +685,9 @@ function updateTags() {
     d.style.transform = `translate(${((pv.x + 1) / 2) * W}px, ${((1 - pv.y) / 2) * H}px) translate(-50%, -100%)`;
   };
   place('me', me, S.solo ? S.nick : (S.room?.players.find((p) => p.id === S.you)?.nick ?? S.nick));
-  place('opp', opp.present ? opp : null, opp.nick);
+  const seen = new Set(['me']);
+  for (const o of opps.values()) { place('o' + o.id, o, o.nick); seen.add('o' + o.id); }
+  for (const k of Object.keys(tagEls)) if (!seen.has(k)) tagEls[k].style.display = 'none';
 }
 
 function frame(now) {
@@ -686,16 +704,16 @@ function frame(now) {
   if (me.st && active) {
     const inp = me.finished ? { throttle: 0, brake: 0.3, steer: 0, hand: false } : input;
     me.st.step(track, inp, dt);
-    if (opp.present && opp.st) {
-      if (sampleOpp(performance.now(), dt)) {
-        const h = carVsCar(me.st, opp.st);
-        if (h > 1.5 && me.hitCd <= 0) { sfx.crash(h / 14, 0); sparks((me.st.x + opp.st.x) / 2, (me.st.z + opp.st.z) / 2, h); me.hitCd = 0.15; }
+    for (const o of oppList()) {
+      if (sampleOpp(o, performance.now())) {
+        const h = carVsCar(me.st, o.st);
+        if (h > 1.5 && me.hitCd <= 0) { sfx.crash(h / 14, 0); sparks((me.st.x + o.st.x) / 2, (me.st.z + o.st.z) / 2, h); me.hitCd = 0.15; }
       }
     }
     me.hitCd -= dt;
     if (me.st.hit > 3 && me.hitCd <= 0) { sfx.crash(me.st.hit / 18, 0); sparks(me.st.x, me.st.z, me.st.hit); me.hitCd = 0.2; }
     if (S.mode === 'racing' || (S.mode === 'finished' && !me.finished && !S.solo)) onLapProgress();
-  } else if (opp.present && opp.st && racing) sampleOpp(performance.now(), dt);
+  } else if (racing) for (const o of oppList()) sampleOpp(o, performance.now());
 
   if (me.st) updateGameplay(dt, active); else if (world) world.tires.update(dt);
 
@@ -711,24 +729,25 @@ function frame(now) {
 
   // wizualizacja
   if (me.vis && me.st) me.vis.sync(me.st, dt);
-  if (opp.vis && opp.st && opp.present) {
-    opp.st.accelNow += (((opp.st.vf - opp.prevVf) / dt) - opp.st.accelNow) * Math.min(1, dt * 6); opp.prevVf = opp.st.vf;
-    opp.vis.sync(opp.st, dt);
+  for (const o of oppList()) {
+    o.st.accelNow += (((o.st.vf - o.prevVf) / dt) - o.st.accelNow) * Math.min(1, dt * 6); o.prevVf = o.st.vf;
+    o.vis.sync(o.st, dt);
   }
-  if (racing) { carFx(me, 'me', dt); if (opp.present) carFx(opp, 'op', dt); }
+  if (racing) { carFx(me, 'me', dt); for (const o of oppList()) carFx(o, 'o' + o.id, dt); }
   particles.update(dt, camera, renderer.domElement.height);
   world.update(T);
 
   // dźwięk
   if (audioReady()) {
     if (!me.audio) me.audio = new CarAudio(0.85, 0);
-    if (!opp.audio) opp.audio = new CarAudio(0.45, 0);
     const maxS = (me.st?.def.maxSpeed || 45);
     me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st ? clamp((me.st.slip - 4.5) / 8, 0, 1) * (active ? 1 : 0) : 0, rough: me.st && (me.st.onGrass || me.st.onKerb) && active ? 1 : 0, active: racing }, dt);
-    if (opp.present && opp.st) {
-      pv.set(opp.st.x, 0, opp.st.z).project(camera); opp.audio.panner.pan.value = clamp(pv.x, -1, 1) * 0.6;
-      opp.audio.update({ speed: opp.st.vf / opp.st.def.maxSpeed, throttle: opp.st.throttle || 0, slip: clamp((opp.st.slip - 4.5) / 8, 0, 1), rough: opp.st.onGrass ? 1 : 0, active: racing }, dt);
-    } else opp.audio.update({ speed: 0, throttle: 0, slip: 0, rough: 0, active: false }, dt);
+    for (const o of oppList()) {
+      if (!o.audio) o.audio = new CarAudio(0.35, 0);
+      pv.set(o.st.x, 0, o.st.z).project(camera); o.audio.panner.pan.value = clamp(pv.x, -1, 1) * 0.6;
+      o.audio.volume = 0.38 * clamp(1 - Math.hypot(o.st.x - (me.st?.x ?? 0), o.st.z - (me.st?.z ?? 0)) / 170, 0.12, 1);
+      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: clamp((o.st.slip - 4.5) / 8, 0, 1), rough: o.st.onGrass ? 1 : 0, active: racing }, dt);
+    }
   }
 
   updateCamera(dt);
@@ -746,8 +765,10 @@ function updateCamera(dt) {
     const m = me.st;
     let fx = m.x + m.vx * 0.28, fz = m.z + m.vz * 0.28;
     let half = 27 + clamp(m.speed - 15, 0, 30) * 0.18;
-    if (opp.present && opp.st) {
-      const dx = opp.st.x - m.x, dz = opp.st.z - m.z, d = Math.hypot(dx, dz);
+    let near = null, nd = 1e9;
+    for (const o of oppList()) { const d = Math.hypot(o.st.x - m.x, o.st.z - m.z); if (d < nd) { nd = d; near = o; } }
+    if (near) {
+      const dx = near.st.x - m.x, dz = near.st.z - m.z, d = nd;
       const w = 0.25 * clamp(d / 60, 0, 1);
       fx += dx * w; fz += dz * w;
       half = Math.max(half, 20 + d * 0.5);
@@ -761,9 +782,9 @@ function updateCamera(dt) {
     cam.racingT = (cam.racingT ?? 0) + dt;
   } else {
     const P = new THREE.Vector3(me.st ? me.st.x : 0, 0.8, me.st ? me.st.z : 0);
-    const two = opp.present && opp.st;
-    if (two) P.set((me.st.x + opp.st.x) / 2, 0.8, (me.st.z + opp.st.z) / 2);
-    const a = T * 0.2 + 0.5, r = two ? 21 : 15.5;
+    const ol = oppList();
+    if (ol.length) { const all = [me, ...ol]; P.set(all.reduce((a, c) => a + c.st.x, 0) / all.length, 0.8, all.reduce((a, c) => a + c.st.z, 0) / all.length); }
+    const a = T * 0.2 + 0.5, r = 15.5 + ol.length * 7;
     pos = new THREE.Vector3(P.x + Math.cos(a) * r, 8.2 + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
     look = P.clone(); fov = 36; shift = S.mode === 'menu' || S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
   }
@@ -792,7 +813,7 @@ function updateHud() {
   $('hud-bar').style.width = `${clamp(sp / me.st.def.maxSpeed, 0, 1) * 100}%`;
   if (S.mode === 'racing' && !me.finished) setText('hud-time', fmt(elapsed()));
   else if (me.finished) setText('hud-time', fmt(me.finishTime));
-  if (opp.present && opp.st) { const first = me.st.progress >= opp.st.progress; setText('hud-pos', `${first ? 1 : 2}/2`); }
+  if (opps.size) setText('hud-pos', `${1 + oppList().filter((o) => o.st.progress > me.st.progress).length}/${opps.size + 1}`);
   setText('hud-lap', `${clamp(me.lapIdx + 1, 1, S.lapsNow)}/${S.lapsNow}`);
 }
 
@@ -829,7 +850,7 @@ function bindUi() {
   $('btn-rematch').addEventListener('click', () => {
     if (S.solo) { startSolo(); return; }
     socket?.emit('player:ready', true);
-    $('btn-rematch').disabled = true; $('btn-rematch').textContent = 'Czekam na przeciwnika…';
+    $('btn-rematch').disabled = true; $('btn-rematch').textContent = 'Czekam na pozostałych…';
   });
 }
 
@@ -850,5 +871,5 @@ function bindUi() {
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);
   if (S.nick) goMenu(); else { showScreen('nick'); $('inp-nick').focus(); }
-  window.__tc = { S, me, opp, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
+  window.__tc = { S, me, opps, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
 })();
