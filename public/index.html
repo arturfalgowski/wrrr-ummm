@@ -39,6 +39,7 @@
   <div class="hud-items">
     <div class="slot" id="slot-nitro"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M13 2L5 14h5l-2 8 9-13h-5z" fill="currentColor"/></svg><kbd>Shift</kbd><span>Nitro</span></div>
     <div class="slot" id="slot-ammo"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2c2 2 3 4 3 7v10H9V9c0-3 1-5 3-7zM8 20h8v2H8z" fill="currentColor"/></svg><kbd>F</kbd><span>Strzał</span><i class="timer"><b id="ammo-bar"></b></i></div>
+    <div class="slot hidden" id="slot-gun"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M3 10h13l3-2v8l-3-2H3zM6 14h4l1 5H7z" fill="currentColor"/></svg><kbd>R</kbd><span>Karabin</span><i class="timer"><b id="gun-bar"></b></i></div>
     <div class="slot" id="slot-oil"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2s7 7.5 7 12.5A7 7 0 015 14.5C5 9.5 12 2 12 2z" fill="currentColor"/></svg><kbd>E</kbd><span>Olej</span></div>
   </div>
   <div class="hud-bl" id="hud-help">
@@ -48,6 +49,13 @@
   <div id="toast"></div>
 </div>
 
+<div id="music-ctl">
+  <button id="btn-music" class="icon-btn" title="Muzyka" aria-label="Muzyka">
+    <svg id="mus-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+    <svg id="mus-off" class="hidden" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>
+  </button>
+  <input id="music-vol" type="range" min="0" max="100" step="1" aria-label="Głośność muzyki">
+</div>
 <button id="btn-mute" class="icon-btn" title="Dźwięk (M)" aria-label="Dźwięk">
   <svg id="ico-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg>
   <svg id="ico-off" class="hidden" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>

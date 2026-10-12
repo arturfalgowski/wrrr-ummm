@@ -25,6 +25,10 @@ W trakcie jazdy w rogu ekranu jest **minimapa**: zarys toru, pozycje wszystkich 
 Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otworzy drugi gracz
 (adres LAN, np. `http://192.168.0.10:3000`, albo wdrożenie na serwerze). Link w lobby jest budowany z adresu, pod którym otwarto grę.
 
+## Muzyka
+
+Utwory z `public/music/` (mp3) losują się na starcie menu i każdego poziomu; domyślna głośność 30%. Przycisk nutki w rogu włącza/wyłącza muzykę (najechanie pokazuje suwak głośności). Dodanie nowego pliku do folderu wystarczy — lista jest czytana z serwera.
+
 ## Sterowanie
 
 | Klawisz | Akcja |
@@ -36,6 +40,7 @@ Aby zagrać z kimś w sieci, serwer musi być dostępny pod adresem, który otwo
 | Shift | nitro (2,5 s) |
 | F | karabin: seria przez 4 s (naboje trzymasz do dowolnej chwili) |
 | E | zrzut plamy oleju |
+| R | (arena) karabin: seria 2 s, ładuje się sam co 6 s |
 | M | wyciszenie |
 
 ## Arena (tryb walki)

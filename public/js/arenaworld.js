@@ -8,9 +8,11 @@ const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a
 
 function noiseTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d'); g.fillStyle = '#d9d9d9'; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 5000; i++) { g.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${0.05 + Math.random() * 0.1})` : `rgba(0,0,0,${0.05 + Math.random() * 0.12})`; const s = 1 + Math.random() * 2.5; g.fillRect(Math.random() * 256, Math.random() * 256, s, s * (1 + Math.random() * 2)); }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  const g = c.getContext('2d'); g.fillStyle = '#e4e4ea'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) { g.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${0.03 + Math.random() * 0.05})` : `rgba(0,0,0,${0.03 + Math.random() * 0.07})`; const s = 2 + Math.random() * 6; g.fillRect(Math.random() * 256, Math.random() * 256, s, s); }
+  g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 253);   // łączenia płyt betonowych
+  g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 2; g.strokeRect(5, 5, 246, 246);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(15, 15); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 }
 function stripeTex() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 64;
@@ -28,9 +30,9 @@ export function buildArenaWorld(scene, renderer) {
     const pm = new THREE.PMREMGenerator(renderer);
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.42;
   }
-  world.sky = new THREE.Color(0xf0b68a);
-  root.add(new THREE.HemisphereLight(0xffe2c4, 0x7a5a48, 0.95));
-  const sun = new THREE.DirectionalLight(0xffc58a, 3.4);
+  world.sky = new THREE.Color(0x8d7fb4);
+  root.add(new THREE.HemisphereLight(0xcfd2ff, 0x4a4256, 1.0));
+  const sun = new THREE.DirectionalLight(0xffc99a, 3.0);
   sun.position.set(-90, 95, 85); sun.target.position.set(0, 0, 0);
   sun.castShadow = true; const sm = Math.min(2048, renderer.capabilities.maxTextureSize); sun.shadow.mapSize.set(sm, sm);
   Object.assign(sun.shadow.camera, { left: -118, right: 118, top: 118, bottom: -118, near: 20, far: 380 });
@@ -38,14 +40,14 @@ export function buildArenaWorld(scene, renderer) {
   root.add(sun, sun.target);
 
   // ---- daleka płaszczyzna ----
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ color: 0xb98d5f, roughness: 1 }));
+  const far = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({ color: 0x34343f, roughness: 1 }));
   far.rotation.x = -Math.PI / 2; far.position.y = -0.4; far.receiveShadow = true; root.add(far);
 
   // ---- teren ----
   const SIZE = (ARENA_R + 22) * 2, SEG = 130;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
-  const sand = new THREE.Color('#c79a63'), dirt = new THREE.Color('#8f6038'), pit = new THREE.Color('#e0bc86'), pitDeep = new THREE.Color('#9b7448'), ramp = new THREE.Color('#f0ac22'), plat = new THREE.Color('#a8a29a');
+  const sand = new THREE.Color('#5d606e'), dirt = new THREE.Color('#444653'), pit = new THREE.Color('#656979'), pitDeep = new THREE.Color('#4b4e5d'), ramp = new THREE.Color('#f0ac22'), plat = new THREE.Color('#8a8d9c');
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x, z);
     pos.setY(i, h);
@@ -55,7 +57,7 @@ export function buildArenaWorld(scene, renderer) {
     const r = Math.hypot(x, z);
     if (r < PLATFORM.r + 1.5 && h > PLATFORM.H * 0.75) c.lerp(plat, 0.9);
     if (rampMask(x, z)) c.lerp(ramp, 0.92);
-    const n = hash(Math.round(x * 3), Math.round(z * 3)); c.multiplyScalar(0.9 + n * 0.2);
+    const n = hash(Math.round(x * 0.7), Math.round(z * 0.7)); c.multiplyScalar(0.96 + n * 0.08);
     if (r > ARENA_R) c.multiplyScalar(0.8);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
@@ -95,7 +97,7 @@ export function buildArenaWorld(scene, renderer) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(5, 1.4, 2.2), new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: 0xffe0a0, emissiveIntensity: 2.2 }));
     head.position.set(px, 20.4, pz); head.lookAt(0, 8, 0); root.add(head);
   }
-  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xa57d58, flatShading: true, roughness: 0.95 }), 70);
+  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x5c5f6e, flatShading: true, roughness: 0.95 }), 70);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
   for (let i = 0; i < 70; i++) {
     const a = Math.random() * Math.PI * 2, r = ARENA_R + 14 + Math.random() * 70, s = 1.5 + Math.random() * 5;

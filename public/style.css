@@ -229,3 +229,11 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 .seg.wide2 { display: grid; grid-template-columns: repeat(2, 1fr); margin-top: 8px; }
 .seg.wide2 button { padding: 12px 8px; font-size: 14px; }
 .seg.wide2 button small { display: block; font-weight: 500; opacity: .75; font-size: 11px; margin-top: 2px; }
+
+/* ---------- Muzyka ---------- */
+#music-ctl { position: fixed; top: 16px; right: 64px; z-index: 30; display: flex; flex-direction: row-reverse; align-items: center; gap: 8px; }
+#music-ctl .icon-btn { position: static; }
+#music-vol { width: 0; opacity: 0; transition: width .2s, opacity .2s; padding: 0; accent-color: #ff4f8b; cursor: pointer; }
+#music-ctl:hover #music-vol, #music-vol:focus { width: 90px; opacity: 1; }
+#slot-gun .timer { display: block; }
+#slot-gun.has { background: rgba(200,110,10,.75); box-shadow: 0 0 22px rgba(255,176,46,.6); }

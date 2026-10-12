@@ -10,6 +10,7 @@ import { Items } from './items.js';
 import { Minimap } from './minimap.js';
 import { ARENA_R, SPAWNS, OBSTACLES, field as arenaField, heightAt, arenaStep, tiltAt } from './arena.js';
 import { buildArenaWorld } from './arenaworld.js';
+import { Music } from './music.js';
 import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,6 +35,9 @@ const post = createPost(renderer, scene, camera);
 
 const particles = new Particles(scene);
 const skids = new SkidMarks(scene);
+const music = new Music();
+const musicReady = music.load();
+const musicStart = () => musicReady.then(() => music.playRandom());
 const items = new Items(scene, particles);
 const minimap = new Minimap(document.getElementById('minimap'));
 items._thud = () => sfx.land();
@@ -65,6 +69,7 @@ const CAM_DIR = (() => { const az = THREE.MathUtils.degToRad(16), el = THREE.Mat
 
 function resize() {
   const W = window.innerWidth, H = window.innerHeight;
+  if (!W || !H) return; // okno ukryte/zminimalizowane — nie psuj proporcji kamery
   renderer.setPixelRatio(pr);
   renderer.setSize(W, H, false);
   post.setSize(W, H, pr);
@@ -85,7 +90,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { weapon: null, shieldT: 0, specIdx: 0, deadAt: 0, hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
+const me = { gunCharge: 1, weapon: null, shieldT: 0, specIdx: 0, deadAt: 0, hp: 100, dead: false, respawnT: 0, inv: 0, dmgCd: 0, items: { nitro: false, oil: false, ammo: false }, fireT: 0, fireAcc: 0, nitroT: 0, tireCd: 0, st: null, vis: null, audio: null, lapIdx: 0, maxP: 0, lapStart: 0, best: Infinity, lapTimes: [], finished: false, finishTime: 0, smokeAcc: 0, hitCd: 0 };
 const opps = new Map(); // id gracza -> { id, nick, carId, slot, st, vis, audio, snaps, prevVf, smokeAcc, finished }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -155,6 +160,7 @@ function resetRace() {
   $('hud-lap').textContent = `1/${S.lapsNow}`;
   $('chip-pos').classList.toggle('hidden', !opps.size);
   $('hud-lap').parentElement.classList.toggle('hidden', isArena());
+  $('hud-help').innerHTML = isArena() ? '<kbd>W</kbd><kbd>S</kbd> gaz &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>F</kbd> broń (na start rakieta) &nbsp; <kbd>R</kbd> karabin &nbsp; <kbd>Shift</kbd> nitro' : '<kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej';
   $('chip-pos').querySelector('.lbl').textContent = isArena() ? 'Żywi' : 'Pozycja';
 }
 
@@ -328,6 +334,7 @@ function goMenu() {
   particles.clear(); skids.clear();
   showScreen('menu');
   loadRanking();
+  musicStart();
 }
 
 function renderLobby() {
@@ -437,6 +444,7 @@ function enterLobby() {
 function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 function startPrepare() {
   clearTimers();
+  musicStart();
   const arenaNow = S.solo ? S.game === 'arena' : S.room.mode === 'arena';
   useTrack(arenaNow ? 'arena' : S.solo ? S.trackId : S.room.track);
   S.lapsNow = S.solo ? S.laps : S.room.settings.laps;
@@ -666,6 +674,7 @@ window.addEventListener('keydown', (e) => {
   if (!e.repeat) {
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') useNitro();
     else if (e.code === 'KeyF') fire();
+    else if (e.code === 'KeyR') fireGun();
     else if (e.code === 'KeyE') dropOil();
   }
   if (!audioReady()) initAudio();
@@ -679,7 +688,7 @@ function readInput() {
   input.steer = (k('KeyD', 'ArrowRight') ? 1 : 0) - (k('KeyA', 'ArrowLeft') ? 1 : 0);
   input.hand = keys.has('Space');
 }
-function toggleMute() { setMuted(!isMuted()); refreshMute(); }
+function toggleMute() { setMuted(!isMuted()); refreshMute(); music.setMuted(isMuted()); }
 function refreshMute() { $('ico-on').classList.toggle('hidden', isMuted()); $('ico-off').classList.toggle('hidden', !isMuted()); }
 
 
@@ -846,6 +855,12 @@ function nearestEnemy(st, exceptId) {
   }
   return best;
 }
+/** podstawowy karabin na arenie: zawsze dostępny, ładuje się sam (R, seria 2 s) */
+function fireGun() {
+  if (!isArena() || !racingNow()) return;
+  if (me.gunCharge < 1 || me.fireT > 0) { sfx.empty(); return; }
+  me.gunCharge = 0; me.fireT = 2; me.fireAcc = 0; updateSlots();
+}
 function fireArena() {
   if (!racingNow()) return;
   const w = me.weapon, s = me.st, cs = Math.cos(s.yaw), sn = Math.sin(s.yaw);
@@ -1007,7 +1022,7 @@ function refreshOpp(o) { return o.bot ? true : sampleOpp(o, performance.now()); 
 const soloSpawn = { t: 5, id: 1 };
 function resetItems() {
   items.clear();
-  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.weapon = null; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
+  me.hp = 100; me.dead = false; me.inv = 0; me.respawnT = 0; me.weapon = isArena() ? 'rocket' : null; me.gunCharge = 1; me.shieldT = 0; me.specIdx = 0; arenaEnd = false; if (me.vis) { me.vis.group.visible = true; me.vis.setDamage(0); } if (me.st) { me.st.damage = 0; me.st.hp = 100; }
   me.items = { nitro: false, oil: false, ammo: false }; me.fireT = 0; me.fireAcc = 0; me.nitroT = 0; me.tireCd = 0;
   if (me.st) { me.st.nitro = false; me.st.slowT = 0; me.st.inOil = false; }
   soloSpawn.t = 5;
@@ -1071,13 +1086,13 @@ function updateSlots() {
   if (isArena()) {
     const sh = me.shieldT > 0, gun = me.fireT > 0;
     $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0); $('slot-nitro').classList.toggle('active', me.nitroT > 0);
-    $('slot-oil').classList.add('hidden');
+    $('slot-oil').classList.add('hidden'); $('slot-gun').classList.remove('hidden'); $('slot-gun').classList.toggle('has', me.gunCharge >= 1 && me.fireT <= 0);
     $('slot-ammo').classList.toggle('has', !!me.weapon || sh || gun); $('slot-ammo').classList.toggle('active', sh || gun);
     $('slot-ammo').querySelector('span').textContent = gun ? 'Ogień!' : sh ? 'Tarcza!' : (WEAPON_NAMES[me.weapon] || 'Broń');
     $('ammo-bar').style.width = `${gun ? clamp(me.fireT / 4, 0, 1) * 100 : sh ? clamp(me.shieldT / 5, 0, 1) * 100 : 0}%`;
     return;
   }
-  $('slot-oil').classList.remove('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał';
+  $('slot-oil').classList.remove('hidden'); $('slot-gun').classList.add('hidden'); $('slot-ammo').querySelector('span').textContent = 'Strzał';
   $('slot-nitro').classList.toggle('has', me.items.nitro || me.nitroT > 0);
   $('slot-nitro').classList.toggle('active', me.nitroT > 0);
   $('slot-ammo').classList.toggle('has', me.items.ammo || me.fireT > 0);
@@ -1107,6 +1122,10 @@ function updateGameplay(dt, active) {
       if (me.fireAcc <= 0 && me.fireT > 0) { shootOne(); me.fireAcc = 0.12; }
       if (me.fireT <= 0) { me.fireT = 0; updateSlots(); } else updateBar();
     }
+  }
+  if (isArena()) {
+    if (me.fireT <= 0 && me.gunCharge < 1) { me.gunCharge = Math.min(1, me.gunCharge + dt / 6); if (me.gunCharge >= 1) updateSlots(); }
+    $('gun-bar').style.width = `${me.gunCharge * 100}%`;
   }
   if (me.shieldT > 0) { me.shieldT -= dt; if (me.shieldT <= 0) { me.shieldT = 0; updateSlots(); } else updateBar(); }
   // paczki: solo spawnuje lokalnie, w multiplayerze robi to serwer
@@ -1230,7 +1249,7 @@ function frame(now) {
     me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st ? Math.max(clamp((me.st.slip - 4.5) / 8, 0, 1), me.st.hand && me.st.speed > 6 && !me.st.onGrass ? 0.95 : 0) * (active ? 1 : 0) : 0, rough: me.st && (me.st.onGrass || me.st.onKerb) && active ? 1 : 0, active: racing }, dt);
     for (const o of oppList()) {
       if (!o.audio) o.audio = new CarAudio(0.35, 0);
-      pv.set(o.st.x, 0, o.st.z).project(camera); o.audio.panner.pan.value = clamp(pv.x, -1, 1) * 0.6;
+      pv.set(o.st.x, 0, o.st.z).project(camera); o.audio.panner.pan.value = Number.isFinite(pv.x) ? clamp(pv.x, -1, 1) * 0.6 : 0;
       o.audio.volume = 0.38 * clamp(1 - Math.hypot(o.st.x - (me.st?.x ?? 0), o.st.z - (me.st?.z ?? 0)) / 170, 0.12, 1);
       o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: Math.max(clamp((o.st.slip - 4.5) / 8, 0, 1), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), rough: o.st.onGrass ? 1 : 0, active: racing }, dt);
     }
@@ -1315,7 +1334,12 @@ function bindUi() {
   document.addEventListener('click', (e) => { if (e.target.closest('button')) { if (!audioReady()) initAudio(); sfx.click(); } });
   document.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.car, .btn'); if (b && b !== bindUi.hv) { bindUi.hv = b; sfx.hover(); } });
   $('btn-mute').addEventListener('click', toggleMute);
-  refreshMute();
+  refreshMute(); music.setMuted(isMuted());
+  const refreshMusic = () => { $('mus-on').classList.toggle('hidden', !music.enabled); $('mus-off').classList.toggle('hidden', music.enabled); };
+  $('btn-music').addEventListener('click', () => { music.toggle(); refreshMusic(); });
+  $('music-vol').value = Math.round(music.vol * 100);
+  $('music-vol').addEventListener('input', (e) => music.setVolume(e.target.value / 100));
+  refreshMusic();
 
   $('form-nick').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1364,5 +1388,5 @@ function bindUi() {
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 700);
   if (S.nick) goMenu(); else { showScreen('nick'); $('inp-nick').focus(); }
-  window.__tc = { S, me, opps, ghost, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
+  window.__tc = { S, me, opps, ghost, music, items, camera, scene, keys, startSolo, post, get track() { return track; }, get world() { return world; } };
 })();

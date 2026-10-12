@@ -49,6 +49,9 @@ const io = new Server(server, { transports: ['websocket', 'polling'] });
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/ranking', (_req, res) => res.json(ranking()));
+app.get('/api/music', (_req, res) => {
+  try { res.json(fs.readdirSync(path.join(__dirname, 'public/music')).filter((f) => /\.(mp3|ogg|m4a|wav)$/i.test(f)).sort()); } catch { res.json([]); }
+});
 
 // ---------- Pokoje ----------
 const rooms = new Map();
