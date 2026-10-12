@@ -23,7 +23,7 @@ export class CarState {
     this.brakeLit = false; this.throttle = 0; this.accelNow = 0;
     this.hit = 0;           // siła ostatniego uderzenia (do dźwięku/iskier)
     this.wallContact = false;
-    this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
+    this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0;
   }
 
   place(track, p, lateral) {
@@ -73,7 +73,8 @@ export class CarState {
     const lowSpeed = clamp(sp / 9, 0, 1);
     const highDamp = 1 / (1 + (sp / (def.maxSpeed * 1.25)) ** 2 * 1.8);
     let yawRate = this.steer * def.turn * lowSpeed * highDamp * (vf >= 0 ? 1 : -1);
-    if (input.hand) yawRate *= 1.25;
+    this.hand = !!input.hand && Math.abs(this.vf) > 3;
+    if (input.hand) yawRate *= 1.45;
     if (this.inOil) yawRate = yawRate * 0.55 + Math.sin(this.t * 9 + this.x * 0.3) * 1.5 * lowSpeed;
     // samoograniczający się drift: im większy kąt poślizgu, tym mniej skręt go dalej powiększa
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
@@ -94,6 +95,7 @@ export class CarState {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
       else vf += def.accel * (this.nitro ? 2.4 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
     }
+    if (input.hand && vf > 3) this.brakeLit = true;
     if (input.brake > 0) {
       if (vf > 0.4) { vf = Math.max(0, vf - def.brake * h); this.brakeLit = true; }
       else vf = Math.max(-def.maxSpeed * 0.3, vf - def.accel * 0.55 * h);
@@ -103,7 +105,7 @@ export class CarState {
     vf -= vf * drag * h;
     if (Math.abs(vf) > 0.05) vf -= Math.sign(vf) * (this.onGrass ? 3.2 : 0.5) * h; else vf = 0;
     if (vf > vmax) vf -= (vf - vmax) * Math.min(1, 3 * h);
-    if (input.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 2.2 * h * (1 + Math.abs(vl) * 0.1));
+    if (input.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), (8 + Math.abs(vl) * 0.12) * h);
     if (this.onKerb) vf -= vf * 0.25 * h;
 
     // przyczepność boczna — spada przy dużym poślizgu (utrzymuje drift) i hamulcu ręcznym

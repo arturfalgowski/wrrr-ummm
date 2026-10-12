@@ -528,7 +528,7 @@ function applyOpp(opp, a, b, f, ex, exT) {
   }
   st.vx = L(3); st.vz = L(4); st.steer = L(5); st.vf = L(6); st.vl = L(7); st.progress = L(8);
   st.throttle = a[9]; st.brakeLit = !!a[10]; st.onGrass = !!a[11]; st.slip = Math.abs(st.vl);
-  opp.finished = !!a[12]; st.nitro = !!a[13];
+  opp.finished = !!a[12]; st.nitro = !!a[13]; st.hand = !!a[14];
   return true;
 }
 
@@ -542,12 +542,12 @@ function carFx(c, key, dt) {
   const st = c.st; if (!st || !c.vis) return;
   const sp = Math.abs(st.vf);
   const M = c.vis.model;
-  const sliding = st.slip > 5.5 && sp > 7 && !st.onGrass;
+  const sliding = (st.slip > 5.5 || st.hand) && sp > 7 && !st.onGrass;
   const braking = st.brakeLit && sp > 24;
   const [lx, lz] = wheelWorld(st, -M.wheelX, M.wheelZ);
   const [rx, rz] = wheelWorld(st, -M.wheelX, -M.wheelZ);
   const on = (sliding || braking) && S.mode !== 'menu' && S.mode !== 'lobby';
-  skids.add(key + 'L', lx, lz, on); skids.add(key + 'R', rx, rz, on);
+  skids.add(key + 'L', lx, lz, on, st.hand ? 0.42 : 0.34); skids.add(key + 'R', rx, rz, on, st.hand ? 0.42 : 0.34);
   if (S.mode === 'menu' || S.mode === 'lobby') return;
   if (st.nitro) {
     const [ex, ez] = wheelWorld(st, -M.L / 2 - 0.2, 0);
@@ -555,7 +555,7 @@ function carFx(c, key, dt) {
     tmpC.setRGB(1, 0.55, 0.15); particles.emit(ex, 0.55, ez, -Math.cos(st.yaw) * 6, 0.3, -Math.sin(st.yaw) * 6, 0.18, 0.9, 0.1, tmpC, 0.9, 2);
   }
   if (sliding) {
-    c.smokeAcc += dt * 50 * clamp((st.slip - 4.5) / 8, 0.25, 1);
+    c.smokeAcc += dt * 50 * clamp((st.slip - 4.5) / 8, st.hand ? 0.7 : 0.25, 1);
     while (c.smokeAcc >= 1) {
       c.smokeAcc -= 1;
       const side = Math.random() > 0.5;
@@ -860,7 +860,7 @@ function frame(now) {
     if (sendAcc >= 0.033) {
       sendAcc = 0;
       const s = me.st, r = (v) => Math.round(v * 100) / 100;
-      socket.volatile.emit('race:state', [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.progress), input.throttle, s.brakeLit ? 1 : 0, s.onGrass ? 1 : 0, me.finished ? 1 : 0, s.nitro ? 1 : 0]);
+      socket.volatile.emit('race:state', [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.progress), input.throttle, s.brakeLit ? 1 : 0, s.onGrass ? 1 : 0, me.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0]);
     }
   }
 
@@ -878,12 +878,12 @@ function frame(now) {
   if (audioReady()) {
     if (!me.audio) me.audio = new CarAudio(0.85, 0);
     const maxS = (me.st?.def.maxSpeed || 45);
-    me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st ? clamp((me.st.slip - 4.5) / 8, 0, 1) * (active ? 1 : 0) : 0, rough: me.st && (me.st.onGrass || me.st.onKerb) && active ? 1 : 0, active: racing }, dt);
+    me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st ? Math.max(clamp((me.st.slip - 4.5) / 8, 0, 1), me.st.hand && me.st.speed > 6 && !me.st.onGrass ? 0.95 : 0) * (active ? 1 : 0) : 0, rough: me.st && (me.st.onGrass || me.st.onKerb) && active ? 1 : 0, active: racing }, dt);
     for (const o of oppList()) {
       if (!o.audio) o.audio = new CarAudio(0.35, 0);
       pv.set(o.st.x, 0, o.st.z).project(camera); o.audio.panner.pan.value = clamp(pv.x, -1, 1) * 0.6;
       o.audio.volume = 0.38 * clamp(1 - Math.hypot(o.st.x - (me.st?.x ?? 0), o.st.z - (me.st?.z ?? 0)) / 170, 0.12, 1);
-      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: clamp((o.st.slip - 4.5) / 8, 0, 1), rough: o.st.onGrass ? 1 : 0, active: racing }, dt);
+      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: Math.max(clamp((o.st.slip - 4.5) / 8, 0, 1), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), rough: o.st.onGrass ? 1 : 0, active: racing }, dt);
     }
   }
 

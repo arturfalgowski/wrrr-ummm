@@ -68,6 +68,13 @@ export class CarAudio {
     this.sbp = ctx.createBiquadFilter(); this.sbp.type = 'bandpass'; this.sbp.frequency.value = 1900; this.sbp.Q.value = 3.5;
     this.sg = ctx.createGain(); this.sg.gain.value = 0;
     this.sn.connect(this.sbp).connect(this.sg).connect(this.out); this.sn.start();
+    // wysoki „pisk” opon: dwa dostrojone generatory przez filtr pasmowy
+    this.so1 = ctx.createOscillator(); this.so1.type = 'sawtooth'; this.so1.frequency.value = 1180;
+    this.so2 = ctx.createOscillator(); this.so2.type = 'square'; this.so2.frequency.value = 1730;
+    this.sob = ctx.createBiquadFilter(); this.sob.type = 'bandpass'; this.sob.frequency.value = 1500; this.sob.Q.value = 6;
+    this.sog = ctx.createGain(); this.sog.gain.value = 0;
+    this.so1.connect(this.sob); this.so2.connect(this.sob); this.sob.connect(this.sog).connect(this.out);
+    this.so1.start(); this.so2.start();
     // trawa / krawężnik: niski szum
     this.rn = noiseSrc();
     this.rlp = ctx.createBiquadFilter(); this.rlp.type = 'lowpass'; this.rlp.frequency.value = 500;
@@ -96,7 +103,11 @@ export class CarAudio {
     this.lp.frequency.setTargetAtTime(380 + this.rpm * 0.22 + throttle * 700, t, 0.05);
     this.eg.gain.setTargetAtTime(active ? 0.22 + throttle * 0.28 : 0, t, 0.06);
     this.out.gain.setTargetAtTime(this.volume, t, 0.1);
-    this.sg.gain.setTargetAtTime(Math.min(1, slip) * 0.32, t, 0.04);
+    this.sg.gain.setTargetAtTime(Math.min(1, slip) * 0.42, t, 0.04);
+    this.sog.gain.setTargetAtTime(Math.min(1, slip) ** 1.3 * 0.16, t, 0.05);
+    const wob = 1 + Math.sin(t * 17) * 0.015 * slip;
+    this.so1.frequency.setTargetAtTime((1050 + slip * 330 + Math.abs(speed) * 160) * wob, t, 0.05);
+    this.so2.frequency.setTargetAtTime((1560 + slip * 420 + Math.abs(speed) * 200) * wob, t, 0.05);
     this.sbp.frequency.setTargetAtTime(1500 + slip * 900, t, 0.05);
     this.rg.gain.setTargetAtTime(Math.min(1, rough) * Math.min(1, sp * 2) * 0.5, t, 0.08);
   }
@@ -105,7 +116,7 @@ export class CarAudio {
     if (!this.on) return;
     const t = ctx.currentTime;
     this.out.gain.setTargetAtTime(0, t, 0.05);
-    setTimeout(() => { [this.o1, this.o2, this.o3, this.sn, this.rn].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
+    setTimeout(() => { [this.o1, this.o2, this.o3, this.sn, this.rn, this.so1, this.so2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
   }
 }
 
