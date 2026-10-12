@@ -9,19 +9,29 @@ export const BARRIER = 14;       // odległość bariery od osi toru
 // start: punkt odniesienia linii startu (na prostej), stand: gdzie postawić trybunę.
 export const TRACK_DEFS = {
   dolina: {
-    name: 'Dolina Sosen', tag: 'Płynne łuki i szybka prosta', laps: 4, scale: 1.2, start: [0, 46], stand: 'inner',
+    name: 'Dolina Sosen', tag: 'Płynne łuki i szybka prosta', laps: 3, scale: 1.7, start: [0, 46], stand: 'inner',
     points: [[-40, 45], [10, 47], [55, 45], [90, 30], [96, 2], [80, -24], [56, -32], [40, -16], [20, -6], [-4, -16], [-18, -42], [-50, -52], [-86, -40], [-98, -10], [-82, 18], [-64, 34]],
     theme: 'lato',
   },
   owal: {
-    name: 'Pustynny Owal', tag: 'Bardzo szybki, szykana na tyłach', laps: 3, scale: 1.0, start: [0, 60], stand: 'inner',
+    name: 'Pustynny Owal', tag: 'Bardzo szybki, szykana na tyłach', laps: 3, scale: 1.4, start: [0, 60], stand: 'inner',
     points: [[-90, 60], [-30, 60], [30, 60], [90, 60], [140, 45], [160, 0], [140, -45], [90, -60], [50, -50], [20, -68], [-20, -58], [-70, -62], [-125, -45], [-150, 0], [-125, 45]],
     theme: 'pustynia',
   },
   serpentyna: {
-    name: 'Zimowa Serpentyna', tag: 'Techniczny, ciasne agrafki', laps: 3, scale: 1.15, start: [0, 56], stand: 'outer',
+    name: 'Zimowa Serpentyna', tag: 'Techniczny, ciasne agrafki', laps: 2, scale: 1.4, start: [0, 56], stand: 'outer',
     points: [[-30, 56], [30, 56], [77, 56], [90, 51], [95, 38], [90, 25], [77, 20], [30, 20], [-34, 20], [-47, 15], [-52, 2], [-47, -11], [-34, -16], [10, -16], [60, -16], [76, -23], [83, -39], [76, -55], [60, -62], [20, -62], [-50, -66], [-100, -52], [-122, -5], [-112, 40], [-85, 58]],
     theme: 'zima',
+  },
+  jesien: {
+    name: 'Jesienna Pętla', tag: 'Długie łuki i szykana w lesie', laps: 3, scale: 1.75, start: [0, 62], stand: 'inner',
+    points: [[-80, 58], [-20, 62], [50, 60], [100, 48], [125, 15], [110, -20], [75, -32], [48, -10], [20, -30], [-10, -52], [-55, -58], [-100, -40], [-120, -5], [-105, 30]],
+    theme: 'jesien',
+  },
+  wyspa: {
+    name: 'Nadmorski Wir', tag: 'Szeroka pętla z agrafką i długą prostą', laps: 3, scale: 1.75, start: [0, 58], stand: 'inner',
+    points: [[-60, 55], [0, 58], [60, 55], [105, 40], [118, 5], [100, -22], [112, -52], [75, -70], [20, -60], [-35, -38], [-80, -58], [-125, -38], [-132, 5], [-100, 40]],
+    theme: 'wyspa',
   },
 };
 export const TRACK_IDS = Object.keys(TRACK_DEFS);

@@ -73,6 +73,12 @@ export const THEMES = {
   pustynia: { sky: 0xf0d3a8, hemi: [0xffe6c0, 0x9a7a5a, 0.9], sun: [0xffc487, 3.5], grass: [217, 184, 120], light: [236, 206, 150], dark: [190, 150, 90], flowers: false,
     gravel: '#a9764f', gravel2: '#c28f62', gravelA: 'rgba(255,215,160,0.3)', gravelB: 'rgba(90,55,30,0.3)', asphalt: '#625b6b',
     foliage: ['#7a5a3a', '#8f8a3e', '#a39a4a', '#b6ab58'], trees: 90, rock: 0xc09270, rocks: 140, bush: [0.12, 0.45, 0.4], bushes: 90 },
+  jesien: { sky: 0xe9c9a2, hemi: [0xffe3c2, 0x8a6a52, 0.9], sun: [0xffbf80, 3.3], grass: [150, 126, 62], light: [196, 150, 60], dark: [104, 76, 40], flowers: false,
+    gravel: '#94704a', gravel2: '#ad8760', gravelA: 'rgba(255,215,160,0.28)', gravelB: 'rgba(70,40,25,0.3)', asphalt: '#4f4a58',
+    foliage: ['#5b4331', '#b4491a', '#d17f1c', '#e9b53a'], trees: 300, rock: 0x9a8670, rocks: 70, bush: [0.07, 0.6, 0.38], bushes: 160 },
+  wyspa: { sky: 0xaee3f2, hemi: [0xdaf4ff, 0x7aa08e, 0.95], sun: [0xfff1cf, 3.2], grass: [74, 192, 122], light: [118, 224, 156], dark: [30, 142, 92], flowers: true,
+    gravel: '#e4d29a', gravel2: '#efe0b2', gravelA: 'rgba(255,255,255,0.4)', gravelB: 'rgba(150,120,70,0.25)', asphalt: '#575868',
+    foliage: ['#7a5a3a', '#1c9a68', '#2eb87a', '#63dca6'], trees: 220, rock: 0xb8b4a8, rocks: 50, bush: [0.38, 0.5, 0.42], bushes: 140 },
   zima: { sky: 0xcfdcf0, hemi: [0xe2eeff, 0x8f9db8, 1.0], sun: [0xe8f0ff, 2.7], grass: [232, 238, 246], light: [250, 252, 255], dark: [170, 186, 210], flowers: false,
     gravel: '#8d96a6', gravel2: '#a6aebb', gravelA: 'rgba(255,255,255,0.35)', gravelB: 'rgba(60,70,90,0.28)', asphalt: '#4c4b5e',
     foliage: ['#5b4331', '#2a6b50', '#3b8062', '#eef5f8'], trees: 260, rock: 0x9aa2b2, rocks: 80, bush: [0.45, 0.2, 0.55], bushes: 70 },
@@ -466,7 +472,8 @@ export function buildWorld(scene, renderer, track) {
     add(new THREE.ConeGeometry(1.95, 3.0, 8), 4.7, T.foliage[2]);
     add(new THREE.ConeGeometry(1.4, 2.6, 8), 6.1, T.foliage[3]);
     const geo = mergeGeometries(parts);
-    const spots = scatter(T.trees, BARRIER + 7.5, 60, 5.4);
+    const dens = Math.sqrt(track.length / 600);
+    const spots = scatter(Math.round(T.trees * dens), BARRIER + 7.5, 60, 5.4, 9000);
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = world.time;
@@ -493,7 +500,7 @@ export function buildWorld(scene, renderer, track) {
 
   // ---------- Skały i krzewy ----------
   {
-    const rocks = scatter(T.rocks, BARRIER + 5, 70, 7);
+    const rocks = scatter(Math.round(T.rocks * Math.sqrt(track.length / 600)), BARRIER + 5, 70, 7);
     const rm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: T.rock, flatShading: true, roughness: 0.9 }), rocks.length);
     rocks.forEach(([x, z], i) => {
       const s = 0.8 + rnd() * 1.8;
@@ -501,7 +508,7 @@ export function buildWorld(scene, renderer, track) {
       rm.setMatrixAt(i, m4.compose(v3.set(x, s * 0.35, z), q4, s3.set(s * 1.2, s * 0.8, s)));
     });
     rm.castShadow = rm.receiveShadow = true; root.add(rm);
-    const bushes = scatter(T.bushes, BARRIER + 4.5, 70, 4.2);
+    const bushes = scatter(Math.round(T.bushes * Math.sqrt(track.length / 600)), BARRIER + 4.5, 70, 4.2);
     const bm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), bushes.length);
     const bc2 = new THREE.Color();
     bushes.forEach(([x, z], i) => {

@@ -9,11 +9,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const TRACKS = ['dolina', 'owal', 'serpentyna'];
-const LAPS = { dolina: 4, owal: 3, serpentyna: 3 };
+const TRACKS = ['dolina', 'owal', 'serpentyna', 'jesien', 'wyspa'];
+const LAPS = { dolina: 3, owal: 3, serpentyna: 2, jesien: 3, wyspa: 3 };
 // paleta kolorów aut — zgodna z CAR_COLORS w public/js/physics.js
 const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 const freeColor = (r, pref) => (COLORS.includes(pref) && !r.players.some((p) => p.color === pref) ? pref : COLORS.find((c) => !r.players.some((p) => p.color === c)));
+const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
 const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair'];
 const ARENA_ITEMS = ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'];
@@ -81,7 +82,7 @@ function startCountdown(r) {
   r.times = {};
   r.recorded = false;
   r.pickups = new Map();
-  r.alive = new Set(r.players.map((p) => p.sid)); r.elim = []; r.order = [];
+  r.alive = new Set(r.players.map((p) => p.sid)); r.elim = []; r.order = []; r.afterRace = false;
   io.to(r.id).emit('race:prepare', publicRoom(r));
   later(r, 800, () => io.to(r.id).emit('race:count', 3));
   later(r, 1800, () => io.to(r.id).emit('race:count', 2));
@@ -124,6 +125,7 @@ function arenaEliminate(r, sid) {
 function endRace(r, winner, reason) {
   if (r.recorded) return;
   r.recorded = true;
+  r.afterRace = true;
   r.state = 'finished';
   clearTimers(r);
   r.winner = winner.sid;
@@ -252,6 +254,27 @@ io.on('connection', (socket) => {
     socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, r: n(e.r), dmg: n(e.dmg), x: n(e.x), z: n(e.z), yaw: n(e.yaw), vx: n(e.vx), vz: n(e.vz) });
   });
 
+  const chatOut = (socket) => {
+    const r = rooms.get(socket.data.roomId);
+    const p = r?.players.find((x) => x.sid === socket.id);
+    if (!p) return null;
+    const now = Date.now();
+    p.chatT = (p.chatT || []).filter((t) => now - t < 4000);
+    if (p.chatT.length >= 6) return null; // limit: 6 wiadomości / 4 s
+    p.chatT.push(now);
+    return { r, p };
+  };
+  socket.on('chat', (text) => {
+    const ctx = chatOut(socket); if (!ctx) return;
+    const t = String(text ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90);
+    if (!t) return;
+    io.to(ctx.r.id).emit('chat', { from: socket.id, nick: ctx.p.nick, color: ctx.p.color, text: t });
+  });
+  socket.on('react', (i) => {
+    const ctx = chatOut(socket); if (!ctx || !Number.isInteger(i) || i < 1 || i > 9) return;
+    io.to(ctx.r.id).emit('chat', { from: socket.id, nick: ctx.p.nick, color: ctx.p.color, text: REACTIONS[i - 1], react: true });
+  });
+
   socket.on('player:car', (car) => {
     const r = rooms.get(socket.data.roomId);
     const p = r?.players.find((x) => x.sid === socket.id);
@@ -274,6 +297,10 @@ io.on('connection', (socket) => {
     const p = r?.players.find((x) => x.sid === socket.id);
     if (!p || r.state === 'racing' || r.state === 'countdown') return;
     p.ready = !!ready;
+    if (p.ready) {
+      const n = r.players.filter((x) => x.ready).length;
+      io.to(r.id).emit('chat', { sys: true, text: `${p.nick} ${r.afterRace ? 'chce rewanż' : 'jest gotowy'} (${n}/${r.players.length})` });
+    }
     if (r.state === 'finished' && p.ready) { r.state = 'lobby'; }
     io.to(r.id).emit('room:update', publicRoom(r));
     if (r.players.length >= 2 && r.players.every((x) => x.ready)) startCountdown(r);

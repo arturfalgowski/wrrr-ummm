@@ -16,6 +16,7 @@
 <body>
 <canvas id="gl"></canvas>
 <div id="tags"></div>
+<div id="bubbles"></div>
 
 <div id="loading"><div class="spinner"></div><span>Budowanie toru…</span></div>
 
@@ -136,6 +137,7 @@
     <div class="res-title" id="res-title">Wygrana!</div>
     <div class="res-sub" id="res-sub"></div>
     <table class="restable" id="res-table"></table>
+    <div class="rematch hidden" id="rematch-box"><h4>Rewanż</h4><div id="rematch-list"></div></div>
     <h4>Ranking</h4>
     <ol id="rank-results" class="ranklist compact"></ol>
     <div class="row-btns">
@@ -144,6 +146,12 @@
     </div>
   </div>
 </section>
+
+<div id="chat" class="chat hidden">
+  <div id="chat-log"></div>
+  <form id="chat-form" class="hidden" autocomplete="off"><input id="chat-input" maxlength="90" placeholder="Napisz wiadomość i naciśnij Enter…" spellcheck="false"></form>
+  <div class="chat-hint"><kbd>Enter</kbd> czat &nbsp; <kbd>1</kbd>–<kbd>9</kbd> reakcje</div>
+</div>
 
 <script src="socket.io/socket.io.js"></script>
 <script type="module" src="js/main.js"></script>

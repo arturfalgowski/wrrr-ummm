@@ -170,12 +170,13 @@ function showScreen(name) {
   for (const s of SCREENS) $(`scr-${s}`).classList.toggle('hidden', s !== name);
   const inRace = name === null;
   $('hud').classList.toggle('hidden', !(inRace || name === 'results'));
+  updateChatUi();
 }
 function toast(msg, ms = 2200) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms);
 }
-function setMode(m) { S.mode = m; }
+function setMode(m) { S.mode = m; updateChatUi(); }
 
 function renderRanking(list) {
   for (const id of ['rank-menu', 'rank-results']) {
@@ -255,7 +256,7 @@ function renderMenuSettings() {
     renderMenuSettings();
   });
 }
-const THEME_SW = { lato: ['#5f9c49', '#a1694a'], pustynia: ['#d9b878', '#a9764f'], zima: ['#e8eef6', '#8d96a6'] };
+const THEME_SW = { lato: ['#5f9c49', '#a1694a'], pustynia: ['#d9b878', '#a9764f'], zima: ['#e8eef6', '#8d96a6'], jesien: ['#96723a', '#94704a'], wyspa: ['#4ac07a', '#e4d29a'] };
 function buildTrackList(wrapId, selected, onPick, canPick) {
   const wrap = $(wrapId); wrap.textContent = '';
   for (const id of TRACK_IDS) {
@@ -333,6 +334,7 @@ function goMenu() {
   me.finished = false; resetItems();
   particles.clear(); skids.clear();
   showScreen('menu');
+  clearChat();
   loadRanking();
   musicStart();
 }
@@ -407,6 +409,7 @@ function connect() {
   socket.on('race:opp', (id, a) => { const o = opps.get(id); if (!o || !Array.isArray(a) || a.length < 13) return; o.snaps.push({ t: performance.now(), a }); if (o.snaps.length > 40) o.snaps.shift(); });
   socket.on('race:end', (data) => { S.results = data; if (S.mode === 'racing' || S.mode === 'finished' || S.mode === 'countdown') { setMode('finished'); showResultsMP(); } });
   socket.on('ranking', (list) => renderRanking(list));
+  socket.on('chat', (m) => { chatAdd(m); if (m.sys) { if (S.mode === 'finished') toast(m.text, 2200); } else showBubble(m.from, m.text); });
   socket.on('pickup:spawn', (p) => { if (S.mode === 'racing' || S.mode === 'countdown') spawnCrate(p.id, p.type, p.u, p.l, p.x, p.z); });
   socket.on('pickup:remove', ({ id }) => items.remove(id, false));
   socket.on('pickup:taken', ({ id, by, type }) => { items.remove(id); if (by === S.you) applyPickup(type); });
@@ -560,8 +563,11 @@ function updateResultsButtons() {
   const mine = S.room?.players.find((p) => p.id === S.you);
   b.disabled = !two || !!mine?.ready;
   if (!two) b.textContent = 'Brak rywali';
-  else if (mine?.ready) b.textContent = 'Czekam na pozostałych…';
-  else b.textContent = 'Rewanż';
+  else if (mine?.ready) {
+    const waiting = S.room.players.filter((p) => !p.ready).map((p) => p.nick);
+    b.textContent = waiting.length ? `Czekam na: ${waiting.join(', ')}` : 'Start za chwilę…';
+  } else b.textContent = 'Rewanż';
+  renderRematch();
 }
 
 // ======================= Opiekun przeciwnika (interpolacja) =======================
@@ -664,11 +670,13 @@ function sparks(x, z, power) {
 }
 
 // ======================= Wejście =======================
-const typing = () => document.activeElement && document.activeElement.tagName === 'INPUT';
+const typing = () => document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'range';
 window.addEventListener('keydown', (e) => {
-  if (typing()) return;
+  if (typing()) { if (e.code === 'Escape' && e.target.id === 'chat-input') closeChat(); return; }
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
+  if (e.code === 'Enter' && !e.repeat && S.mode !== 'menu' && $('scr-nick').classList.contains('hidden')) { e.preventDefault(); openChat(); return; }
+  if (!e.repeat && S.mode !== 'menu' && $('scr-nick').classList.contains('hidden')) { const mm = /^(?:Digit|Numpad)([1-9])$/.exec(e.code); if (mm) { sendReact(+mm[1]); return; } }
   if (e.code === 'KeyM' && !e.repeat) toggleMute();
   if (me.dead && isArena() && !e.repeat) { if (e.code === 'KeyA' || e.code === 'ArrowLeft') me.specIdx--; if (e.code === 'KeyD' || e.code === 'ArrowRight') me.specIdx++; }
   if (!e.repeat) {
@@ -1152,6 +1160,63 @@ function updateGameplay(dt, active) {
   updateArenaCombat(dt);
 }
 
+// ======================= Czat i reakcje =======================
+const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
+const bubbles = new Map(); // id gracza -> { el, until }
+let reactCd = 0;
+function updateChatUi() {
+  const c = $('chat');
+  c.classList.toggle('hidden', S.mode === 'menu' || !$('scr-nick').classList.contains('hidden'));
+  c.classList.toggle('side', S.mode === 'lobby' || S.mode === 'finished');
+}
+function chatAdd(m) {
+  const log = $('chat-log'), d = document.createElement('div');
+  d.className = 'msg' + (m.sys ? ' sys' : '') + (m.react ? ' react' : '');
+  if (!m.sys) { const b = document.createElement('b'); b.textContent = m.nick; b.style.color = m.color || '#fff'; d.append(b); }
+  d.append(document.createTextNode(m.text));
+  log.append(d);
+  while (log.children.length > 8) log.firstChild.remove();
+  setTimeout(() => d.classList.add('old'), 12000); setTimeout(() => d.remove(), 45000);
+}
+function showBubble(id, text) {
+  const old = bubbles.get(id); if (old) old.el.remove();
+  const el = document.createElement('div'); el.className = 'bubble'; el.textContent = text;
+  $('bubbles').append(el); bubbles.set(id, { el, until: performance.now() + 4200 });
+}
+function clearChat() { $('chat-log').textContent = ''; for (const b of bubbles.values()) b.el.remove(); bubbles.clear(); }
+function sendChat(text) {
+  if (S.room && socket) socket.emit('chat', text); else showBubble('me', text.slice(0, 90));
+}
+function sendReact(i) {
+  if (performance.now() < reactCd) return; reactCd = performance.now() + 700;
+  if (S.room && socket) socket.emit('react', i); else showBubble('me', REACTIONS[i - 1]);
+}
+function openChat() { $('chat-form').classList.remove('hidden'); $('chat').classList.remove('hidden'); keys.clear(); $('chat-input').focus(); }
+function closeChat() { $('chat-form').classList.add('hidden'); $('chat-input').value = ''; $('chat-input').blur(); updateChatUi(); }
+function updateBubbles() {
+  const W = innerWidth, H = innerHeight, now = performance.now();
+  for (const [id, b] of [...bubbles]) {
+    const ent = id === S.you || id === 'me' ? me : opps.get(id);
+    if (now > b.until || !ent?.st || ent.dead || S.mode === 'menu') { b.el.remove(); bubbles.delete(id); continue; }
+    pv.set(ent.st.x, (ent.st.y || 0) + 6, ent.st.z).project(camera);
+    if (!Number.isFinite(pv.x)) continue;
+    b.el.style.transform = `translate(${((pv.x + 1) / 2) * W}px, ${((1 - pv.y) / 2) * H}px) translate(-50%, -100%)`;
+  }
+}
+function renderRematch() {
+  const box = $('rematch-box'), list = $('rematch-list');
+  if (!S.room || S.solo || S.mode !== 'finished') { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden'); list.textContent = '';
+  for (const p of S.room.players) {
+    const row = document.createElement('div'); row.className = 'rm-row' + (p.id === S.you ? ' me' : '');
+    row.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="st"></span>';
+    row.querySelector('.dot').style.background = p.color;
+    row.querySelector('.nm').textContent = p.nick + (p.id === S.you ? ' (Ty)' : '');
+    const st = row.querySelector('.st'); st.textContent = p.ready ? 'Chce rewanż ✓' : 'Czeka…'; st.classList.toggle('ok', p.ready);
+    list.append(row);
+  }
+}
+
 // ======================= Pętla gry =======================
 let last = performance.now(), T = 0, sendAcc = 0, fpsAvg = 16, slowFrames = 0;
 const tagEls = {};
@@ -1257,6 +1322,7 @@ function frame(now) {
 
   updateCamera(dt);
   updateHud();
+  updateBubbles();
   drawMinimap();
   updateTags();
   post.composer.render(dt);
@@ -1333,12 +1399,15 @@ function updateHud() {
 function bindUi() {
   document.addEventListener('click', (e) => { if (e.target.closest('button')) { if (!audioReady()) initAudio(); sfx.click(); } });
   document.addEventListener('pointerover', (e) => { const b = e.target.closest?.('.car, .btn'); if (b && b !== bindUi.hv) { bindUi.hv = b; sfx.hover(); } });
+  $('chat-form').addEventListener('submit', (e) => { e.preventDefault(); const t = $('chat-input').value.trim(); if (t) sendChat(t); closeChat(); });
+  $('chat-input').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('chat-input')) closeChat(); }, 100));
   $('btn-mute').addEventListener('click', toggleMute);
   refreshMute(); music.setMuted(isMuted());
   const refreshMusic = () => { $('mus-on').classList.toggle('hidden', !music.enabled); $('mus-off').classList.toggle('hidden', music.enabled); };
   $('btn-music').addEventListener('click', () => { music.toggle(); refreshMusic(); });
   $('music-vol').value = Math.round(music.vol * 100);
   $('music-vol').addEventListener('input', (e) => music.setVolume(e.target.value / 100));
+  $('music-vol').addEventListener('change', (e) => e.target.blur());
   refreshMusic();
 
   $('form-nick').addEventListener('submit', (e) => {

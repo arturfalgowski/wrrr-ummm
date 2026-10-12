@@ -158,7 +158,7 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 }
 
 /* ---------- Wybór toru ---------- */
-.tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .track { text-align: left; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,.05); color: inherit; font: inherit; cursor: pointer; transition: background .2s, border-color .2s, transform .12s; }
 .track:hover:not(:disabled) { background: rgba(255,255,255,.1); transform: translateY(-2px); }
 .track:disabled { cursor: default; opacity: .75; }
@@ -239,3 +239,30 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px; margin: 0 2px; t
 #slot-gun.has { background: rgba(200,110,10,.75); box-shadow: 0 0 22px rgba(255,176,46,.6); }
 #btn-music.wait { animation: musicwait 1s ease-in-out infinite alternate; border-color: #ff4f8b; }
 @keyframes musicwait { to { box-shadow: 0 0 16px #ff4f8b; transform: scale(1.08); } }
+
+/* ---------- Czat i reakcje ---------- */
+.chat { position: fixed; left: 20px; bottom: 76px; width: min(340px, 86vw); z-index: 12; pointer-events: none; }
+.chat.side { left: auto; right: 20px; bottom: 20px; }
+#chat-log { display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow: hidden; justify-content: flex-end; }
+.chat .msg { background: rgba(20,17,38,.62); border-radius: 10px; padding: 5px 10px; font-size: 13px; line-height: 1.35; backdrop-filter: blur(6px); word-break: break-word; transition: opacity 1.2s; }
+.chat .msg b { margin-right: 6px; }
+.chat .msg.react { font-weight: 700; }
+.chat .msg.sys { background: rgba(255,179,71,.2); color: #ffd9a0; font-style: italic; }
+.chat .msg.old { opacity: .35; }
+#chat-form { pointer-events: auto; margin-top: 6px; }
+#chat-form input { padding: 9px 12px; font-size: 14px; border-radius: 12px; }
+.chat-hint { margin-top: 6px; font-size: 11px; color: #fff; opacity: .65; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+#bubbles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.bubble { position: absolute; left: 0; top: 0; max-width: 200px; padding: 6px 12px; border-radius: 14px; background: #fff; color: #1b1830; font-weight: 800; font-size: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.35); will-change: transform; animation: bpop .25s cubic-bezier(.2, 1.4, .4, 1) both; }
+.bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 12px; height: 12px; background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+@keyframes bpop { from { opacity: 0; scale: .5; } to { opacity: 1; scale: 1; } }
+/* ---------- Rewanż ---------- */
+.rematch { margin-top: 14px; text-align: left; }
+#rematch-list { display: grid; gap: 6px; }
+.rm-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 14px; }
+.rm-row .dot { width: 10px; height: 10px; border-radius: 50%; }
+.rm-row .nm { flex: 1; font-weight: 700; }
+.rm-row .st { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.1); color: var(--muted); }
+.rm-row .st.ok { background: rgba(91,227,161,.2); color: var(--good); }
+.rm-row.me { outline: 1px solid rgba(255,79,139,.5); }
+@media (max-width: 820px) { .chat { bottom: 120px; } }
