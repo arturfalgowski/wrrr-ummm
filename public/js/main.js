@@ -1015,6 +1015,7 @@ function chatAdd(m) {
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.append(d);
   while (log.children.length > 100) log.firstChild.remove();
+  if (m.kill) setTimeout(() => { d.style.transition = 'opacity .6s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 650); }, 6000); // informacje o eliminacji znikają po chwili
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 function showBubble(id, text) {
