@@ -400,9 +400,9 @@ function buildCarList() {
   markCar();
 }
 /** opis wybranego auta: nazwa, krótki opis i trzy opisane paski (każdy w swoim kolorze) */
-function renderCarDetail() {
-  const box = $('car-detail'); if (!box) return;
-  const d = S.carPick === 'random' ? { name: 'Losowy', tag: 'Losowe auto przy każdym starcie', stats: null } : CAR_DEFS[S.carPick];
+function renderCarDetail(boxId = 'car-detail', pick = S.carPick) {
+  const box = $(boxId); if (!box) return;
+  const d = pick === 'random' || !CAR_DEFS[pick] ? { name: 'Losowy', tag: 'Losowe auto przy każdym starcie', stats: null } : CAR_DEFS[pick];
   box.textContent = '';
   const head = document.createElement('div'); head.className = 'cd-head'; const nm = document.createElement('b'); nm.textContent = d.name; const tg = document.createElement('small'); tg.textContent = d.tag; head.append(nm, tg); box.append(head);
   const spec = document.createElement('div'); spec.className = 'cd-spec';
@@ -575,9 +575,11 @@ function buildTeamPicker(r, mine) {
 function buildLobbyPickers(r, mine) {
   const w = $('lobby-cars'); w.textContent = '';
   for (const [id, d] of Object.entries(CAR_DEFS)) {
-    const b = document.createElement('button'); b.textContent = d.name; b.classList.toggle('sel', mine?.car === id);
+    const b = document.createElement('button'); b.className = 'car' + (mine?.car === id ? ' sel' : ''); b.dataset.id = id;
+    b.innerHTML = '<span class="dot"></span><b></b>'; b.querySelector('b').textContent = d.name; b.querySelector('.dot').style.background = mine?.color || S.color;
     b.addEventListener('click', () => { S.carId = id; S.carPick = id; store.set('tc_car', id); socket?.emit('player:car', id); }); w.append(b);
   }
+  renderCarDetail('lobby-cardetail', mine?.car);
   const taken = new Set(r.players.filter((p) => p.id !== S.you).map((p) => p.color));
   swatches('lobby-colors', mine?.color, taken, (c) => { S.color = c; store.set('tc_color', c); socket?.emit('player:color', c); });
   if (mine && !($('lobby-custom').contains(document.activeElement))) buildCustomUi('lobby-custom', mine.custom || S.custom, (c) => { S.custom = { ...S.custom, ...c }; store.set('tc_custom', JSON.stringify(S.custom)); socket?.emit('player:custom', S.custom); });
@@ -591,7 +593,7 @@ function modeButtons(wrapId, current, canPick, onPick) {
   const w = $(wrapId); w.textContent = '';
   for (const [id, name, sub] of [['race', 'Wyścig', 'ściganie się na torze'], ['arena', 'Arena', 'walka do ostatniego żywego'], ['soccer', 'Piłka', 'mecz drużynowy autami']]) {
     const b = document.createElement('button'); b.classList.toggle('sel', current === id); b.disabled = !canPick && current !== id;
-    const ic = wrapId === 'mode-list';
+    const ic = wrapId === 'mode-list' || wrapId === 'lobby-mode';
     b.innerHTML = (ic ? `<span class="ic">${MODE_ICONS[id]}</span>` : '') + '<span class="nm"></span><small></small>'; b.querySelector('.nm').textContent = name; b.querySelector('small').textContent = sub;
     b.addEventListener('click', () => onPick(id)); w.append(b);
   }
@@ -638,6 +640,24 @@ function goMenu() {
   musicStart();
 }
 
+const WX_L = { auto: 'losowa', sun: 'słonecznie', rain: 'deszcz', storm: 'burza' }, TM_L = { auto: 'losowa', day: 'dzień', dusk: 'zmierzch', night: 'noc' }, PK_L = { off: 'brak', rare: 'rzadko', normal: 'normalnie', often: 'często' };
+/** karta „Co jest grane”: tryb, trasa i ustawienia pokoju (widoczne dla wszystkich) */
+function renderLobbyInfo(r, isHost) {
+  const box = $('lobby-info'); box.textContent = '';
+  const st = r.settings, row = (k, v) => { const e = document.createElement('div'); e.className = 'l2-row'; e.innerHTML = '<span></span><b></b>'; e.firstChild.textContent = k; e.lastChild.textContent = v; box.append(e); };
+  const desc = { race: 'Ściganie się na torze — wygrywa pierwszy na mecie.', arena: 'Walka do ostatniego żywego. Uderzenie przodem nie rani.', soccer: 'Mecz drużynowy autami — wbij piłkę do bramki przeciwnika.' }[r.mode];
+  const head = document.createElement('div'); head.className = 'l2-desc'; head.textContent = desc; box.append(head);
+  row('Tryb', { race: 'Wyścig', arena: 'Arena', soccer: 'Piłka' }[r.mode]);
+  row('Gospodarz', r.players[0]?.nick || '—');
+  if (r.mode === 'race') {
+    const t = TRACK_DEFS[r.track]; row('Tor', t ? `${t.name}` : r.track); if (t) row('O torze', t.tag);
+    row('Okrążenia', String(st.laps)); if (st.tournament) row('Turniej', '3 wyścigi, punkty 10-6-4-2');
+  }
+  if (r.mode === 'soccer') { row('Czas', st.timeLimit ? fmtClock(st.timeLimit) : 'bez limitu'); row('Do goli', st.goalLimit ? String(st.goalLimit) : 'bez limitu'); row('Ataki', st.attacks ? 'włączone' : 'wyłączone'); }
+  if (st.bots) row('Boty', String(st.bots));
+  if (r.mode !== 'soccer' || st.attacks) { row('Paczki', PK_L[st.pickups] || st.pickups); row('Start', st.loadout === 'full' ? 'pełne wyposażenie' : 'standardowy'); }
+  row('Pogoda', WX_L[st.weather] || st.weather); row('Pora dnia', TM_L[st.time] || st.time);
+}
 function renderLobby() {
   const r = S.room; if (!r) return;
   $('lobby-code').textContent = r.id;
@@ -645,7 +665,8 @@ function renderLobby() {
   $('lobby-link').value = `${location.origin}${location.pathname}?room=${r.id}`;
   const nb = r.bots?.length || 0, two = r.players.length + nb >= 2, full = r.players.length >= 4;
   $('copyrow').classList.toggle('hidden', full);
-  $('lobby-hint').textContent = (two ? `W pokoju: ${r.players.length}/4${nb ? ` + ${nb} bot.` : ''}. Gdy wszyscy klikną „Gotowy”, ruszy odliczanie. ` : 'Potrzebny co najmniej jeden rywal. ') + (full ? '' : 'Link do zaproszenia (do 4 graczy):');
+  $('lobby-hint').textContent = `${r.players.length}/4${nb ? ` + ${nb} bot.` : ''}`;
+  void (two ? `W pokoju: ${r.players.length}/4${nb ? ` + ${nb} bot.` : ''}. Gdy wszyscy klikną „Gotowy”, ruszy odliczanie. ` : 'Potrzebny co najmniej jeden rywal. ');
   const box = $('lobby-players'); box.textContent = '';
   for (let s = 0; s < 4; s++) {
     const p = r.players.find((x) => x.slot === s), bt = !p && r.bots?.find((x) => x.slot === s);
@@ -674,16 +695,20 @@ function renderLobby() {
   { const st = r.settings, vals = r.mode === 'soccer' ? { timeLimit: st.timeLimit, goalLimit: st.goalLimit, attacks: st.attacks, pickups: st.pickups, loadout: st.loadout, weather: st.weather, time: st.time, raceBots: st.bots, public: st.public } : r.mode === 'arena' ? { pickups: st.pickups, loadout: st.loadout, weather: st.weather, time: st.time, public: st.public }
       : { laps: st.laps, pickups: st.pickups, loadout: st.loadout, weather: st.weather, time: st.time, tournament: st.tournament, raceBots: st.bots, public: st.public };
     buildSettings('lobby-settings', vals, isHost, (c) => { if (c.raceBots !== undefined) { c.bots = c.raceBots; delete c.raceBots; } socket?.emit('room:settings', c); }); }
-  $('track-note').textContent = isHost ? '— wybierasz jako gospodarz' : '— wybiera gospodarz';
+  $('track-note').textContent = isHost ? '— możesz zmieniać w każdej chwili' : '— zmienia gospodarz';
+  renderLobbyInfo(r, isHost);
   const wantTrack = fieldOf(r.mode) || r.track;
   const trackChanged = wantTrack !== trackId;
   if (trackChanged) { useTrack(wantTrack); me.carIdShown = null; }
   modeButtons('lobby-mode', r.mode, isHost, (m) => socket?.emit('room:mode', m));
   $('lobby-track-section').classList.toggle('hidden', !!fieldOf(r.mode));
-  const btn = $('btn-ready');
-  btn.disabled = !two;
+  const btn = $('btn-ready'), st = $('btn-start');
+  const goLabel = r.mode === 'arena' ? 'Rozpocznij walkę' : r.mode === 'soccer' ? 'Rozpocznij mecz' : 'Rozpocznij wyścig';
+  st.classList.toggle('hidden', !isHost); btn.classList.toggle('hidden', isHost);
+  st.disabled = !two; st.textContent = two ? goLabel : 'Czekam na rywala…';
   btn.classList.toggle('on', !!mine?.ready);
   btn.textContent = mine?.ready ? 'Gotowy ✓' : 'Gotowy';
+  $('lobby-err').textContent = isHost ? '' : 'Gospodarz rozpocznie grę, gdy będziecie gotowi.';
   // auta w tle (showroom)
   const slot = mySlot();
   if (!me.vis || me.carIdShown !== mine?.car || me.slotShown !== slot) { setCar(me, mine?.car || S.carId, slot, mine?.color); me.carIdShown = mine?.car; me.slotShown = slot; }
@@ -1664,6 +1689,11 @@ const bubbles = new Map(); // id gracza -> { el, until }
 let reactCd = 0;
 function updateChatUi() {
   const c = $('chat');
+  const dock = S.mode === 'lobby' && !!S.room && !S.spectator && !!$('lobby-chatslot');
+  if (dock !== c.classList.contains('docked')) {
+    if (dock) { $('lobby-chatslot').append(c); c.classList.add('docked'); $('chat-form').classList.remove('hidden'); }
+    else { if (c.parentElement !== document.body) document.body.append(c); c.classList.remove('docked'); $('chat-form').classList.add('hidden'); }
+  }
   c.classList.toggle('hidden', S.mode === 'menu' || !$('scr-nick').classList.contains('hidden'));
   document.body.classList.toggle('chat-on', !c.classList.contains('hidden'));
 }
@@ -1691,7 +1721,7 @@ function sendReact(i) {
   if (S.room && socket) socket.emit('react', i); else showBubble('me', REACTIONS[i - 1]);
 }
 function openChat() { $('chat-form').classList.remove('hidden'); $('chat').classList.remove('hidden'); keys.clear(); $('chat-input').focus(); }
-function closeChat() { $('chat-form').classList.add('hidden'); $('chat-input').value = ''; $('chat-input').blur(); updateChatUi(); }
+function closeChat() { if (!$('chat').classList.contains('docked')) $('chat-form').classList.add('hidden'); $('chat-input').value = ''; $('chat-input').blur(); updateChatUi(); }
 function updateBubbles() {
   const W = innerWidth, H = innerHeight, now = performance.now();
   for (const [id, b] of [...bubbles]) {
@@ -2203,14 +2233,14 @@ function updateCamera(dt) {
   } else {
     const ol = oppList();
     const base = me.st || ol[0]?.st;
-    const P = new THREE.Vector3(base ? base.x : 0, S.mode === 'menu' ? -2.3 : 0.8, base ? base.z : 0); // w menu auto wyżej w kadrze (nad garażem)
-    const menuView = S.mode === 'menu', a = T * 0.2 + 0.5, r = menuView ? (S.game === 'race' ? 25 : 32) : 15.5 + ol.length * 1.5;
+    const P = new THREE.Vector3(base ? base.x : 0, S.mode === 'menu' || S.mode === 'lobby' ? -2.3 : 0.8, base ? base.z : 0); // w menu auto wyżej w kadrze (nad garażem)
+    const menuView = S.mode === 'menu' || S.mode === 'lobby', a = T * 0.2 + 0.5, r = menuView ? (S.game === 'race' ? 25 : 32) : 15.5 + ol.length * 1.5;
     pos = new THREE.Vector3(P.x + Math.cos(a) * r, (menuView ? r * 0.5 : 8.2) + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
     look = P.clone(); fov = 36;
     if (menuView && menuTab === 'track' && S.game === 'race' && track?.bounds) { // zakładka Tor: widok z góry obejmujący cały tor
       const b = track.bounds, ex = b.maxX - b.minX, ez = b.maxZ - b.minZ, d = Math.max(ez * 2.1, ex * 1.5);
       look = new THREE.Vector3((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2); pos = look.clone().add(new THREE.Vector3(0, d * 0.92, d * 0.4));
-    } shift = S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
+    } shift = 0; tilt = 0.35;
   }
   if (!racingView) cam.racingT = undefined;
   { const ov = S.mode === 'menu' && menuTab === 'track' && S.game === 'race'; if (world.skyline) for (const o of world.skyline) o.visible = !ov; rain.visible = envNow.weather !== 'sun' && !ov; } // w podglądzie toru chowamy wieżowce
@@ -2297,6 +2327,8 @@ function bindUi() {
     socket?.emit('player:ready', !mine?.ready);
   });
   $('btn-leave').addEventListener('click', goMenu);
+  $('btn-start').addEventListener('click', () => socket?.emit('room:start'));
+  $('btn-lobby-custom').addEventListener('click', () => { const b = $('lobby-custom-box'); const open = b.classList.toggle('hidden') === false; $('btn-lobby-custom').classList.toggle('open', open); sfx.tick(0.6); });
   $('btn-menu').addEventListener('click', goMenu);
   $('btn-rematch').addEventListener('click', () => {
     if (S.solo) { startSolo(); return; }

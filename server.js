@@ -526,6 +526,17 @@ io.on('connection', (socket) => {
     if (cars >= 2 && teamsOk && r.players.every((x) => x.ready)) startCountdown(r);
   });
 
+  // gospodarz startuje grę w dowolnym momencie (bez czekania na „Gotowy” pozostałych)
+  socket.on('room:start', () => {
+    const { r } = me();
+    if (!r || !isHost(r, socket) || lockedState(r)) return;
+    const bots = activeBots(r), cars = r.players.length + bots.length;
+    if (cars < 2) return io.to(socket.id).emit('chat', { sys: true, text: 'Potrzebny co najmniej jeden rywal (gracz lub bot).' });
+    if (r.mode === 'soccer' && !['red', 'blue'].every((t) => [...r.players, ...bots].some((x) => x.team === t))) return io.to(socket.id).emit('chat', { sys: true, text: 'Piłka: potrzeba aut w obu drużynach (zmień drużynę lub dodaj boty).' });
+    if (r.state === 'finished') r.state = 'lobby';
+    startCountdown(r);
+  });
+
   // Stan samochodu — relay do pozostałych (nieautorytatywny, bez walidacji fizyki).
   socket.on('race:state', (s) => {
     const { r, p } = me();

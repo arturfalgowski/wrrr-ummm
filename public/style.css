@@ -555,3 +555,42 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 .menu2 .banner { margin-top: 6px; padding: 7px 10px; font-size: 12px; background: rgba(255,194,51,.14); border-color: var(--a1); }
 .menu2 .set { font-size: 12px; }
 @media (max-width: 1050px) { .screen.menu2 { gap: 10px; } }
+
+/* ---------- Lobby v3: ten sam układ i kolory co menu ---------- */
+.lobby2 .m2-top { gap: 14px; }
+.l2-room { display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end; }
+.l2-badge { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.l2-badge small { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.l2-badge .code { font-size: 17px; letter-spacing: .14em; color: var(--a1); background: none; padding: 0; }
+.lobby2 .copyrow { display: flex; gap: 6px; margin: 0; width: min(380px, 38vw); }
+.lobby2 .copyrow input { flex: 1; padding: 6px 10px; font-size: 12px; border-radius: 9px; }
+.l2-hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.lobby2 .m2-left { align-self: stretch; max-height: calc(100vh - 64px); overflow: hidden; display: flex; flex-direction: column; }
+.lobby2 .players { display: grid; gap: 5px; }
+.lobby2 .player { padding: 6px 10px; border-radius: 10px; font-size: 13px; background: var(--bg); border: 1px solid var(--line); }
+.lobby2 .player .st.ok { color: #4cd08a; }
+.l2-info { padding: 8px 10px; font-size: 12px; display: grid; gap: 4px; max-height: 34vh; overflow: auto; }
+.l2-desc { color: var(--text); font-size: 12px; line-height: 1.35; padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.l2-row { display: flex; justify-content: space-between; gap: 10px; }
+.l2-row span { color: var(--muted); } .l2-row b { text-align: right; font-weight: 700; }
+.l2-chat { padding: 8px; flex: 1; min-height: 150px; display: flex; flex-direction: column; }
+#lobby-chatslot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat.docked { position: static; width: 100%; height: 100%; left: auto; bottom: auto; display: flex; flex-direction: column; pointer-events: auto; }
+.chat.docked #chat-log { flex: 1; max-height: none; min-height: 0; overflow-y: auto; justify-content: flex-start; }
+.chat.docked .msg { background: rgba(255,255,255,.06); backdrop-filter: none; font-size: 12px; }
+.chat.docked .msg.sys { background: rgba(255,194,51,.14); color: #ffd98a; }
+.chat.docked #chat-form { margin-top: 6px; }
+.chat.docked #chat-form input { padding: 7px 10px; font-size: 13px; border-radius: 9px; }
+.chat.docked .chat-hint { display: none; }
+.lobby2 .m2-bottom { align-content: end; }
+.lobby2 .m2-garage .seg.wide { grid-template-columns: 1fr 1fr; width: 100%; }
+.lobby2 .m2-garage .cars { grid-template-columns: repeat(5, 1fr); }
+.lobby2 .m2-garage .car-detail { grid-template-columns: 1fr 1fr; align-items: start; gap: 10px; }
+.lobby2 .m2-garage .cd-spec { display: none; }
+.l2-right { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.l2-right .card { flex: none; }
+.l2-right .m2-modes { margin-top: 6px; }
+.l2-right .tracks { grid-template-columns: 1fr 1fr; margin-top: 6px; }
+.l2-right .m2-set { border: 0; background: none; padding: 6px 0 0; }
+.lobby2 .m2-dock .err { color: var(--muted); }
+@media (max-width: 1050px) { .l2-room { flex-wrap: wrap; } .lobby2 .m2-left, .lobby2 .m2-right { max-height: none; } }

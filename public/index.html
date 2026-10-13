@@ -160,33 +160,58 @@
   </aside>
 </section>
 
-<section id="scr-lobby" class="screen left hidden">
-  <div class="card wide">
-    <h3><span id="lobby-title">Wyścig</span> <b id="lobby-code" class="code"></b></h3>
-    <p class="muted" id="lobby-hint">Wyślij ten link drugiemu graczowi:</p>
-    <div class="copyrow" id="copyrow">
-      <input id="lobby-link" readonly>
-      <button class="btn small" id="btn-copy">Kopiuj</button>
-    </div>
-    <div class="players" id="lobby-players"></div>
-    <div id="lobby-team-section" class="hidden"><h3>Drużyna</h3><div class="seg wide" id="lobby-team"></div></div>
-    <h3>Twoje auto <span class="muted" style="text-transform:none;letter-spacing:0">— podgląd widzisz obok; kolory innych graczy są zablokowane</span></h3>
-    <div class="seg wide" id="lobby-cars"></div>
-    <div class="swatches" id="lobby-colors"></div>
-    <details class="detbox"><summary>Personalizacja auta (numer, wzór, felgi)</summary><div class="settings" id="lobby-custom"></div></details>
-    <div class="seg wide2" id="lobby-mode" style="margin-top:16px"></div>
-    <div id="lobby-track-section">
-    <h3>Tor <span class="muted" id="track-note" style="text-transform:none;letter-spacing:0"></span></h3>
-    <div class="tracks" id="lobby-tracks"></div>
-    </div>
-    <h3>Ustawienia</h3>
-    <div class="settings" id="lobby-settings"></div>
-    <div class="row-btns">
-      <button class="btn primary" id="btn-ready">Gotowy</button>
+<section id="scr-lobby" class="screen menu2 lobby2 hidden">
+  <header class="m2-top">
+    <div class="logo">WRRR<span>UMMM</span></div>
+    <div class="l2-room">
+      <span class="l2-badge"><small id="lobby-title">Wyścig</small><b id="lobby-code" class="code"></b></span>
+      <div class="copyrow" id="copyrow"><input id="lobby-link" readonly><button class="btn small" id="btn-copy">Kopiuj</button></div>
       <button class="btn ghost" id="btn-leave">Wyjdź</button>
     </div>
-    <div class="err" id="lobby-err"></div>
-  </div>
+  </header>
+  <aside class="m2-left">
+    <div class="m2-label">Gracze <span id="lobby-hint" class="l2-hint"></span></div>
+    <div class="players" id="lobby-players"></div>
+    <div class="m2-label">Co jest grane</div>
+    <div class="card l2-info" id="lobby-info"></div>
+    <div class="m2-label">Czat</div>
+    <div class="card l2-chat"><div id="lobby-chatslot"></div></div>
+  </aside>
+  <section class="m2-bottom">
+    <div class="m2-garage hidden" id="lobby-team-section">
+      <div class="m2-label">Drużyna</div>
+      <div class="seg wide" id="lobby-team"></div>
+    </div>
+    <div class="m2-garage">
+      <div class="m2-label">Twoje auto</div>
+      <div class="cars" id="lobby-cars"></div>
+      <div class="car-detail" id="lobby-cardetail"></div>
+      <div class="m2-colorrow">
+        <div class="swatches" id="lobby-colors"></div>
+        <button class="link m2-customlink" id="btn-lobby-custom">Personalizacja <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="m2-custom hidden" id="lobby-custom-box"><div class="settings" id="lobby-custom"></div></div>
+    </div>
+    <div class="m2-dock">
+      <button class="btn primary big hidden" id="btn-start">Rozpocznij</button>
+      <button class="btn primary big" id="btn-ready">Gotowy</button>
+      <div class="err" id="lobby-err"></div>
+    </div>
+  </section>
+  <aside class="m2-right l2-right">
+    <div class="card">
+      <div class="m2-label">Tryb gry <span id="track-note" class="l2-hint"></span></div>
+      <div class="m2-modes" id="lobby-mode"></div>
+    </div>
+    <div class="card" id="lobby-track-section">
+      <div class="m2-label">Tor</div>
+      <div class="tracks" id="lobby-tracks"></div>
+    </div>
+    <div class="card">
+      <div class="m2-label">Ustawienia gry</div>
+      <div class="settings m2-set" id="lobby-settings"></div>
+    </div>
+  </aside>
 </section>
 
 <section id="scr-spec" class="screen left hidden">
