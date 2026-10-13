@@ -1234,7 +1234,7 @@ function useMine() {
   me.items.mine--; const id = nextId(), s = me.st.s - 3.2; items.dropMine(id, s, me.st.d, 'me'); emitEvent({ t: 'bomb', id, x: s, z: me.st.d }); sfx.oil(); updateSlots();
 }
 // ---- strefy uszkodzeń: 0 koło p.-prawe, 1 p.-lewe, 2 t.-prawe, 3 t.-lewe, 4 dziób, 5 tył, 6 bok prawy, 7 bok lewy (prawa = +d) ----
-const PART_K = 0.045; // siła obrażeń (hp) → uszkodzenie stref (0..1)
+const PART_K = 0.02; // siła obrażeń (hp) → uszkodzenie stref (0..1)
 const ZONES_SHOT = { 5: 1, 2: 0.6, 3: 0.6, 6: 0.25, 7: 0.25 };
 const ZONES_MINE = { 0: 0.8, 1: 0.8, 2: 0.8, 3: 0.8, 6: 0.4, 7: 0.4, 4: 0.3, 5: 0.3 };
 const zonesWall = (st) => (st.d > 0 ? { 6: 1, 0: 0.8, 2: 0.45, 4: 0.3 } : { 7: 1, 1: 0.8, 3: 0.45, 4: 0.3 });
@@ -1446,12 +1446,12 @@ function updateCamera(dt) {
       cam.u.lerp(_cu, 1 - Math.exp(-dt * 2.6)); cam.u.addScaledVector(cam.f, -cam.u.dot(cam.f)).normalize();
       // bliższa kamera za autem; mysz (przeciąganie) obraca widok wokół auta, kółko przybliża; po puszczeniu wraca za auto
       if (!orbit.drag) { orbit.idle += dt; if (orbit.idle > 1.6) { const kk = 1 - Math.exp(-dt * 3); orbit.yaw -= orbit.yaw * kk; orbit.pitch -= orbit.pitch * kk; } }
-      const dist = (7.4 + clamp(speed - 20, 0, 50) * 0.06) * orbit.zoom, h = (2.7 + clamp(speed - 20, 0, 50) * 0.014) * orbit.zoom;
+      const dist = (5.3 + clamp(speed - 20, 0, 50) * 0.04) * orbit.zoom, h = (1.95 + clamp(speed - 20, 0, 50) * 0.01) * orbit.zoom;
       _cp.set(m.x, m.y, m.z);
       _co.set(0, 0, 0).addScaledVector(cam.f, -dist).addScaledVector(cam.u, h);
       if (orbit.yaw || orbit.pitch) { _co.applyAxisAngle(cam.u, orbit.yaw); _cr.crossVectors(cam.f, cam.u).normalize(); _co.applyAxisAngle(_cr, orbit.pitch); }
       pos = _cp.clone().add(_co);
-      look = _cp.clone().addScaledVector(cam.f, 6).addScaledVector(cam.u, 1.0);
+      look = _cp.clone().addScaledVector(cam.f, 5).addScaledVector(cam.u, 0.85);
       fov = 62 + clamp((speed - 25) / 45, 0, 1) * 9 + (m.nitro ? 8 : 0);
       up = cam.u;
     } else {
