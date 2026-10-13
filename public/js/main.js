@@ -557,28 +557,34 @@ function buildLobbyPickers(r, mine) {
   swatches('lobby-colors', mine?.color, taken, (c) => { S.color = c; store.set('tc_color', c); socket?.emit('player:color', c); });
   if (mine && !($('lobby-custom').contains(document.activeElement))) buildCustomUi('lobby-custom', mine.custom || S.custom, (c) => { S.custom = { ...S.custom, ...c }; store.set('tc_custom', JSON.stringify(S.custom)); socket?.emit('player:custom', S.custom); });
 }
+const MODE_ICONS = {
+  race: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h13l-2.5 4L18 12H5"/></svg>',
+  arena: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
+  soccer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8l3.5 2.5-1.3 4h-4.4l-1.3-4z"/><path d="M12 8V3M15.5 10.5l4.5-1.5M14.2 14.5l2.8 3.7M9.8 14.5L7 18.2M8.5 10.5L4 9"/></svg>',
+};
 function modeButtons(wrapId, current, canPick, onPick) {
   const w = $(wrapId); w.textContent = '';
   for (const [id, name, sub] of [['race', 'Wyścig', 'ściganie się na torze'], ['arena', 'Arena', 'walka do ostatniego żywego'], ['soccer', 'Piłka', 'mecz drużynowy autami']]) {
     const b = document.createElement('button'); b.classList.toggle('sel', current === id); b.disabled = !canPick && current !== id;
-    b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = name; b.querySelector('small').textContent = sub;
+    const ic = wrapId === 'mode-list';
+    b.innerHTML = (ic ? `<span class="ic">${MODE_ICONS[id]}</span>` : '') + '<span class="nm"></span><small></small>'; b.querySelector('.nm').textContent = name; b.querySelector('small').textContent = sub;
     b.addEventListener('click', () => onPick(id)); w.append(b);
   }
 }
 function applyModeUi() {
   const field = S.game !== 'race';
   $('tab-btn-track').classList.toggle('hidden', field);
-  $('tab-btn-settings').textContent = S.game === 'arena' ? 'Ustawienia areny' : S.game === 'soccer' ? 'Ustawienia meczu' : 'Ustawienia wyścigu';
   if (field && menuTab === 'track') showTab('car');
   modeButtons('mode-list', S.game, true, pickMenuMode);
   renderMenuSettings();
   $('btn-solo').textContent = S.game === 'arena' ? 'Arena solo z botami' : S.game === 'soccer' ? 'Piłka solo z botami' : 'Trening solo';
+  $('btn-create').textContent = S.game === 'arena' ? 'Stwórz arenę' : S.game === 'soccer' ? 'Stwórz mecz' : 'Stwórz wyścig';
 }
 let menuTab = 'car';
 function showTab(name) {
   menuTab = name;
   document.querySelectorAll('#menu-tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.tab === name));
-  for (const n of ['car', 'track', 'settings']) $('pane-' + n).classList.toggle('hidden', n !== name);
+  for (const n of ['car', 'track', 'settings', 'rank']) $('pane-' + n).classList.toggle('hidden', n !== name);
 }
 function pickMenuMode(g) {
   S.game = g; store.set('tc_game', g); applyModeUi();
@@ -2172,10 +2178,10 @@ function updateCamera(dt) {
   } else {
     const ol = oppList();
     const base = me.st || ol[0]?.st;
-    const P = new THREE.Vector3(base ? base.x : 0, 0.8, base ? base.z : 0);
+    const P = new THREE.Vector3(base ? base.x : 0, S.mode === 'menu' ? -2.3 : 0.8, base ? base.z : 0); // w menu auto wyżej w kadrze (nad garażem)
     const a = T * 0.2 + 0.5, r = 15.5 + ol.length * 1.5;
     pos = new THREE.Vector3(P.x + Math.cos(a) * r, 8.2 + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
-    look = P.clone(); fov = 36; shift = S.mode === 'menu' || S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
+    look = P.clone(); fov = 36; shift = S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
   }
   if (!racingView) cam.racingT = undefined;
   const k = cam.first ? 1 : 1 - Math.exp(-dt * (racingView ? 2.6 + Math.min(1, cam.racingT / 1.4) * 8 : 2.4));

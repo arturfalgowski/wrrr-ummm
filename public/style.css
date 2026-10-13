@@ -382,3 +382,56 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 #boost-wrap div { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
 #boost-wrap i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff7a1a, #ffd84d); box-shadow: 0 0 12px rgba(255,170,40,.6); }
 #boost-wrap.on i { filter: brightness(1.4); }
+
+/* ---------- Menu główne v2: układ trzech stref wokół auta ---------- */
+.screen.menu2 { display: grid; grid-template-columns: minmax(250px, 310px) 1fr minmax(340px, 420px); grid-template-rows: auto 1fr auto; gap: 14px 22px; padding: 18px clamp(16px, 2.6vw, 40px) 20px; align-items: stretch; }
+.menu2 .m2-top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding-right: 130px; }
+.menu2 .logo { font-size: 34px; }
+.m2-who { display: flex; align-items: center; gap: 12px; padding: 7px 14px 7px 8px; border-radius: 40px; background: var(--bg); border: 1px solid var(--line); backdrop-filter: blur(14px); }
+.m2-who small { display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.m2-who b { font-size: 14px; }
+.m2-av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--a1), var(--a2)); box-shadow: 0 0 0 3px rgba(255,255,255,.12); }
+.m2-left { grid-row: 2 / 4; display: flex; flex-direction: column; gap: 10px; align-self: start; }
+.m2-label { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding-left: 4px; }
+.m2-modes { display: grid; gap: 10px; }
+.m2-modes button { position: relative; display: grid; grid-template-columns: 46px 1fr; grid-template-rows: auto auto; column-gap: 14px; align-items: center; text-align: left; padding: 14px 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); backdrop-filter: blur(16px); color: inherit; font: inherit; cursor: pointer; transition: transform .18s, border-color .18s, background .18s; overflow: hidden; }
+.m2-modes button:hover { transform: translateX(4px); border-color: rgba(255,255,255,.3); }
+.m2-modes button .ic { grid-row: 1 / 3; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.08); color: #fff; }
+.m2-modes button .ic svg { width: 26px; height: 26px; }
+.m2-modes button span:not(.ic) { font-weight: 800; font-size: 17px; letter-spacing: .01em; }
+.m2-modes button small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+.m2-modes button.sel { border-color: transparent; background: linear-gradient(110deg, rgba(255,79,139,.85), rgba(255,140,80,.8)); box-shadow: 0 12px 30px rgba(255,79,139,.35); }
+.m2-modes button.sel small { color: rgba(255,255,255,.85); }
+.m2-modes button.sel .ic { background: rgba(255,255,255,.22); }
+.m2-modes button:disabled:not(.sel) { opacity: .5; cursor: default; }
+.m2-bottom { grid-column: 2; grid-row: 3; display: grid; gap: 14px; align-content: end; justify-items: center; }
+.m2-garage { width: min(640px, 100%); display: grid; gap: 8px; justify-items: center; padding: 12px 14px; border-radius: 20px; background: var(--bg); border: 1px solid var(--line); backdrop-filter: blur(16px); }
+.m2-garage .m2-label { justify-self: start; }
+.m2-garage .cars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; }
+.m2-garage .cars .car { grid-template-columns: 1fr; gap: 4px; padding: 9px 10px; text-align: left; }
+.m2-garage .cars .car .dot { display: none; }
+.m2-garage .cars .car small { display: none; }
+.m2-garage .cars .car .stat { grid-column: 1; }
+.m2-garage .swatches { justify-content: center; }
+.m2-dock { display: grid; gap: 10px; width: min(640px, 100%); }
+.m2-dock .big { width: 100%; font-size: 19px; padding: 16px 20px; letter-spacing: .04em; box-shadow: 0 14px 36px rgba(255,79,139,.4); }
+.m2-dock-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.m2-dock-row .btn { flex: 1 1 150px; padding: 11px 14px; }
+.m2-dock .err { text-align: center; min-height: 0; }
+.m2-right { grid-column: 3; grid-row: 2 / 4; display: flex; flex-direction: column; padding: 14px 16px; min-height: 0; max-height: calc(100vh - 100px); }
+.m2-right .tabs { margin: 0 0 12px; }
+.m2-right .tabpane { flex: 1; min-height: 0; max-height: none; overflow: auto; }
+.m2-right .tracks { grid-template-columns: 1fr 1fr; }
+.m2-right .settings { grid-template-columns: 1fr; }
+.m2-right h3 { margin: 2px 0 10px; }
+@media (max-width: 1050px) {
+  .screen.menu2 { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; overflow: auto; pointer-events: auto; padding-bottom: 40px; }
+  .menu2 .m2-top { padding-right: 0; }
+  .m2-left, .m2-bottom, .m2-right { grid-column: 1; grid-row: auto; }
+  .m2-modes { grid-template-columns: repeat(3, 1fr); }
+  .m2-modes button { grid-template-columns: 1fr; text-align: center; padding: 10px 6px; }
+  .m2-modes button .ic { display: none; }
+  .m2-modes button small { display: none; }
+  .m2-right { max-height: none; }
+  .m2-garage .cars { grid-template-columns: 1fr 1fr; }
+}

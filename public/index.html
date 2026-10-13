@@ -109,49 +109,56 @@
   </div>
 </section>
 
-<section id="scr-menu" class="screen left hidden">
-  <div class="card menucard">
-    <div class="menu-top">
-      <div>
-        <div class="logo small">WRRR<span>UMMM</span></div>
-        <div class="who">Kierowca: <b id="menu-nick"></b> <button class="link" id="btn-change-nick">zmień</button></div>
-      </div>
-      <div class="seg mode-seg" id="mode-list"></div>
-    </div>
+<section id="scr-menu" class="screen menu2 hidden">
+  <header class="m2-top">
+    <div class="logo">WRRR<span>UMMM</span></div>
+    <div class="m2-who"><span class="m2-av"></span><div><small>Kierowca</small><b id="menu-nick"></b></div><button class="link" id="btn-change-nick">zmień</button></div>
+  </header>
+  <aside class="m2-left">
+    <div class="m2-label">Tryb gry</div>
+    <div class="m2-modes" id="mode-list"></div>
     <div class="banner hidden" id="join-banner">Zaproszenie do wyścigu <b id="join-code"></b></div>
+  </aside>
+  <section class="m2-bottom">
+    <div class="m2-garage">
+      <div class="m2-label">Garaż</div>
+      <div class="cars" id="car-list"></div>
+      <div class="swatches" id="menu-colors"></div>
+    </div>
+    <div class="m2-dock">
+      <button class="btn primary big" id="btn-solo">Trening solo</button>
+      <div class="m2-dock-row">
+        <button class="btn primary" id="btn-create">Stwórz pokój</button>
+        <button class="btn primary hidden" id="btn-join">Dołącz do wyścigu</button>
+        <button class="btn" id="btn-quick">Szybka gra</button>
+        <button class="btn ghost" id="btn-rooms">Pokoje publiczne</button>
+      </div>
+      <div class="err" id="menu-err"></div>
+    </div>
+  </section>
+  <aside class="m2-right card">
     <nav class="tabs" id="menu-tabs">
-      <button data-tab="car" class="sel">Auto i wygląd</button>
+      <button data-tab="car" class="sel">Wygląd</button>
       <button data-tab="track" id="tab-btn-track">Tor</button>
-      <button data-tab="settings" id="tab-btn-settings">Ustawienia wyścigu</button>
+      <button data-tab="settings" id="tab-btn-settings">Ustawienia</button>
+      <button data-tab="rank" id="tab-btn-rank">Ranking</button>
     </nav>
     <div class="tabpane" id="pane-car">
-      <div class="cars" id="car-list"></div>
-      <div class="pane-cols">
-        <div><h3>Kolor auta</h3><div class="swatches" id="menu-colors"></div></div>
-        <div><h3>Personalizacja</h3><div class="settings" id="menu-custom"></div></div>
-      </div>
+      <h3>Personalizacja auta</h3>
+      <div class="settings" id="menu-custom"></div>
     </div>
     <div class="tabpane hidden" id="pane-track">
       <div class="tracks" id="track-list"></div>
     </div>
     <div class="tabpane hidden" id="pane-settings">
-      <div class="settings two" id="menu-settings"></div>
+      <div class="settings" id="menu-settings"></div>
     </div>
-    <div class="menu-actions">
-      <button class="btn primary big" id="btn-solo">Trening solo</button>
-      <button class="btn primary" id="btn-create">Stwórz wyścig</button>
-      <button class="btn primary hidden" id="btn-join">Dołącz do wyścigu</button>
-      <button class="btn" id="btn-quick">Szybka gra</button>
-      <button class="btn ghost" id="btn-rooms">Pokoje publiczne</button>
+    <div class="tabpane hidden" id="pane-rank">
+      <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button><button data-m="soccer">Piłka</button></div>
+      <ol id="rank-menu" class="ranklist"></ol>
+      <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
     </div>
-    <div class="err" id="menu-err"></div>
-  </div>
-  <div class="card rank">
-    <h3>Ranking</h3>
-    <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button><button data-m="soccer">Piłka</button></div>
-    <ol id="rank-menu" class="ranklist"></ol>
-    <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
-  </div>
+  </aside>
 </section>
 
 <section id="scr-lobby" class="screen left hidden">
