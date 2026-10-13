@@ -14,8 +14,8 @@ function canvasTex(w, h, draw, { repeat = null, aniso = 8 } = {}) {
 }
 
 /** Pas czworokątów wzdłuż toru między offsetami bocznymi offA..offB na wysokości h nad powierzchnią (po normalnej U). */
-function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = null, from = 0, to = track.N - 1 } = {}) {
-  const pos = [], uv = [], col = [], idx = []; let n = 0; const c = new THREE.Color();
+function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = null, from = 0, to = track.N - 1, info = null } = {}) {
+  const pos = [], uv = [], col = [], idx = [], inf = []; let n = 0; const c = new THREE.Color();
   const hf = typeof h === 'function' ? h : () => h;
   for (let i = from; i < to; i++) {
     if (!pred(i) || !track.surf[i] || !track.surf[i + 1]) continue;
@@ -24,6 +24,7 @@ function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = n
       const hh = hf(k);
       pos.push(track.px[k] + track.rx[k] * off + track.ux[k] * hh, track.py[k] + track.ry[k] * off + track.uy[k] * hh, track.pz[k] + track.rz[k] * off + track.uz[k] * hh);
       uv.push(u, k * DS / vScale);
+      if (info) inf.push(info(k), off, k * DS); // pokrycie, odległość boczna [m], odległość wzdłuż toru [m]
       if (color) { color(i, c); col.push(c.r, c.g, c.b); }
     }
     idx.push(n, n + 1, n + 2, n, n + 2, n + 3); n += 4;
@@ -31,6 +32,7 @@ function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = n
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   if (color) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  if (info) g.setAttribute('aInfo', new THREE.Float32BufferAttribute(inf, 3));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 /** Pionowa ściana wzdłuż toru (po normalnej U) na offsecie bocznym off od h0 do h1. */
@@ -70,7 +72,6 @@ function cobbleTexture(T) {
       x.beginPath(); x.roundRect(c * cw + ox + 2, r * rh + 2, cw - 4, rh - 4, 6); x.fill();
       x.fillStyle = 'rgba(255,255,255,0.06)'; x.fillRect(c * cw + ox + 4, r * rh + 4, cw - 10, 3);
     }
-    x.fillStyle = 'rgba(245,240,230,0.55)'; x.fillRect(w * 0.04, 0, 4, h); x.fillRect(w * 0.96 - 4, 0, 4, h);
   });
 }
 function sandTexture(T) {
@@ -79,7 +80,6 @@ function sandTexture(T) {
     x.fillStyle = base; x.fillRect(0, 0, w, h);
     for (let i = 0; i < 9000; i++) { x.fillStyle = rnd() > 0.5 ? `rgba(255,200,140,${0.04 + rnd() * 0.08})` : `rgba(90,60,25,${0.05 + rnd() * 0.12})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); }
     for (const cxr of [w * 0.32, w * 0.68]) { const g = x.createLinearGradient(cxr - 18, 0, cxr + 18, 0); g.addColorStop(0, 'rgba(80,55,25,0)'); g.addColorStop(0.5, 'rgba(30,18,8,0.45)'); g.addColorStop(1, 'rgba(80,55,25,0)'); x.fillStyle = g; x.fillRect(cxr - 18, 0, 36, h); }
-    x.fillStyle = 'rgba(255,248,225,0.85)'; x.fillRect(w * 0.04, 0, 6, h); x.fillRect(w * 0.96 - 4, 0, 4, h);
   });
 }
 const checkerTex = (cols, rows) => canvasTex(64 * cols, 64 * rows, (x) => { for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { x.fillStyle = (r + c) % 2 ? '#101018' : '#f4f4f8'; x.fillRect(c * 64, r * 64, 64, 64); } });
@@ -204,12 +204,35 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   world.farDist = farDist;
 
   // ---------- jezdnia ----------
+  // asfalt na całej długości; piasek i kostka to nakładki z nieregularną krawędzią (szum w shaderze): piasek „wysypany” na asfalt
   world.roadMats = [];
-  for (const [type, mk, rough, vs] of [[0, () => asphaltTexture(T.asphalt, T.centerLine), 0.86, 32], [1, () => cobbleTexture(T), 0.8, 16], [2, () => sandTexture(T), 0.95, 32]]) {
-    if (!track.zone.some((z) => z === type)) continue;
-    const m = new THREE.Mesh(ribbon(track, -HW, HW, 0.02, { vScale: vs, pred: (i) => track.zone[i] === type }), new THREE.MeshStandardMaterial({ map: mk(), roughness: rough, side: THREE.DoubleSide }));
-    m.receiveShadow = true; root.add(m); world.roadMats.push(m.material); if (type === 0) world.asphaltMat = m.material;
-  }
+  const road = new THREE.Mesh(ribbon(track, -HW, HW, 0.02, { vScale: 32 }), new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt, T.centerLine), roughness: 0.86, side: THREE.DoubleSide }));
+  road.receiveShadow = true; root.add(road); world.roadMats.push(road.material); world.asphaltMat = road.material;
+  const overlay = (cov, mk, rough, vs, mode) => {
+    if (!cov.some((v) => v > 0.004)) return;
+    const mat = new THREE.MeshStandardMaterial({ map: mk(), roughness: rough, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aInfo;\nvarying vec3 vInfo;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvInfo = aInfo;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying vec3 vInfo;
+        float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnz(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+        float fbmz(vec2 p) { return 0.5 * vnz(p) + 0.25 * vnz(p * 2.1) + 0.125 * vnz(p * 4.3) + 0.0625 * vnz(p * 8.9); }`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+        { float cov = vInfo.x; vec2 q = vec2(vInfo.y, vInfo.z);
+          float edge = pow(abs(vInfo.y) / ${HW.toFixed(1)}, 2.0) * 0.22 * smoothstep(0.0, 0.18, cov);
+          ${mode === 'sand'
+            ? 'float n = fbmz(vec2(q.x * 0.22, q.y * 0.075) + 3.7) * 0.75 + vnz(q * 1.9) * 0.25; float v = cov * 1.12 + edge - n * 0.82;'
+            : 'vec2 cell = floor(vec2(q.x * 0.9, q.y * 0.9)); float n = h21(cell) * 0.55 + fbmz(vec2(q.x * 0.3, q.y * 0.14) + 9.1) * 0.45; float v = cov * 1.2 + edge - n * 0.9;'}
+          float a = smoothstep(0.0, ${mode === 'sand' ? '0.11' : '0.05'}, v) * smoothstep(0.0, 0.03, cov);
+          diffuseColor.a *= a; }`);
+    };
+    mat.customProgramCacheKey = () => 'roadov-' + mode;
+    const m = new THREE.Mesh(ribbon(track, -HW, HW, 0.03, { vScale: vs, pred: (i) => cov[i] > 0.004 || cov[i + 1] > 0.004, info: (k) => cov[k] }), mat);
+    m.receiveShadow = true; m.renderOrder = 1; root.add(m); world.roadMats.push(mat);
+  };
+  overlay(track.covCob, () => cobbleTexture(T), 0.8, 16, 'cobble');
+  overlay(track.covSand, () => sandTexture(T), 0.95, 32, 'sand');
   // bryła pod jezdnią (grubość) i boki
   const concrete = new THREE.MeshStandardMaterial({ color: T.slab, roughness: 0.9, side: THREE.DoubleSide });
   const under = new THREE.Mesh(ribbon(track, -HW - 0.5, HW + 0.5, -1.5), concrete);
@@ -267,7 +290,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
     const beam = new THREE.Mesh(new THREE.BoxGeometry(2, 2.6, w * 2 + 1), [steel, steel, steel, steel, new THREE.MeshStandardMaterial({ map: textTex(label, bg, fg, 512, 128), roughness: 0.5, emissive: 0xffffff, emissiveMap: textTex(label, bg, fg, 512, 128), emissiveIntensity: 0.25 }), new THREE.MeshStandardMaterial({ map: textTex(label, bg, fg, 512, 128), roughness: 0.5 })]);
     beam.position.set(0, 9.8, 0); beam.castShadow = true; g.add(beam);
     const line = new THREE.Mesh(new THREE.PlaneGeometry(3, HW * 2), new THREE.MeshStandardMaterial({ map: checkerTex(2, 8), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }));
-    line.rotation.x = -Math.PI / 2; line.rotation.z = Math.PI / 2; line.position.set(0, 0.07, 0); g.add(line);
+    line.rotation.x = -Math.PI / 2; line.position.set(0, 0.07, 0); g.add(line); // 3 m wzdłuż toru, szerokość jezdni w poprzek
     root.add(g);
   };
   gate(track.startS, 'START / META', '#12141d', '#ffd84d');

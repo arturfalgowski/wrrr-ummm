@@ -598,3 +598,31 @@ body.spectating .hud-items { display: none !important; }
 #car-dmg { display: block; margin: 6px auto 0; width: 30px; height: 52px; overflow: visible; }
 #car-dmg rect { fill: #3ee08a; stroke: rgba(0,0,0,.45); stroke-width: .8; transition: fill .25s, opacity .25s; }
 #car-dmg rect.lost { opacity: .3; }
+
+/* światła startowe jak w F1: 3 czerwone, 2 pomarańczowe, po zgaśnięciu/zmianie — zielone */
+#startlights { position: absolute; left: 0; right: 0; top: 14%; display: flex; justify-content: center; pointer-events: none; transition: opacity .6s; }
+#startlights.hidden { display: none; }
+#startlights.fade { opacity: 0; }
+#startlights .gantry { display: flex; gap: clamp(10px, 2.4vw, 26px); padding: clamp(10px, 2vw, 20px) clamp(14px, 3vw, 30px); background: linear-gradient(#17171d, #0b0b10); border: 2px solid #2a2a34; border-radius: 18px; box-shadow: 0 14px 40px rgba(0,0,0,.55), inset 0 2px 0 rgba(255,255,255,.07); }
+#startlights .lamp { width: clamp(36px, 7vw, 76px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #2c2c34, #101015 70%); box-shadow: inset 0 0 0 3px #08080b, inset 0 -6px 12px rgba(0,0,0,.6); transition: background .08s, box-shadow .08s; }
+#startlights .lamp.red { background: radial-gradient(circle at 35% 30%, #ff9a8a, #ff1f1f 45%, #9b0b0b 100%); box-shadow: inset 0 0 0 3px #08080b, 0 0 28px 6px rgba(255,40,30,.75); }
+#startlights .lamp.amber { background: radial-gradient(circle at 35% 30%, #ffe3a0, #ff9d0a 45%, #a85a00 100%); box-shadow: inset 0 0 0 3px #08080b, 0 0 28px 6px rgba(255,160,20,.75); }
+#startlights .lamp.green { background: radial-gradient(circle at 35% 30%, #c8ffd9, #1fe36b 45%, #0a8a3a 100%); box-shadow: inset 0 0 0 3px #08080b, 0 0 32px 8px rgba(40,240,120,.8); }
+
+/* podium na mecie */
+#fw-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+#scr-results .card { position: relative; z-index: 1; }
+.card.res.wide { width: min(760px, 94vw); max-width: none; }
+.res-winner { margin-top: 8px; font-size: clamp(22px, 4.4vw, 34px); font-weight: 900; letter-spacing: .02em; color: #ffe08a; text-shadow: 0 0 24px rgba(255,210,74,.55); font-variant-numeric: tabular-nums; }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; margin: 18px 0 6px; min-height: 250px; }
+.pod { display: flex; flex-direction: column; align-items: center; width: clamp(96px, 26%, 200px); opacity: 0; transform: translateY(60px); animation: podIn .7s cubic-bezier(.2,.9,.25,1.1) var(--delay) forwards; }
+.pod .pname { font-weight: 800; font-size: 15px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pod.me .pname { color: #ffd9a0; }
+.pod .ptime { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.pod .pcar { width: 86%; margin: 4px 0 -2px; }
+.pod .pcar-svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 4px 6px rgba(0,0,0,.45)); }
+.pod .pblock { width: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; font-style: italic; color: rgba(20,16,32,.85); border-radius: 10px 10px 0 0; background: linear-gradient(180deg, color-mix(in srgb, var(--medal) 100%, #fff 25%), var(--medal) 55%, color-mix(in srgb, var(--medal) 100%, #000 35%)); box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 10px 30px rgba(0,0,0,.35); }
+.pod.p1 .pblock { height: 120px; } .pod.p2 .pblock { height: 88px; } .pod.p3 .pblock { height: 64px; }
+.pod.p1 .pname { font-size: 18px; color: #ffe08a; }
+@keyframes podIn { to { opacity: 1; transform: none; } }
+@media (max-width: 560px) { .podium { gap: 6px; min-height: 210px; } .pod .pblock { font-size: 28px; } .pod .pname { font-size: 13px; } }

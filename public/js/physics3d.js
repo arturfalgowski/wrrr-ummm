@@ -121,7 +121,7 @@ export class CarState {
       else vf = Math.max(-def.maxSpeed * 0.3, vf - def.accel * 0.55 * h);
     }
     // opory (piasek hamuje mocniej)
-    vf -= vf * (0.025 + (f.grip < 0.85 ? 0.07 : 0)) * h;
+    vf -= vf * (0.025 + 0.07 * (f.sand ?? 0)) * h;
     if (Math.abs(vf) > 0.05) vf -= Math.sign(vf) * 0.5 * h; else vf = 0;
     if (vf > vmax) vf -= (vf - vmax) * Math.min(1, 3 * h);
     if (input.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), (8 + Math.abs(vl) * 0.12) * h);
@@ -264,30 +264,31 @@ export class CarState {
   }
 }
 
-/** kolizja dwóch aut (dwa okręgi po 1,35 m w 3D); zmienia tylko `me` w torze (s, d, prędkości) */
+/** kolizja dwóch aut: obrys z 3 okręgów (R = 1,6 m) wzdłuż auta, zmienia tylko `me` w torze (s, d, prędkości, lekki obrót od uderzenia) */
+const COL_R = 1.62, COL_OFF = [-1.75, 0, 1.75];
 export function carVsCar(me, opp, track) {
-  if (me.air || opp.air) return 0;
-  const R = 1.35, off = 1.45;
+  if (me.air || opp.air || me.dead || opp.dead) return 0;
   const dx0 = opp.x - me.x, dy0 = opp.y - me.y, dz0 = opp.z - me.z;
-  if (dx0 * dx0 + dy0 * dy0 + dz0 * dz0 > 42) return 0;
+  if (dx0 * dx0 + dy0 * dy0 + dz0 * dz0 > 90) return 0;
   const f = track.at(me.s, me._f);
   let hit = 0;
-  for (const sa of [off, -off]) for (const sb of [off, -off]) {
+  for (const sa of COL_OFF) for (const sb of COL_OFF) {
     const ax = me.x + me.fx * sa, ay = me.y + me.fy * sa, az = me.z + me.fz * sa;
     const bx = opp.x + opp.fx * sb, by = opp.y + opp.fy * sb, bz = opp.z + opp.fz * sb;
     let dx = ax - bx, dy = ay - by, dz = az - bz;
     const dist = Math.hypot(dx, dy, dz);
-    if (dist < 2 * R && dist > 1e-4) {
+    if (dist < 2 * COL_R && dist > 1e-4) {
       dx /= dist; dy /= dist; dz /= dist;
-      const pen = 2 * R - dist;
-      const pt = pen * 0.6 * (dx * f.tx + dy * f.ty + dz * f.tz), pr = pen * 0.6 * (dx * f.rx + dy * f.ry + dz * f.rz);
-      me.s += pt; me.d = clamp(me.d + pr, -HW + 1, HW - 1);
+      const pen = 2 * COL_R - dist;
+      const nt = dx * f.tx + dy * f.ty + dz * f.tz, nr = dx * f.rx + dy * f.ry + dz * f.rz;
+      me.s += pen * 0.55 * nt; me.d = clamp(me.d + pen * 0.55 * nr, -HW + 1, HW - 1);
       const rel = (me.vx - opp.vx) * dx + (me.vy - opp.vy) * dy + (me.vz - opp.vz) * dz;
       if (rel < 0) {
-        const j = -(1 + 0.35) * rel * 0.5;
-        const dvt = j * (dx * f.tx + dy * f.ty + dz * f.tz), dvr = j * (dx * f.rx + dy * f.ry + dz * f.rz);
+        const j = -(1 + 0.4) * rel * 0.5;
+        const dvt = j * nt, dvr = j * nr;
         const c = Math.cos(me.phi), sn = Math.sin(me.phi);
         me.vf += dvt * c + dvr * sn; me.vl += -dvt * sn + dvr * c;
+        me.phi += clamp(-sa * nr * j * 0.012, -0.12, 0.12); // uderzenie z boku obraca auto wokół punktu styku
         hit = Math.max(hit, -rel);
       }
     }

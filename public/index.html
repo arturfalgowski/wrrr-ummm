@@ -76,6 +76,7 @@
     <kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> karabin &nbsp; <kbd>E</kbd> olej &nbsp; <kbd>Q</kbd> mina &nbsp; <kbd>R</kbd> powrót na checkpoint &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>Esc</kbd> pauza
   </div>
   <div id="countdown"></div>
+  <div id="startlights" class="hidden"><div class="gantry"><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span><span class="lamp"></span></div></div>
   <div id="toast"></div>
 </div>
 
@@ -209,10 +210,13 @@
 </section>
 
 <section id="scr-results" class="screen center hidden">
-  <div class="card res">
+  <canvas id="fw-canvas"></canvas>
+  <div class="card res wide">
     <div class="res-title" id="res-title">Wygrana!</div>
     <div class="res-sub" id="res-sub"></div>
-    <table class="restable" id="res-table"></table>
+    <div class="res-winner" id="res-winner"></div>
+    <div class="podium" id="podium"></div>
+    <table class="restable hidden" id="res-table"></table>
     <div class="tour hidden" id="tour-box" style="display:none"><h4 id="tour-title">Turniej</h4><table class="restable" id="tour-table"></table><div class="muted" id="tour-note" style="font-size:12px;margin-top:6px"></div><div class="tracks" id="tour-tracks" style="margin-top:10px"></div></div>
     <div class="rematch hidden" id="rematch-box"><h4>Rewanż</h4><div id="rematch-list"></div></div>
     <h4 id="rank-results-title">Ranking</h4>

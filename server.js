@@ -138,10 +138,9 @@ function startCountdown(r) {
   for (const b of activeBots(r)) { b.progress = 0; b.finishTime = null; }
   r.env = resolveEnv(r); r.pickups = new Map();
   io.to(r.id).emit('race:prepare', publicRoom(r));
-  later(r, 800, () => io.to(r.id).emit('race:count', 3));
-  later(r, 1800, () => io.to(r.id).emit('race:count', 2));
-  later(r, 2800, () => io.to(r.id).emit('race:count', 1));
-  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
+  // światła startowe jak w F1: 5 lamp zapala się co 0,8 s (3 czerwone, 2 pomarańczowe), po losowej chwili zielone = start
+  for (let n = 1; n <= 5; n++) later(r, 800 * n, () => io.to(r.id).emit('race:count', n));
+  later(r, 4000 + 600 + Math.random() * 900, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
 }
 
 /** paczki losowane na torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne); klient dopasowuje je do jezdni */

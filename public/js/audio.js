@@ -114,6 +114,17 @@ export class CarAudio {
     this.rlp = ctx.createBiquadFilter(); this.rlp.type = 'lowpass'; this.rlp.frequency.value = 500;
     this.rg = ctx.createGain(); this.rg.gain.value = 0;
     this.rn.connect(this.rlp).connect(this.rg).connect(this.out); this.rn.start();
+    // kostka: rytmiczny dudniący stukot (częstość z prędkością); piasek: szum sypiącego się piasku
+    this.cn = noiseSrc(); this.clp = ctx.createBiquadFilter(); this.clp.type = 'lowpass'; this.clp.frequency.value = 320; this.clp.Q.value = 0.9;
+    this.cam = ctx.createGain(); this.cam.gain.value = 0.5; this.cg = ctx.createGain(); this.cg.gain.value = 0;
+    this.clfo = ctx.createOscillator(); this.clfo.type = 'square'; this.clfo.frequency.value = 12; this.clfoG = ctx.createGain(); this.clfoG.gain.value = 0.5; this.clfo.connect(this.clfoG).connect(this.cam.gain);
+    this.cn.connect(this.clp).connect(this.cam).connect(this.cg).connect(this.out);
+    this.cbp = ctx.createBiquadFilter(); this.cbp.type = 'bandpass'; this.cbp.frequency.value = 1100; this.cbp.Q.value = 1.4; this.cg2 = ctx.createGain(); this.cg2.gain.value = 0; // „kliknięcia” kamieni
+    this.cn.connect(this.cbp).connect(this.cam); this.cam.connect(this.cg2).connect(this.out);
+    this.hn = noiseSrc(); this.hbp = ctx.createBiquadFilter(); this.hbp.type = 'bandpass'; this.hbp.frequency.value = 1500; this.hbp.Q.value = 0.5; this.hg = ctx.createGain(); this.hg.gain.value = 0;
+    this.hlp = ctx.createBiquadFilter(); this.hlp.type = 'lowpass'; this.hlp.frequency.value = 380; this.hg2 = ctx.createGain(); this.hg2.gain.value = 0;
+    this.hn.connect(this.hbp).connect(this.hg).connect(this.out); this.hn.connect(this.hlp).connect(this.hg2).connect(this.out);
+    this.cn.start(); this.clfo.start(); this.hn.start(); this.surfK = 0;
     this.rpm = RPM_IDLE; this.gear = 0; this.cut = 0; this.lastThr = 0; this.popCd = 0; this.shiftCd = 0; this.limT = 0;
   }
 
@@ -125,7 +136,7 @@ export class CarAudio {
   }
 
   /** speed: prędkość względem maksymalnej (może przekraczać 1 z nitro), throttle 0..1, slip 0..1, rough 0..1, brake 0..1 */
-  update({ speed, throttle, slip, rough, brake = 0, active = true, nitro = false }, dt) {
+  update({ speed, throttle, slip, rough, brake = 0, active = true, nitro = false, sandK = 0, cobK = 0 }, dt) {
     if (!this.on) return;
     const t = ctx.currentTime;
     const sp = Math.abs(speed);
@@ -178,8 +189,9 @@ export class CarAudio {
     this.wg.gain.setTargetAtTime(active ? Math.min(1, sp * sp) * 0.2 : 0, t, 0.1);
     // opony: szum + pisk (zakręt w poślizgu, drift) oraz pisk hamowania na dużej prędkości
     const brk = brake > 0.5 && sp > 0.28 ? Math.min(1, (brake - 0.4) * 1.6) * Math.min(1, sp * 1.5) * 0.85 : 0;
-    const sq = Math.min(1, Math.max(slip, brk));
-    this.sg.gain.setTargetAtTime(Math.min(1, slip) * 0.34 + brk * 0.18, t, 0.04);
+    const surfMul = (1 - sandK * 0.85) * (1 - cobK * 0.55); // na piasku/kostce pisk jest cichszy, ale pojawia się inny dźwięk
+    const sq = Math.min(1, Math.max(slip, brk)) * surfMul;
+    this.sg.gain.setTargetAtTime((Math.min(1, slip) * 0.34 + brk * 0.18) * (1 - sandK * 0.5), t, 0.04);
     this.sog.gain.setTargetAtTime(sq ** 1.15 * 0.2, t, 0.05);
     this.slfoG.gain.setTargetAtTime(0.18 + sq * 0.35, t, 0.1);
     this.slfo.frequency.setTargetAtTime(30 + sq * 40, t, 0.1);
@@ -190,13 +202,22 @@ export class CarAudio {
     this.sob.frequency.setTargetAtTime(1250 + slip * 700 + sp * 500, t, 0.05);
     this.sbp.frequency.setTargetAtTime(1500 + slip * 1000, t, 0.05);
     this.rg.gain.setTargetAtTime(Math.min(1, rough) * Math.min(1, sp * 2) * 0.5, t, 0.08);
+    // kostka: stukot w rytmie kamieni (ok. 3 m między szwami), z prędkością rośnie częstość
+    const mv = Math.min(1, sp * 1.6), ms = sp * 82; // prędkość w m/s
+    this.clfo.frequency.setTargetAtTime(4 + ms / 2.4, t, 0.1);
+    this.cg.gain.setTargetAtTime(active ? cobK * mv * 0.75 : 0, t, 0.08); this.cg2.gain.setTargetAtTime(active ? cobK * mv * 0.28 : 0, t, 0.08);
+    // piasek: szorstki szum i niski chrzęst, bez pisku
+    this.hbp.frequency.setTargetAtTime(1000 + sp * 1800, t, 0.1);
+    this.hg.gain.setTargetAtTime(active ? sandK * mv * 0.34 : 0, t, 0.08); this.hg2.gain.setTargetAtTime(active ? sandK * mv * 0.5 : 0, t, 0.08);
+    if ((sandK > 0.5) !== (this.surfK > 0.5) || (cobK > 0.5) !== (this.cobPrev > 0.5)) { if (active && sp > 0.1) this._burst(sandK > 0.5 ? 1800 : 400, 0.1, 0.18, 0.8); }
+    this.surfK = sandK; this.cobPrev = cobK;
   }
 
   stop() {
     if (!this.on) return;
     const t = ctx.currentTime;
     this.out.gain.setTargetAtTime(0, t, 0.05);
-    setTimeout(() => { [this.o1, this.o2, this.o3, this.o4, this.lfo, this.in, this.to, this.wn, this.sn, this.rn, this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
+    setTimeout(() => { [this.o1, this.o2, this.o3, this.o4, this.lfo, this.cn, this.clfo, this.hn, this.in, this.to, this.wn, this.sn, this.rn, this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
   }
 }
 
@@ -229,9 +250,9 @@ export const sfx = {
     tone({ type: 'sine', f: 150, f2: 38, dur: 0.3, gain: 0.7 * p + 0.15 });
     tone({ type: 'square', f: 320 + Math.random() * 80, f2: 120, dur: 0.12, gain: 0.08 * p });
   },
-  beep(go = false) {
-    if (go) { tone({ type: 'square', f: 880, dur: 0.7, gain: 0.22, attack: 0.01 }); tone({ type: 'sawtooth', f: 1320, dur: 0.7, gain: 0.08 }); }
-    else tone({ type: 'square', f: 440, dur: 0.22, gain: 0.2, attack: 0.01 });
+  beep(go = false, n = 1) {
+    if (go) { tone({ type: 'square', f: 1046, dur: 0.9, gain: 0.24, attack: 0.01 }); tone({ type: 'sawtooth', f: 1568, dur: 0.9, gain: 0.09 }); }
+    else { tone({ type: 'square', f: 520 + (n - 1) * 40, dur: 0.16, gain: 0.2, attack: 0.005 }); tone({ type: 'sine', f: 1040 + (n - 1) * 80, dur: 0.12, gain: 0.07 }); }
   },
   lap() { tone({ type: 'triangle', f: 660, dur: 0.12, gain: 0.2 }); tone({ type: 'triangle', f: 990, dur: 0.18, gain: 0.2, when: 0.1 }); },
   kick(power = 0.5) {
@@ -316,6 +337,14 @@ export const sfx = {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
     src.connect(lp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 1.4);
     tone({ type: 'sine', f: 110, f2: 28, dur: 0.9, gain: 0.9 });
+  },
+  firework() {
+    if (!ctx) return; const t = ctx.currentTime;
+    tone({ type: 'sine', f: 500 + Math.random() * 400, f2: 1800, dur: 0.35, gain: 0.05 });
+    const src = noiseSrc(), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1400;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t + 0.34); g.gain.exponentialRampToValueAtTime(0.28, t + 0.36); g.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+    src.connect(hp).connect(g).connect(master); src.start(t, Math.random()); src.stop(t + 1.2);
+    tone({ type: 'sine', f: 140, f2: 50, dur: 0.3, gain: 0.25, when: 0.34 });
   },
   thunder() {
     if (!ctx) return; const t = ctx.currentTime;

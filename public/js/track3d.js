@@ -89,15 +89,25 @@ export class Track3D {
     const zone = new Uint8Array(N), bridge = new Float32Array(N), tunnel = new Float32Array(N), grip = new Float32Array(N).fill(1);
     this.bridges = []; this.tunnels = [];
     const GRIP = { cobble: 0.9, sand: 0.8 };
+    // pokrycie nawierzchni 0..1 wzdłuż toru: pełne w strefie, wygasa na TR m po obu stronach (nieregularne przejście rysuje shader)
+    const TR = 120, covSand = new Float32Array(N), covCob = new Float32Array(N);
+    const addCov = (arr, i0, i1) => {
+      for (let i = 0; i < n; i++) {
+        let d = 0; if (i < i0) d = Math.min(i0 - i, i + n - i1); else if (i > i1) d = Math.min(i - i1, i0 + n - i);
+        const k = Math.max(0, 1 - d / TR); if (k > arr[i]) arr[i] = k;
+      }
+    };
     for (const z of def.zones || []) {
       const i0 = Math.round(z.a * n), i1 = Math.round(z.b * n);
-      if (z.type === 'cobble' || z.type === 'sand') for (let i = i0; i <= i1; i++) { zone[i] = z.type === 'cobble' ? 1 : 2; grip[i] = GRIP[z.type]; }
+      if (z.type === 'cobble' || z.type === 'sand') { addCov(z.type === 'sand' ? covSand : covCob, i0, i1); for (let i = i0; i <= i1; i++) zone[i] = z.type === 'cobble' ? 1 : 2; }
       else if (z.type === 'bridge') { this.bridges.push({ i0, i1 }); for (let i = i0; i <= i1; i++) bridge[i] = 1; }
       else if (z.type === 'tunnel') { this.tunnels.push({ i0, i1 }); for (let i = i0 - 7; i <= i1 + 7; i++) tunnel[i] = Math.min(1, (i - (i0 - 7)) / 14, ((i1 + 7) - i) / 14); }
     }
     const blur = (a, w, passes) => { for (let p = 0; p < passes; p++) { const o = new Float32Array(N); for (let i = 0; i < N; i++) { let t = 0; for (let j = -w; j <= w; j++) t += a[(i + j + n) % n]; o[i] = t / (2 * w + 1); } o[n] = o[0]; a.set(o); } };
     blur(bridge, 36, 2);
-    Object.assign(this, { zone, bridgeK: bridge, tunnelK: tunnel, gripArr: grip });
+    covSand[n] = covSand[0]; covCob[n] = covCob[0];
+    for (let i = 0; i < N; i++) grip[i] = 1 - (1 - GRIP.sand) * covSand[i] - (1 - GRIP.cobble) * covCob[i]; // przyczepność zmienia się płynnie razem z nawierzchnią
+    Object.assign(this, { zone, bridgeK: bridge, tunnelK: tunnel, gripArr: grip, covSand, covCob });
   }
 
   /** czy pad p obejmuje punkt s (okrąża modulo długość okrążenia) */
@@ -128,8 +138,14 @@ export class Track3D {
     let k = Math.hypot(o.tx, o.ty, o.tz) || 1; o.tx /= k; o.ty /= k; o.tz /= k;
     k = Math.hypot(o.ux, o.uy, o.uz) || 1; o.ux /= k; o.uy /= k; o.uz /= k;
     k = Math.hypot(o.rx, o.ry, o.rz) || 1; o.rx /= k; o.ry /= k; o.rz /= k;
-    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]); o.wall = 1; o.surf = 1; o.grip = this.gripArr[i];
+    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]); o.wall = 1; o.surf = 1; o.grip = l(this.gripArr[i], this.gripArr[j]); o.sand = l(this.covSand[i], this.covSand[j]);
     return o;
+  }
+  /** nawierzchnia pod autem w (s, d): { sand, cob } 0..1 — piasek jest wywiany bardziej ku krawędziom jezdni */
+  surfAt(s, d, o = {}) {
+    const L = this.length, i = Math.floor((((s % L) + L) % L) / DS), t = Math.abs(d) / HW, e = 0.22 * t * t;
+    const sa = this.covSand[i], co = this.covCob[i];
+    o.sand = sa > 0.01 ? Math.min(1, sa + e * Math.min(1, sa * 4)) : 0; o.cob = co > 0.01 ? Math.min(1, co + e * 0.5) : 0; return o;
   }
   /** pozycja świata punktu (s, d) na powierzchni (+ wysokość h nad nią) */
   pos(s, d, h = 0, o = {}) {

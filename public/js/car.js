@@ -272,7 +272,7 @@ export function buildCar(id, number, color = null, custom = null) {
     group, body, wheels, tailMat, def, model: M, headMat,
     /** noc: mocniej świecące reflektory */
     setNight(k) { headMat.emissiveIntensity = 1.8 + k * 5; },
-    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, tx: 0, tz: 0, color: null, stripeC: null, dmg: 0, cust, pz: [0, 0, 0, 0], partsKey: '', wob: 0,
+    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, tx: 0, tz: 0, color: null, stripeC: null, dmg: 0, cust, pz: [0, 0, 0, 0], partsKey: '', wob: 0, dirt: 0, dirtCol: new THREE.Color(0xb59557), rough: 0,
     /** personalizacja: numer, wzór lakieru, felgi, tablica z nickiem */
     setCustom(c = {}) {
       const n = { ...cust, ...c };
@@ -319,6 +319,13 @@ export function buildCar(id, number, color = null, custom = null) {
         pos.needsUpdate = true; t.geo.computeVertexNormals();
       }
     },
+    /** zabrudzenie opon (0..1) kolorem nawierzchni: piasek robi z opon jasnobrązowe, kostka szare */
+    setDirt(k, col) {
+      if (Math.abs(k - this.dirt) < 0.03 && (k > 0.02 || this.dirt < 0.02)) return;
+      this.dirt = k; if (col) this.dirtCol = col;
+      for (const n of WK) if (wheels[n].base) this._dirtApply(wheels[n]);
+    },
+    _dirtApply(w) { w.tire.material.color.copy(w.base).lerp(this.dirtCol, Math.min(0.85, this.dirt * 0.9)); w.tire.material.roughness = 0.85 + this.dirt * 0.1; },
     /** strefy uszkodzeń (8 liczb 0..1): koła odpadają, spojlery się łamią i odpadają, boki się wgniatają, opony ciemnieją */
     setParts(p) {
       let key = ''; for (let i = 0; i < 8; i++) key += Math.round(p[i] * 15).toString(16);
@@ -327,7 +334,7 @@ export function buildCar(id, number, color = null, custom = null) {
         const w = wheels[WK[i]], d = p[i], side = i % 2 === 0 ? 1 : -1, lost = d >= 1;
         w.pivot.visible = !lost; stubs[WK[i]].visible = lost;
         w.pivot.rotation.x = side * d * 0.5; w.pivot.position.y = M.wheelR * (1 - d * 0.16);
-        w.roll.scale.set(1 - d * 0.2, 1 - d * 0.2, 1); w.tire.material.color.setRGB(0.08 * (1 - d * 0.75), 0.08 * (1 - d * 0.75), 0.1 * (1 - d * 0.75));
+        w.roll.scale.set(1 - d * 0.2, 1 - d * 0.2, 1); w.base = new THREE.Color(0.08 * (1 - d * 0.75), 0.08 * (1 - d * 0.75), 0.1 * (1 - d * 0.75)); this._dirtApply(w);
         if (lost) stubs[WK[i]].position.y = M.wheelR * 0.55;
       }
       const dn = p[4], dt = p[5];
@@ -354,7 +361,7 @@ export function buildCar(id, number, color = null, custom = null) {
       this.roll += (targetRoll - this.roll) * Math.min(1, dt * 8);
       this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 8);
       body.rotation.x = this.roll; body.rotation.z = this.pitch;
-      body.position.y = Math.sin(performance.now() * 0.05) * 0.004 * Math.min(1, Math.abs(st.vf) / 10);
+      body.position.y = Math.sin(performance.now() * 0.05) * 0.004 * Math.min(1, Math.abs(st.vf) / 10) + (this.rough > 0.02 ? (Math.random() - 0.5) * 0.05 * this.rough * Math.min(1, Math.abs(st.vf) / 20) : 0); // kostka trzęsie autem
       const steerAng = -st.steer * 0.36;
       this.spin -= st.vf * dt / M.wheelR;
       for (const k of ['fl', 'fr']) wheels[k].pivot.rotation.y = steerAng;
