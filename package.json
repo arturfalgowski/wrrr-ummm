@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Wyścigi 3D dla dwóch graczy w przeglądarce (Three.js + Socket.IO)",
+  "description": "Wyścigi w stylu TrackMania w przeglądarce (Three.js + Socket.IO)",
   "scripts": {
     "start": "node --no-warnings server.js"
   },

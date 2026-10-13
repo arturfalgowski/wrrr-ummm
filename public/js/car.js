@@ -1,32 +1,10 @@
 // Proceduralne modele samochodów: wyciągnięty profil boczny (wygładzony) + własny shader farby/pasów.
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { CAR_DEFS } from './physics.js';
+import { CAR_DEFS } from './physics3d.js';
 
 const MODELS = {
-  aurora: {
-    L: 5.2, W: 1.95, wheelX: 1.62, wheelZ: 1.2, wheelR: 0.54,
-    body: [[-2.6, 0.38], [-2.64, 0.82], [-2.25, 1.02], [-1.0, 1.08], [0.35, 1.12], [0.9, 1.04], [1.7, 0.9], [2.4, 0.7], [2.64, 0.5], [2.6, 0.36], [1.3, 0.3], [-1.3, 0.3]],
-    cabin: null, open: true, spoiler: false, decalX: 1.5, plateX: -1.95, number: 7,
-  },
-  vortex: {
-    L: 5.5, W: 2.05, wheelX: 1.75, wheelZ: 1.24, wheelR: 0.52,
-    body: [[-2.75, 0.38], [-2.78, 0.86], [-2.4, 1.0], [-1.4, 1.04], [0.0, 1.02], [1.2, 0.95], [2.4, 0.72], [2.76, 0.5], [2.72, 0.36], [1.2, 0.3], [-1.2, 0.3]],
-    cabin: [[-1.75, 0.98], [-0.95, 1.55], [-0.15, 1.66], [0.55, 1.5], [1.05, 1.0]], open: false, spoiler: true, decalX: -0.2, plateX: -2.05, number: 33,
-  },
-  blaze: {
-    L: 4.7, W: 1.9, wheelX: 1.45, wheelZ: 1.17, wheelR: 0.5,
-    body: [[-2.35, 0.4], [-2.35, 1.0], [-1.95, 1.2], [-0.5, 1.2], [0.9, 1.02], [1.95, 0.84], [2.32, 0.6], [2.3, 0.4], [1.0, 0.32], [-1.0, 0.32]],
-    cabin: [[-1.8, 1.14], [-1.3, 1.72], [0.0, 1.8], [0.7, 1.46], [1.1, 1.04]], open: false, spoiler: true, decalX: -0.3, plateX: -1.95, number: 23,
-  },
-  // pickup terenowy: wysoko zawieszony, ogromne koła, kabina z paką
-  tytan: {
-    L: 5.4, W: 2.2, wheelX: 1.75, wheelZ: 1.4, wheelR: 0.95, wheelW: 0.95, lightY: 1.15, tailY: 1.3,
-    body: [[-2.7, 0.7], [-2.74, 1.5], [-1.0, 1.55], [-0.62, 1.58], [0.95, 1.58], [1.6, 1.42], [2.62, 1.34], [2.72, 1.0], [2.62, 0.7], [1.2, 0.62], [-1.2, 0.62]],
-    cabin: [[-0.6, 1.5], [-0.38, 2.4], [0.85, 2.46], [1.4, 1.52]], open: false, spoiler: false, decalX: 0.3, plateX: -2.1, number: 4, extras: 'truck',
-  },
-  // bolid: wąski kadłub, odkryte koła, skrzydła
-  kometa: {
+  formula: {
     L: 5.2, W: 1.0, wheelX: 1.6, wheelZ: 1.28, wheelR: 0.56, wheelW: 0.7, lightY: 0.52, tailY: 0.7,
     body: [[-2.55, 0.28], [-2.58, 0.64], [-1.7, 0.82], [-0.7, 0.86], [0.3, 0.72], [1.3, 0.5], [2.62, 0.42], [2.62, 0.3], [1.3, 0.25], [-1.3, 0.25]],
     cabin: null, open: false, spoiler: false, decalX: 0.15, plateX: -1.55, number: 88, extras: 'formula',
@@ -240,16 +218,6 @@ export function buildCar(id, number, color = null, custom = null) {
       arm.rotation.x = Math.PI / 2; arm.position.set(sx, 0.5, Math.sign(sz) * (0.45 + len / 2)); body.add(arm);
     }
   }
-  if (M.extras === 'truck') {
-    const acc = reg(paintMaterial({ paint: def.stripe || 0x222222 }), 'accent');
-    const box = (w, h, d, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; body.add(m); return m; };
-    box(0.4, 0.55, M.W * 1.02, M.L / 2 + 0.05, 0.85, 0, darkMat);               // zderzaki
-    box(0.35, 0.45, M.W * 1.0, -M.L / 2 - 0.02, 0.9, 0, darkMat);
-    const bar = box(0.18, 0.16, 1.6, 0.35, 2.58, 0, new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffe9a0, emissiveIntensity: 1.6 })); void bar; // belka świateł
-    for (const sz of [-1.0, 1.0]) box(2.1, 0.12, 0.1, -1.75, 1.66, sz, acc);      // burty paki
-    box(0.1, 0.5, 2.0, -2.72, 1.8, 0, acc);                                       // klapa
-    for (const sz of [-0.85, 0.85]) { const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8), new THREE.MeshStandardMaterial({ color: 0xaab0bd, metalness: 0.9, roughness: 0.3 })); ex.position.set(-0.7, 2.1, sz); body.add(ex); }
-  }
   // światła
   const headMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffe9a0, emissiveIntensity: 1.8 });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff1a1a, emissiveIntensity: 0.9 });
@@ -345,25 +313,19 @@ export function buildCar(id, number, color = null, custom = null) {
         pos.needsUpdate = true; t.geo.computeVertexNormals();
       }
     },
-    /** Aktualizacja wizualna na podstawie stanu fizycznego. */
+    /** Aktualizacja wizualna dla toru 3D: pozycja i orientacja z fizyki (pętle, przechyły, lot), ruch kół i zawieszenia. */
     sync(st, dt) {
-      group.rotation.order = 'YZX';
-      group.position.set(st.x, st.y || 0, st.z);
-      this.tx += ((st.tiltX || 0) - this.tx) * Math.min(1, dt * 12 + (dt ? 0 : 1)); this.tz += ((st.tiltZ || 0) - this.tz) * Math.min(1, dt * 12 + (dt ? 0 : 1));
-      group.rotation.x = this.tx; group.rotation.z = this.tz;
-      // na ręcznym tył auta wyraźnie „wychodzi” w bok (efekt wizualny ponad fizyką)
+      group.position.set(st.x, st.y, st.z);
+      group.quaternion.copy(st.quat);
       if (Math.abs(st.steer) > 0.1) this.hdir = Math.sign(st.steer);
-      this.hk += (((st.hand ? 0.24 : 0) * (this.hdir || 1)) - this.hk) * Math.min(1, dt * 9);
-      group.rotation.y = -st.yaw + this.hk;
       const sf = Math.min(1, Math.abs(st.vf) / 14);
-      const targetRoll = -st.steer * sf * 0.055 - Math.max(-0.1, Math.min(0.1, st.vl * 0.012));
-      const targetPitch = Math.max(-0.04, Math.min(0.045, st.accelNow * 0.0018));
+      const targetRoll = -st.steer * sf * 0.045 - Math.max(-0.08, Math.min(0.08, st.vl * 0.01));
+      const targetPitch = Math.max(-0.04, Math.min(0.045, st.accelNow * 0.0016));
       this.roll += (targetRoll - this.roll) * Math.min(1, dt * 8);
       this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 8);
-      body.rotation.x = this.roll;
-      body.rotation.z = this.pitch;
-      body.position.y = Math.sin(performance.now() * 0.05) * (st.onGrass ? 0.04 : 0.004) * Math.min(1, Math.abs(st.vf) / 10);
-      const steerAng = -st.steer * 0.42;
+      body.rotation.x = this.roll; body.rotation.z = this.pitch;
+      body.position.y = Math.sin(performance.now() * 0.05) * 0.004 * Math.min(1, Math.abs(st.vf) / 10);
+      const steerAng = -st.steer * 0.36;
       this.spin -= st.vf * dt / M.wheelR;
       for (const k of ['fl', 'fr']) wheels[k].pivot.rotation.y = steerAng;
       for (const k of ['fl', 'fr', 'rl', 'rr']) wheels[k].roll.rotation.z = this.spin;

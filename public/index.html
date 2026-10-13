@@ -51,34 +51,22 @@
 <!-- HUD -->
 <div id="hud" class="hidden">
   <div class="hud-tl">
-    <div class="chip"><span class="lbl">Okrążenie</span><b id="hud-lap">1/3</b></div>
+    <div class="chip"><span class="lbl">Checkpoint</span><b id="hud-cp">0/0</b></div>
     <div class="chip" id="chip-pos"><span class="lbl">Pozycja</span><b id="hud-pos">1/2</b></div>
   </div>
   <div class="hud-tc">
     <b id="hud-time">0:00.00</b>
     <span id="hud-best"></span>
+    <div class="prog"><i id="hud-prog"></i></div>
   </div>
   <div class="hud-br">
     <div class="speed"><b id="hud-speed">0</b><i>km/h</i></div>
     <div class="bar"><div id="hud-bar"></div></div>
-    <div class="hplabel">Wytrzymałość</div>
-    <div class="bar hpbar"><div id="hud-hp"></div></div>
   </div>
-  <div id="soc-hud" class="hidden"><div class="t red"><span>Czerwoni</span><b id="soc-red">0</b></div><div class="mid"><b id="soc-time">3:00</b><small id="soc-info"></small></div><div class="t blue"><b id="soc-blue">0</b><span>Niebiescy</span></div></div>
-  <div id="goal-banner" class="hidden"></div>
-  <div id="boost-wrap" class="hidden"><span>NITRO <kbd>Shift</kbd></span><div><i id="boost-fill"></i></div></div>
+  <div id="boost-wrap"><span>NITRO <kbd>Shift</kbd></span><div><i id="boost-fill"></i></div></div>
   <canvas id="minimap"></canvas>
-  <div class="hud-items">
-    <div class="slot" id="slot-nitro"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M13 2L5 14h5l-2 8 9-13h-5z" fill="currentColor"/></svg><kbd>Shift</kbd><span>Nitro</span></div>
-    <div class="slot" id="slot-ammo"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2c2 2 3 4 3 7v10H9V9c0-3 1-5 3-7zM8 20h8v2H8z" fill="currentColor"/></svg><kbd>F</kbd><span>Strzał</span><i class="timer"><b id="ammo-bar"></b></i></div>
-    <div class="slot hidden" id="slot-gun"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M3 10h13l3-2v8l-3-2H3zM6 14h4l1 5H7z" fill="currentColor"/></svg><kbd>R</kbd><span>Karabin</span><i class="timer"><b id="gun-bar"></b></i></div>
-    <div class="slot hidden" id="slot-mine"><svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="14" r="7" fill="currentColor"/><path d="M12 7V3M9 4l3-1 3 1" stroke="currentColor" stroke-width="2" fill="none"/></svg><kbd>Q</kbd><span>Mina</span></div>
-    <div class="slot hidden" id="slot-rocket"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2c3 3 4 7 3 11l2 4-4-1-1 4-1-4-4 1 2-4c-1-4 0-8 3-11z" fill="currentColor"/></svg><kbd>T</kbd><span>Rakieta</span></div>
-    <div class="slot hidden" id="slot-shield"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2l8 3v6c0 5-3 9-8 11-5-2-8-6-8-11V5z" fill="currentColor"/></svg><kbd>G</kbd><span>Tarcza</span></div>
-    <div class="slot" id="slot-oil"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2s7 7.5 7 12.5A7 7 0 015 14.5C5 9.5 12 2 12 2z" fill="currentColor"/></svg><kbd>E</kbd><span>Olej</span></div>
-  </div>
   <div class="hud-bl" id="hud-help">
-    <kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>Esc</kbd> pauza &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>F</kbd> strzał &nbsp; <kbd>E</kbd> olej
+    <kbd>W</kbd><kbd>S</kbd> gaz / hamulec &nbsp; <kbd>A</kbd><kbd>D</kbd> skręt &nbsp; <kbd>Spacja</kbd> drift &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>R</kbd> powrót na checkpoint &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>Esc</kbd> pauza
   </div>
   <div id="countdown"></div>
   <div id="toast"></div>
@@ -100,7 +88,7 @@
 <section id="scr-nick" class="screen center hidden">
   <div class="card narrow">
     <div class="logo">WRRR<span>UMMM</span></div>
-    <p class="muted">Wyścigi, areny i piłka samochodowa w przeglądarce, solo albo do 4 graczy. Wpisz nick, pod którym trafisz do rankingu.</p>
+    <p class="muted">Wyścigi w stylu TrackMania: pętle, skoki i pochylone zakręty, solo albo do 4 graczy. Wpisz nick, pod którym trafisz do rankingu.</p>
     <form id="form-nick" autocomplete="off">
       <input id="inp-nick" maxlength="14" placeholder="Twój nick" spellcheck="false" autofocus>
       <button class="btn primary" type="submit">Jedziemy</button>
@@ -122,8 +110,7 @@
   </aside>
   <section class="m2-bottom">
     <div class="m2-garage">
-      <div class="m2-label">Garaż</div>
-      <div class="cars" id="car-list"></div>
+      <div class="m2-label">Twój bolid F1</div>
       <div class="m2-colorrow">
         <div class="swatches" id="menu-colors"></div>
         <button class="link m2-customlink" id="btn-custom">Personalizacja <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -150,7 +137,7 @@
     </div>
     <div class="card m2-tabs">
       <nav class="tabs" id="menu-tabs">
-        <button data-tab="car" class="sel">Auto</button>
+        <button data-tab="car" class="sel">Bolid</button>
         <button data-tab="track" id="tab-btn-track">Tor</button>
       </nav>
       <div class="tabpane" id="pane-car"><div class="car-detail" id="car-detail"></div></div>
@@ -177,13 +164,8 @@
     <div class="card l2-chat"><div id="lobby-chatslot"></div></div>
   </aside>
   <section class="m2-bottom">
-    <div class="m2-garage hidden" id="lobby-team-section">
-      <div class="m2-label">Drużyna</div>
-      <div class="seg wide" id="lobby-team"></div>
-    </div>
     <div class="m2-garage">
-      <div class="m2-label">Twoje auto</div>
-      <div class="cars" id="lobby-cars"></div>
+      <div class="m2-label">Twój bolid F1</div>
       <div class="car-detail" id="lobby-cardetail"></div>
       <div class="m2-colorrow">
         <div class="swatches" id="lobby-colors"></div>
@@ -213,7 +195,7 @@
 <section id="scr-spec" class="screen left hidden">
   <div class="card wide">
     <h3>Obserwujesz pokój <b id="spec-code" class="code"></b></h3>
-    <p class="muted" id="spec-info">Czekasz na start wyścigu — gdy ruszy, zobaczysz go na żywo (A/D zmienia kamerę).</p>
+    <p class="muted" id="spec-info">Czekasz na start wyścigu — gdy ruszy, zobaczysz go na żywo.</p>
     <div class="players" id="spec-players"></div>
     <div class="row-btns"><button class="btn primary hidden" id="btn-spec-join">Dołącz jako gracz</button><button class="btn ghost" id="btn-spec-leave">Wyjdź</button></div>
   </div>
@@ -224,7 +206,7 @@
     <div class="res-title" id="res-title">Wygrana!</div>
     <div class="res-sub" id="res-sub"></div>
     <table class="restable" id="res-table"></table>
-    <div class="tour hidden" id="tour-box"><h4 id="tour-title">Turniej</h4><table class="restable" id="tour-table"></table><div class="muted" id="tour-note" style="font-size:12px;margin-top:6px"></div><div class="tracks" id="tour-tracks" style="margin-top:10px"></div></div>
+    <div class="tour hidden" id="tour-box" style="display:none"><h4 id="tour-title">Turniej</h4><table class="restable" id="tour-table"></table><div class="muted" id="tour-note" style="font-size:12px;margin-top:6px"></div><div class="tracks" id="tour-tracks" style="margin-top:10px"></div></div>
     <div class="rematch hidden" id="rematch-box"><h4>Rewanż</h4><div id="rematch-list"></div></div>
     <h4 id="rank-results-title">Ranking</h4>
     <ol id="rank-results" class="ranklist compact"></ol>

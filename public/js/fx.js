@@ -85,20 +85,20 @@ export class SkidMarks {
     this.last = new Map();
   }
   /** key: identyfikator koła; null przerywa ślad */
-  add(key, x, z, on, width = 0.34) {
+  add(key, x, y, z, on, width = 0.34) {
     const prev = this.last.get(key);
     if (!on) { this.last.delete(key); return; }
     if (prev) {
       const dx = x - prev.x, dz = z - prev.z, l = Math.hypot(dx, dz);
       if (l < 0.35) return;
-      if (l > 6) { this.last.set(key, { x, z }); return; }
+      if (l > 6 || Math.abs(y - prev.y) > 2) { this.last.set(key, { x, y, z }); return; }
       const nx = -dz / l * width, nz = dx / l * width;
-      const y = 0.05, i = this.cursor * 12;
-      this.pos.set([prev.x + nx, y, prev.z + nz, prev.x - nx, y, prev.z - nz, x - nx, y, z - nz, x + nx, y, z + nz], i);
+      const i = this.cursor * 12, y0 = prev.y + 0.06, y1 = y + 0.06;
+      this.pos.set([prev.x + nx, y0, prev.z + nz, prev.x - nx, y0, prev.z - nz, x - nx, y1, z - nz, x + nx, y1, z + nz], i);
       this.cursor = (this.cursor + 1) % this.max;
       this.mesh.geometry.attributes.position.needsUpdate = true;
     }
-    this.last.set(key, { x, z });
+    this.last.set(key, { x, y, z });
   }
   clear() { this.pos.fill(0); this.mesh.geometry.attributes.position.needsUpdate = true; this.last.clear(); }
 }

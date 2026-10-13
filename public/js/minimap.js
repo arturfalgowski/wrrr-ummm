@@ -1,5 +1,4 @@
 // Minimapa w HUD: zarys toru (biała linia), pozycje graczy, paczki i duch.
-import { ITEM_TYPES } from './items.js';
 
 export class Minimap {
   constructor(canvas) {
@@ -65,13 +64,13 @@ export class Minimap {
     g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 5.5; g.stroke();
     g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
     // linia startu
-    const t = this.track, [sx, sy] = this._p(t.x[0], t.z[0]), nx = -t.tz[0], nz = t.tx[0];
+    const t = this.track, si = Math.round(t.startS || 0), [sx, sy] = this._p(t.x[si], t.z[si]), nx = -t.tz[si], nz = t.tx[si];
     g.beginPath(); g.moveTo(sx - nx * 5, sy - nz * 5); g.lineTo(sx + nx * 5, sy + nz * 5); g.strokeStyle = '#ff4f8b'; g.lineWidth = 2; g.stroke();
     }
     for (const c of crates) {
       const [px, py] = this._p(c.x, c.z);
       g.save(); g.translate(px, py); g.rotate(Math.PI / 4);
-      g.fillStyle = ITEM_TYPES[c.type].color; g.fillRect(-3, -3, 6, 6);
+      g.fillStyle = '#ffb02e'; g.fillRect(-3, -3, 6, 6);
       g.strokeStyle = '#fff'; g.lineWidth = 1; g.strokeRect(-3, -3, 6, 6); g.restore();
     }
     // duchy pod spodem, potem rywale, na końcu ja
