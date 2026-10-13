@@ -115,8 +115,7 @@
     <div class="m2-who"><span class="m2-av"></span><div><small>Kierowca</small><b id="menu-nick"></b></div><button class="link" id="btn-change-nick">zmień</button></div>
   </header>
   <aside class="m2-left">
-    <div class="m2-label">Tryb gry</div>
-    <div class="m2-modes" id="mode-list"></div>
+    <div class="m2-modes hidden" id="mode-list"></div>
     <div class="banner hidden" id="join-banner">Zaproszenie do wyścigu <b id="join-code"></b></div>
     <div class="m2-label m2-setlabel">Ustawienia</div>
     <div class="settings m2-set" id="menu-settings"></div>
@@ -145,7 +144,7 @@
   <aside class="m2-right">
     <div class="card m2-rank">
       <h3>Ranking</h3>
-      <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button><button data-m="soccer">Piłka</button></div>
+      <div class="seg rank-tabs hidden" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button></div>
       <ol id="rank-menu" class="ranklist compact"></ol>
       <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
     </div>
@@ -199,12 +198,9 @@
     </div>
   </section>
   <aside class="m2-right l2-right">
-    <div class="card">
-      <div class="m2-label">Tryb gry <span id="track-note" class="l2-hint"></span></div>
-      <div class="m2-modes" id="lobby-mode"></div>
-    </div>
+    <div class="m2-modes hidden" id="lobby-mode"></div>
     <div class="card" id="lobby-track-section">
-      <div class="m2-label">Tor</div>
+      <div class="m2-label">Tor <span id="track-note" class="l2-hint"></span></div>
       <div class="tracks" id="lobby-tracks"></div>
     </div>
     <div class="card">
@@ -239,6 +235,7 @@
   </div>
 </section>
 
+<div id="speedfx"></div>
 <div id="chat" class="chat hidden">
   <div id="chat-log"></div>
   <form id="chat-form" class="hidden" autocomplete="off"><input id="chat-input" maxlength="90" placeholder="Napisz wiadomość i naciśnij Enter…" spellcheck="false"></form>

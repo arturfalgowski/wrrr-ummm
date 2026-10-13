@@ -12,43 +12,43 @@ export const TRACK_DEFS = {
     name: 'Dolina Sosen', tag: 'Hopka i kałuża na szybkich łukach', laps: 3, scale: 1.7, start: [0, 46], stand: 'inner',
     points: [[-40, 45], [10, 47], [55, 45], [90, 30], [96, 2], [80, -24], [56, -32], [40, -16], [20, -6], [-4, -16], [-18, -42], [-50, -52], [-86, -40], [-98, -10], [-82, 18], [-64, 34]],
     theme: 'lato',
-    features: { jumps: [{ u: 0.55 }], puddles: [{ u0: 0.14, u1: 0.19, kind: 'water' }] },
+    features: { jumps: [{ u: 0.55 }, { u: 0.9 }], boosts: [{ u: 0.06 }, { u: 0.34 }, { u: 0.74 }], puddles: [{ u0: 0.14, u1: 0.19, kind: 'water' }] },
   },
   owal: {
-    name: 'Pustynny Owal', tag: 'Dwie hopki, bardzo szybki', laps: 3, scale: 1.4, start: [0, 60], stand: 'inner',
-    points: [[-90, 60], [-30, 60], [30, 60], [90, 60], [140, 45], [160, 0], [140, -45], [90, -60], [50, -50], [20, -68], [-20, -58], [-70, -62], [-125, -45], [-150, 0], [-125, 45]],
+    name: 'Pustynny Kanion', tag: 'Szybki kanion: szykany, dwie hopki, nitro', laps: 3, scale: 1.5, start: [0, 60], stand: 'inner',
+    points: [[-90, 60], [-30, 60], [30, 60], [90, 62], [140, 48], [168, 8], [152, -28], [112, -32], [86, -58], [104, -86], [142, -96], [156, -126], [118, -144], [66, -132], [26, -98], [-20, -114], [-76, -124], [-132, -104], [-164, -58], [-150, -8], [-136, 34], [-122, 58]],
     theme: 'pustynia',
-    features: { jumps: [{ u: 0.17 }, { u: 0.62 }] },
+    features: { jumps: [{ u: 0.12 }, { u: 0.58 }], boosts: [{ u: 0.05 }, { u: 0.36 }, { u: 0.8 }] },
   },
   serpentyna: {
     name: 'Zimowa Serpentyna', tag: 'Lodowe plamy i ciasne agrafki', laps: 2, scale: 1.4, start: [0, 56], stand: 'outer',
     points: [[-30, 56], [30, 56], [77, 56], [90, 51], [95, 38], [90, 25], [77, 20], [30, 20], [-34, 20], [-47, 15], [-52, 2], [-47, -11], [-34, -16], [10, -16], [60, -16], [76, -23], [83, -39], [76, -55], [60, -62], [20, -62], [-50, -66], [-100, -52], [-122, -5], [-112, 40], [-85, 58]],
     theme: 'zima',
-    features: { puddles: [{ u0: 0.2, u1: 0.235, kind: 'ice' }, { u0: 0.63, u1: 0.665, kind: 'ice' }] },
+    features: { jumps: [{ u: 0.3 }], boosts: [{ u: 0.1 }, { u: 0.45 }, { u: 0.82 }], puddles: [{ u0: 0.2, u1: 0.235, kind: 'ice' }, { u0: 0.63, u1: 0.665, kind: 'ice' }] },
   },
   jesien: {
     name: 'Jesienna Pętla', tag: 'Deszcz, ósemka z mostem i kałuże', laps: 3, scale: 1.25, start: [-92, 0], stand: 'inner',
     points: [[-130, 0], [-60, 0], [0, 0], [70, 0], [125, 5], [155, 40], [135, 85], [85, 100], [35, 90], [5, 60], [0, 30], [0, -35], [10, -75], [-40, -100], [-100, -85], [-140, -45]],
     theme: 'jesien', rain: true,
-    features: { autoBridge: { h: 7.5, deck: 22, ramp: 70 }, puddles: [{ u0: 0.1, u1: 0.15, kind: 'water' }, { u0: 0.62, u1: 0.68, kind: 'water' }] },
+    features: { jumps: [{ u: 0.4 }], boosts: [{ u: 0.22 }, { u: 0.52 }, { u: 0.86 }], autoBridge: { h: 7.5, deck: 22, ramp: 70 }, puddles: [{ u0: 0.1, u1: 0.15, kind: 'water' }, { u0: 0.62, u1: 0.68, kind: 'water' }] },
   },
   wyspa: {
     name: 'Nadmorski Wir', tag: 'Most nad lagunią, hopka, kałuża', laps: 3, scale: 1.75, start: [0, 58], stand: 'inner',
     points: [[-60, 55], [0, 58], [60, 55], [105, 40], [118, 5], [100, -22], [112, -52], [75, -70], [20, -60], [-35, -38], [-80, -58], [-125, -38], [-132, 5], [-100, 40]],
     theme: 'wyspa',
-    features: { humps: [{ u0: 0.3, u1: 0.46, h: 7.2 }], jumps: [{ u: 0.74 }], puddles: [{ u0: 0.9, u1: 0.945, kind: 'water' }] },
+    features: { humps: [{ u0: 0.3, u1: 0.46, h: 7.2 }], jumps: [{ u: 0.74 }], boosts: [{ u: 0.1 }, { u: 0.58 }, { u: 0.86 }], puddles: [{ u0: 0.9, u1: 0.945, kind: 'water' }] },
   },
   miasto: {
     name: 'Śródmieście', tag: 'Ponad 2,7 km ulic: wiadukt, hopka, kałuże', laps: 2, scale: 2.3, start: [0, 100], stand: 'inner',
     points: [[-40, 100], [40, 100], [110, 100], [140, 80], [148, 40], [120, 15], [80, 10], [60, -10], [75, -35], [120, -45], [150, -70], [140, -105], [100, -115], [40, -110], [10, -85], [-20, -60], [-55, -70], [-90, -100], [-130, -95], [-150, -60], [-135, -25], [-100, -10], [-70, 20], [-95, 45], [-140, 55], [-152, 85], [-125, 102], [-90, 100]],
     theme: 'miasto',
-    features: { humps: [{ u0: 0.3, u1: 0.4, h: 6.5 }], jumps: [{ u: 0.64 }], puddles: [{ u0: 0.12, u1: 0.16, kind: 'water' }, { u0: 0.82, u1: 0.86, kind: 'water' }] },
+    features: { humps: [{ u0: 0.3, u1: 0.4, h: 6.5 }], jumps: [{ u: 0.64 }], boosts: [{ u: 0.05 }, { u: 0.2 }, { u: 0.5 }, { u: 0.78 }], puddles: [{ u0: 0.12, u1: 0.16, kind: 'water' }, { u0: 0.82, u1: 0.86, kind: 'water' }] },
   },
   cyber: {
     name: 'Neon Sektor', tag: 'Cyberpunk: ponad 2,9 km w deszczu i neonach', laps: 2, scale: 2.2, start: [0, 61], stand: 'inner',
     points: [[-120, 60], [-40, 60], [40, 62], [110, 50], [150, 20], [140, -20], [100, -35], [60, -20], [40, 10], [10, 25], [-20, 10], [-30, -25], [-10, -55], [40, -75], [100, -85], [150, -110], [130, -145], [70, -150], [10, -130], [-50, -120], [-110, -130], [-160, -105], [-170, -60], [-140, -25], [-160, 10], [-165, 40]],
     theme: 'cyber', rain: true, forceTime: 'night',
-    features: { humps: [{ u0: 0.17, u1: 0.27, h: 7.5 }, { u0: 0.7, u1: 0.78, h: 9 }], jumps: [{ u: 0.46 }, { u: 0.92 }], puddles: [{ u0: 0.55, u1: 0.6, kind: 'water' }, { u0: 0.33, u1: 0.36, kind: 'water' }] },
+    features: { humps: [{ u0: 0.17, u1: 0.27, h: 7.5 }, { u0: 0.7, u1: 0.78, h: 9 }], jumps: [{ u: 0.46 }, { u: 0.92 }], boosts: [{ u: 0.08 }, { u: 0.4 }, { u: 0.62 }, { u: 0.85 }], puddles: [{ u0: 0.55, u1: 0.6, kind: 'water' }, { u0: 0.33, u1: 0.36, kind: 'water' }] },
   },
 };
 export const TRACK_IDS = Object.keys(TRACK_DEFS);
@@ -102,7 +102,7 @@ export class Track {
     const n = this.N, st = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
     const circ = (i, c) => { let d = Math.abs(i - c); return Math.min(d, n - d); };
     this.hy = new Float32Array(n); this.bar = new Float32Array(n).fill(BARRIER);
-    this.bridges = []; this.puddles = []; this.jumps = []; this.humps = [];
+    this.bridges = []; this.puddles = []; this.jumps = []; this.humps = []; this.boosts = [];
     const bridges = [...(f.bridges || [])];
     if (f.autoBridge) { // skrzyżowanie toru ze sobą: najazd na drugim przejeździe
       let best = 1e9, bi = 0, bj = 0;
@@ -128,6 +128,7 @@ export class Track {
       const i0 = Math.round(j.u * n), len = j.len || 15, hh = j.h || 2.7; this.jumps.push({ i0, len, h: hh });
       for (let k = 0; k < len; k++) this.hy[(i0 + k) % n] = Math.max(this.hy[(i0 + k) % n], hh * (k / len));
     }
+    for (const b of f.boosts || []) this.boosts.push({ i0: Math.round(b.u * n), len: b.len || 16 });
     for (const p of f.puddles || []) this.puddles.push({ i0: Math.round(p.u0 * n), i1: Math.round(p.u1 * n), kind: p.kind || 'water', l0: p.lat ? p.lat[0] : -1, l1: p.lat ? p.lat[1] : 1 });
   }
   /** wysokość jezdni (interpolacja) */

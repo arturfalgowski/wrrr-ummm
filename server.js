@@ -24,7 +24,7 @@ const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'repair', 'repair', 'bom
 const ARENA_ITEMS = ['bomb', 'bomb', 'rocket', 'rocket', 'ammo', 'ammo', 'shield', 'repair', 'repair', 'nitro', 'oil'];
 const ARENA_R = 80;
 const SOC_HX = 70, SOC_HZ = 44; // połowa długości i szerokości boiska (zgodne z public/js/soccer.js)
-const MODES = ['race', 'arena', 'soccer'];
+const MODES = ['race']; // arena i piłka zostały usunięte z gry
 const POINTS = [10, 6, 4, 2];
 const TOURNAMENT_ROUNDS = 3;
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];

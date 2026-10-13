@@ -185,7 +185,7 @@ const S = {
   weather: ['auto', 'sun', 'rain', 'storm'].includes(store.get('tc_weather')) ? store.get('tc_weather') : 'auto', time: ['auto', 'day', 'dusk', 'night'].includes(store.get('tc_time')) ? store.get('tc_time') : 'auto',
   raceBots: Math.min(3, Math.max(0, parseInt(store.get('tc_rbots') || '0', 10) || 0)), tournament: store.get('tc_tour') === '1',
   cam: store.get('tc_cam') === 'chase' ? 'chase' : 'iso', paused: false, pauseStart: 0,
-  game: ['arena', 'soccer'].includes(store.get('tc_game')) ? store.get('tc_game') : 'race', bots: 3,
+  game: 'race', bots: 3,
   timeLimit: [0, 90, 180, 300, 600].includes(+store.get('tc_stime')) && store.get('tc_stime') != null ? +store.get('tc_stime') : 180, goalLimit: [0, 3, 5, 7, 10].includes(+store.get('tc_sgoal')) && store.get('tc_sgoal') != null ? +store.get('tc_sgoal') : 5, attacks: store.get('tc_sattack') === '1', loadout: store.get('tc_loadout') === 'full' ? 'full' : 'normal',
   color: CAR_COLORS.includes(store.get('tc_color')) ? store.get('tc_color') : '#e0457b',
   trackPick: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'random', trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : TRACK_IDS[Math.random() * TRACK_IDS.length | 0], lapsManual: false,
@@ -369,7 +369,7 @@ async function openProfile(nick) {
   let p; try { p = await (await fetch(`api/profile?nick=${encodeURIComponent(nick)}`)).json(); } catch { return; }
   const card = $('profile-card'); card.textContent = '';
   const nm = document.createElement('div'); nm.className = 'prof-name'; nm.textContent = p.nick; card.append(nm);
-  for (const [mode, label] of [['race', 'Wyścigi'], ['arena', 'Arena'], ['soccer', 'Piłka']]) {
+  for (const [mode, label] of [['race', 'Wyścigi']]) {
     const st = p[mode], h = document.createElement('h4'); h.textContent = label; card.append(h);
     const g = document.createElement('div'); g.className = 'prof-grid';
     const box = (v, l) => { const d = document.createElement('div'); d.className = 'prof-box'; d.innerHTML = '<b></b><span></span>'; d.firstChild.textContent = v; d.lastChild.textContent = l; g.append(d); };
@@ -412,7 +412,7 @@ function renderCarDetail(boxId = 'car-detail', pick = S.carPick) {
   const head = document.createElement('div'); head.className = 'cd-head'; const nm = document.createElement('b'); nm.textContent = d.name; const tg = document.createElement('small'); tg.textContent = d.tag; head.append(nm, tg); box.append(head);
   const spec = document.createElement('div'); spec.className = 'cd-spec';
   const sp = (l, v) => { const e = document.createElement('div'); e.innerHTML = '<span></span><b></b>'; e.firstChild.textContent = l; e.lastChild.textContent = v; spec.append(e); };
-  if (d.maxSpeed) { sp('Prędkość maks.', `${Math.round(d.maxSpeed * 3.8)} km/h`); sp('Z nitro', `${Math.round(d.maxSpeed * 1.32 * 3.8)} km/h`); sp('Wytrzymałość', '100 pkt'); sp('Hamowanie', `${d.brake}`); }
+  if (d.maxSpeed) { sp('Prędkość maks.', `${Math.round(d.maxSpeed * 3.8)} km/h`); sp('Z nitro', `${Math.round(d.maxSpeed * 1.45 * 3.8)} km/h`); sp('Wytrzymałość', '100 pkt'); sp('Hamowanie', `${d.brake}`); }
   else { sp('Prędkość maks.', '—'); sp('Wytrzymałość', '100 pkt'); }
   box.append(spec);
   const bars = document.createElement('div'); bars.className = 'cd-bars';
@@ -1652,6 +1652,18 @@ function updateGameplay(dt, active) {
   const nb = world.tires.collide(me.st, 1.3, (x, z) => puff(x, z));
   if (nb && me.tireCd <= 0) { me.st.vx *= 0.85; me.st.vz *= 0.85; me.tireCd = 0.35; sfx.tire(Math.min(1, me.st.speed / 40)); damage(2 + nb * 0.8); }
   for (const o of oppList()) world.tires.collide(o.st, 1.3, (x, z) => puff(x, z, 2));
+  // pady przyspieszające i mini-turbo po długim dryfcie
+  me.padCd = (me.padCd || 0) - dt;
+  if (!isArena() && racingNow() && !me.dead && track.boosts?.length) {
+    const N = track.N, idx = me.st.idx ?? 0;
+    for (const b of track.boosts) {
+      const di = (((idx - b.i0) % N) + N) % N;
+      if (di < b.len && Math.abs(me.st.d || 0) < ROAD_HALF * 0.9 && !me.st.air && me.padCd <= 0) { me.padCd = 1.2; me.nitroT = Math.max(me.nitroT, 1.7); sfx.nitro(); sparks(me.st.x, me.st.z, 22); toast('Nitro!', 700); }
+    }
+  }
+  { const sl = me.st, drifting = racingNow() && sl.hand && sl.speed > 16 && Math.abs(sl.vl) > 3.5;
+    if (drifting) me.driftT = (me.driftT || 0) + dt;
+    else { if ((me.driftT || 0) > 0.9 && racingNow()) { me.nitroT = Math.max(me.nitroT, Math.min(1.9, 0.5 + me.driftT * 0.4)); sfx.nitro(); toast('Mini-turbo!', 800); } me.driftT = 0; } }
   // olej i nitro
   me.st.inOil = items.inOil(me.st.x, me.st.z);
   if (me.nitroT > 0) { me.nitroT -= dt; me.st.nitro = me.nitroT > 0; if (me.nitroT <= 0) updateSlots(); } else me.st.nitro = isSoccer() && soc.boosting;
@@ -1776,7 +1788,10 @@ function raceBotUpdate(o, dt) {
   const d = wrapA(Math.atan2(tg.z - st.z, tg.x - st.x) - st.yaw);
   let kmax = 0; for (let j = 0; j < 42; j += 6) kmax = Math.max(kmax, Math.abs(track.kappa[(i0 + j) % N]));
   const rb = clamp(((me.st?.progress ?? 0) - st.progress) / 700, -0.07, 0.07); // lekka „gumka”
-  const vlim = Math.min(st.def.maxSpeed * (o.skill + rb), Math.sqrt(34 / Math.max(kmax, 0.004)));
+  o.padT = (o.padT || 0) - dt;
+  for (const b of track.boosts || []) { const di = (((st.idx ?? 0) - b.i0) % N + N) % N; if (di < b.len) o.padT = 1.4; }
+  st.nitro = o.padT > 0;
+  const vlim = Math.min(st.def.maxSpeed * (o.skill + rb) * (o.padT > 0 ? 1.3 : 1), Math.sqrt(52 / Math.max(kmax, 0.004)));
   const inp = { throttle: st.speed < vlim ? 1 : 0, brake: st.speed > vlim * 1.1 ? 1 : 0, steer: clamp(d * 2.4, -1, 1), hand: false };
   if (finished) { inp.throttle = 0; inp.brake = 0.5; inp.steer = 0; }
   if (st.speed < 2.5 && !st.air && !finished) ai.stuck += dt; else ai.stuck = 0;
@@ -2212,7 +2227,7 @@ function updateCamera(dt) {
     const subj = me.dead && (isArena() || S.spectator) ? spectateTarget() : null;
     const m = subj ? subj.st : me.st;
     let fx = m.x + m.vx * 0.28, fz = m.z + m.vz * 0.28;
-    let half = (isArena() ? 33 : 27) + clamp(m.speed - 15, 0, 30) * 0.18;
+    let half = (isArena() ? 33 : 27) + clamp(m.speed - 15, 0, 48) * 0.2;
     let near = null, nd = 1e9;
     for (const o of oppList()) { if (o.st === m || o.dead) continue; const d = Math.hypot(o.st.x - m.x, o.st.z - m.z); if (d < nd) { nd = d; near = o; } }
     if (isSoccer()) { // kamera obejmuje auto i piłkę
@@ -2237,7 +2252,7 @@ function updateCamera(dt) {
     cam.half += (half - cam.half) * (1 - Math.exp(-dt * 1.8));
     cam.focus.x += (fx - cam.focus.x) * (1 - Math.exp(-dt * 6)); cam.focus.z += (fz - cam.focus.z) * (1 - Math.exp(-dt * 6));
     pos = cam.focus.clone().addScaledVector(CAM_DIR, cam.half * 3.9); look = cam.focus.clone();
-    fov = RACE_FOV + (m.nitro ? 3.5 : 0); shift = 0; tilt = 0.9;
+    fov = RACE_FOV + clamp((m.speed - 22) / 40, 0, 1) * 4.5 + (m.nitro ? 4.5 : 0); shift = 0; tilt = 0.9;
     cam.racingT = (cam.racingT ?? 0) + dt;
     }
   } else {
@@ -2259,6 +2274,10 @@ function updateCamera(dt) {
   cam.pos.lerp(pos, k); cam.look.lerp(look, k);
   cam.fov += (fov - cam.fov) * k; cam.shift += (shift - cam.shift) * k; cam.tilt += (tilt - cam.tilt) * k;
   camera.position.copy(cam.pos); camera.lookAt(cam.look);
+  if (racingView && me.st && S.mode === 'racing' && !me.dead) { // drżenie kamery przy nitro i dużej prędkości
+    const spd = me.st.speed, amp = (me.st.nitro ? 0.5 : 0) + clamp((spd - 50) / 40, 0, 1) * 0.3;
+    if (amp > 0.01) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp * 0.6, (Math.random() - 0.5) * amp));
+  }
   if (world.occ) { world.occ.cam.value.copy(camera.position); const sm = me.st; if (sm && racingView) world.occ.car.value.set(sm.x, (sm.y || 0) + 1, sm.z); else world.occ.car.value.copy(cam.look); }
   camera.fov = cam.fov;
   const dist = cam.pos.distanceTo(cam.look);
@@ -2274,7 +2293,8 @@ function updateCamera(dt) {
 let hudCache = {};
 function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
 function updateHud() {
-  if ($('hud').classList.contains('hidden') || !me.st) return;
+  if ($('hud').classList.contains('hidden') || !me.st) { $('speedfx').style.opacity = 0; return; }
+  { const sp0 = S.mode === 'racing' && !me.dead ? me.st.speed : 0; $('speedfx').style.opacity = (clamp((sp0 - 44) / 32, 0, 1) * 0.5 + (me.st.nitro && sp0 > 20 ? 0.3 : 0)).toFixed(2); }
   const sp = Math.abs(me.st.vf);
   setText('hud-speed', String(Math.round(sp * 3.8)));
   const hpEl = $('hud-hp'); hpEl.style.width = `${me.hp}%`; hpEl.style.background = me.hp > 50 ? '#5be3a1' : me.hp > 25 ? '#ffd84d' : '#ff4f6e'; hpEl.parentElement.classList.toggle('low', me.hp < 30);

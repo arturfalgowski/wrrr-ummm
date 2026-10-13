@@ -3,15 +3,15 @@ import { ROAD_HALF, KERB_W, BARRIER } from './track.js';
 
 export const CAR_DEFS = {
   aurora: { name: 'Pantera', tag: 'Uniwersalny roadster', color: '#e0457b', stripe: '#fff4e6',
-    maxSpeed: 44, accel: 22, brake: 46, grip: 7.6, turn: 2.35, stats: [0.62, 0.62, 0.72] },
+    maxSpeed: 56, accel: 32, brake: 58, grip: 9.0, turn: 2.7, stats: [0.62, 0.62, 0.72] },
   vortex: { name: 'Tornado', tag: 'Szybkie GT, trudne w ślizgu', color: '#19b6c9', stripe: '#0c2a44',
-    maxSpeed: 50, accel: 19, brake: 44, grip: 6.4, turn: 2.05, stats: [0.9, 0.5, 0.52] },
+    maxSpeed: 64, accel: 28, brake: 56, grip: 7.8, turn: 2.4, stats: [0.9, 0.5, 0.52] },
   blaze: { name: 'Szerszeń', tag: 'Zwinny i dynamiczny', color: '#ff7a1a', stripe: '#1a1a24',
-    maxSpeed: 41, accel: 27, brake: 48, grip: 9.0, turn: 2.7, stats: [0.42, 0.88, 0.9] },
+    maxSpeed: 52, accel: 38, brake: 60, grip: 10.8, turn: 3.1, stats: [0.42, 0.88, 0.9] },
   tytan: { name: 'Tytan', tag: 'Terenowy pickup: ciężki, stabilny, trudno go wytrącić', color: '#2fbf71', stripe: '#f2f2f5',
-    maxSpeed: 38, accel: 21, brake: 42, grip: 9.6, turn: 2.15, stats: [0.3, 0.55, 0.72] },
+    maxSpeed: 48, accel: 30, brake: 54, grip: 11.5, turn: 2.5, stats: [0.3, 0.55, 0.72] },
   kometa: { name: 'Kometa', tag: 'Bolid: rakieta na prostej, wymaga wprawy', color: '#8a5cf0', stripe: '#ffd84d',
-    maxSpeed: 54, accel: 25, brake: 50, grip: 5.4, turn: 2.2, stats: [1.0, 0.75, 0.38] },
+    maxSpeed: 68, accel: 36, brake: 62, grip: 6.8, turn: 2.6, stats: [1.0, 0.75, 0.38] },
 };
 
 const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -70,7 +70,7 @@ export class CarState {
     const surfGrip = (this.onGrass ? 0.5 : 1) * (surf === 'ice' ? 0.2 : surf === 'water' ? 0.5 : 1) * (!this.onGrass ? (track.gripMul ?? 1) : 1);
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
-    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.32 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
+    const vmax = def.maxSpeed * (this.onGrass ? 0.55 : 1) * (this.nitro ? 1.45 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
 
     // sterowanie — płynne wychylanie kierownicy
     const target = input.steer;
@@ -111,7 +111,7 @@ export class CarState {
     this.brakeLit = false;
     if (thr > 0) {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
-      else vf += def.accel * (1 - 0.35 * this.damage) * (this.nitro ? 2.4 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
+      else vf += def.accel * (1 - 0.35 * this.damage) * (this.nitro ? 2.8 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h * (this.onGrass ? 0.7 : 1);
     }
     if (input.hand && vf > 3) this.brakeLit = true;
     if (input.brake > 0) {

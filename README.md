@@ -110,11 +110,8 @@ pokoi, odliczania, kolejności mety i rankingu — nie waliduje fizyki, więc ni
 - Menu w zakładkach (Auto i wygląd / Tor / Ustawienia), „Trening solo” zawsze dostępny; auto i tor domyślnie losowe.
 - Esc w trybie solo = pauza (suwaki muzyki i efektów, kamera, restart, wyjście). C = kamera zza auta.
 
-## Piłka samochodowa
-- Tryb „Piłka”: duża piłka, dwie bramki, boisko z zieloną murawą; drużyny czerwoni/niebiescy (do 2 graczy w drużynie, boty uzupełniają składy).
-- Ustawienia: limit czasu (brak / 1:30 / 3 / 5 / 10 min), limit goli (brak / 3 / 5 / 7 / 10), ataki (bronie, bomby, rakiety, nitro — domyślnie wyłączone), boty, pogoda i pora dnia. Remis po czasie = dogrywka na złotego gola.
-- Multiplayer: piłkę symuluje gospodarz pokoju (`soccer:ball`), serwer liczy wynik i czas (`soccer:score`, `soccer:goal`, `soccer:kickoff`).
-- Kod: `public/js/soccer.js` (boisko, fizyka piłki, bot), `public/js/soccerworld.js` (wizualizacja).
-
 ## Tory
 Siedem torów, w tym dwa długie miejskie: **Śródmieście** (ok. 2,7 km, dzień, wiadukt, hopka) i **Neon Sektor** (ok. 2,9 km, cyberpunk, zawsze noc i deszcz). W menu zakładka „Tor" pokazuje podgląd całego toru z góry.
+
+## Dynamika
+Szybsze auta (np. Kometa ok. 258 km/h), pady przyspieszające z animowanymi szewronami na każdym torze, mini-turbo po długim dryfcie (hamulec ręczny), nitro mocniejsze o 45%, linie prędkości i drżenie kamery przy dużej prędkości. Tryby Arena i Piłka zostały usunięte — zostają wyścigi.

@@ -300,6 +300,24 @@ export function buildWorld(scene, renderer, track) {
   const finish = new THREE.Mesh(strip(track, -ROAD_HALF, ROAD_HALF, 0.035, { pred: (i) => i === 0 || i === 1, vScale: 2 }),
     new THREE.MeshStandardMaterial({ map: checkerTex(8, 2), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
   finish.receiveShadow = true; root.add(finish);
+  // pady przyspieszające: świecące szewrony na jezdni (animowane), wjazd = nitro
+  if (track.boosts.length) {
+    const padTex = canvasTex(128, 128, (x, wd, ht) => {
+      x.clearRect(0, 0, wd, ht);
+      const chev = (y0, col) => { x.fillStyle = col; x.beginPath(); x.moveTo(8, y0 + 46); x.lineTo(wd / 2, y0 + 6); x.lineTo(wd - 8, y0 + 46); x.lineTo(wd - 8, y0 + 66); x.lineTo(wd / 2, y0 + 28); x.lineTo(8, y0 + 66); x.closePath(); x.fill(); };
+      chev(8, '#ffb02e'); chev(-14, 'rgba(255,214,120,0.75)');
+    }, { repeat: [1, 1] });
+    padTex.wrapS = padTex.wrapT = THREE.RepeatWrapping;
+    const padMat = new THREE.MeshStandardMaterial({ map: padTex, transparent: true, emissiveMap: padTex, emissive: 0xffa000, emissiveIntensity: 1.6, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false });
+    const base = new THREE.MeshStandardMaterial({ color: 0x1a1308, emissive: 0xff8a00, emissiveIntensity: 0.25, roughness: 0.6, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    for (const b of track.boosts) {
+      const inPad = (i) => i >= b.i0 && i < b.i0 + b.len;
+      const g0 = new THREE.Mesh(strip(track, -5.6, 5.6, (k) => 0.036 + hy[k], { pred: inPad, vScale: b.len }), base); g0.receiveShadow = true;
+      const g1 = new THREE.Mesh(strip(track, -5, 5, (k) => 0.04 + hy[k], { pred: inPad, vScale: b.len / 2 }), padMat);
+      g1.renderOrder = 2; root.add(g0, g1);
+    }
+    world.padTex = padTex;
+  }
   // pola startowe
   const slotTex = canvasTex(256, 160, (x, w, h) => {
     x.strokeStyle = 'rgba(245,243,250,0.9)'; x.lineWidth = 7; x.strokeRect(8, 8, w - 16, h - 16);
@@ -685,6 +703,7 @@ export function buildWorld(scene, renderer, track) {
 
   world.update = (t) => {
     world.time.value = t;
+    if (world.padTex) world.padTex.offset.y = -((t * 1.4) % 1);
     for (const f of world.flags || []) {
       const p = f.geometry.attributes.position;
       if (!f.userData.base) f.userData.base = p.array.slice();
