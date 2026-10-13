@@ -1320,6 +1320,15 @@ function spectateTarget() {
 
 // ======================= Kamera =======================
 const _cu = new THREE.Vector3(), _cf = new THREE.Vector3(), _cp = new THREE.Vector3(), _ft = {};
+const orbit = { yaw: 0, pitch: 0, zoom: 1, drag: false, idle: 0 }, _co = new THREE.Vector3(), _cr = new THREE.Vector3();
+{
+  const ok = (e) => (S.mode === 'racing' || S.mode === 'countdown' || S.mode === 'finished') && S.cam === 'chase' && !e.target.closest('button, input, textarea, .card, #chat, .screen:not(.hidden), #pause, .modal');
+  addEventListener('pointerdown', (e) => { if (e.button === 0 && ok(e)) { orbit.drag = true; orbit.idle = 0; } });
+  addEventListener('pointermove', (e) => { if (!orbit.drag) return; orbit.yaw = clamp(orbit.yaw - e.movementX * 0.006, -Math.PI, Math.PI); orbit.pitch = clamp(orbit.pitch + e.movementY * 0.004, -0.15, 1.05); orbit.idle = 0; });
+  const up = () => { if (orbit.drag) { orbit.drag = false; orbit.idle = 0; } };
+  addEventListener('pointerup', up); addEventListener('pointercancel', up); addEventListener('blur', up);
+  addEventListener('wheel', (e) => { if (ok(e)) orbit.zoom = clamp(orbit.zoom * (e.deltaY > 0 ? 1.08 : 0.92), 0.6, 2.2); }, { passive: true });
+}
 function updateCamera(dt) {
   const racingView = S.mode === 'countdown' || S.mode === 'racing' || S.mode === 'finished';
   const rc = S.mode === 'replay' ? replayCamera() : null;
@@ -1336,10 +1345,14 @@ function updateCamera(dt) {
       if (cam.first) { cam.f.copy(_cf); cam.u.copy(_cu); }
       cam.f.lerp(_cf, 1 - Math.exp(-dt * 5.5)).normalize();
       cam.u.lerp(_cu, 1 - Math.exp(-dt * 2.6)); cam.u.addScaledVector(cam.f, -cam.u.dot(cam.f)).normalize();
-      const dist = 12.5 + clamp(speed - 20, 0, 50) * 0.09, h = 4.6 + clamp(speed - 20, 0, 50) * 0.02;
+      // bliższa kamera za autem; mysz (przeciąganie) obraca widok wokół auta, kółko przybliża; po puszczeniu wraca za auto
+      if (!orbit.drag) { orbit.idle += dt; if (orbit.idle > 1.6) { const kk = 1 - Math.exp(-dt * 3); orbit.yaw -= orbit.yaw * kk; orbit.pitch -= orbit.pitch * kk; } }
+      const dist = (7.4 + clamp(speed - 20, 0, 50) * 0.06) * orbit.zoom, h = (2.7 + clamp(speed - 20, 0, 50) * 0.014) * orbit.zoom;
       _cp.set(m.x, m.y, m.z);
-      pos = _cp.clone().addScaledVector(cam.f, -dist).addScaledVector(cam.u, h);
-      look = _cp.clone().addScaledVector(cam.f, 9).addScaledVector(cam.u, 1.3);
+      _co.set(0, 0, 0).addScaledVector(cam.f, -dist).addScaledVector(cam.u, h);
+      if (orbit.yaw || orbit.pitch) { _co.applyAxisAngle(cam.u, orbit.yaw); _cr.crossVectors(cam.f, cam.u).normalize(); _co.applyAxisAngle(_cr, orbit.pitch); }
+      pos = _cp.clone().add(_co);
+      look = _cp.clone().addScaledVector(cam.f, 6).addScaledVector(cam.u, 1.0);
       fov = 62 + clamp((speed - 25) / 45, 0, 1) * 9 + (m.nitro ? 8 : 0);
       up = cam.u;
     } else {
