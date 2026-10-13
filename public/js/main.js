@@ -52,6 +52,11 @@ const isSoccer = () => trackId === 'soccer';
 /** „pole walki” bez toru: arena i boisko piłkarskie (wspólna fizyka płaska/hp/bronie) */
 const isArena = () => trackId === 'arena' || trackId === 'soccer';
 const fieldOf = (mode) => (mode === 'arena' ? 'arena' : mode === 'soccer' ? 'soccer' : null);
+/** podgląd pogody/pory dnia wybranych w ustawieniach (menu: moje, lobby: pokoju); „losowa” = domyślna dla toru */
+function previewEnv(id) {
+  const src = S.mode === 'lobby' && S.room ? S.room.settings : S;
+  return { weather: src.weather && src.weather !== 'auto' ? src.weather : (TRACK_DEFS[id]?.rain ? 'rain' : 'sun'), time: src.time && src.time !== 'auto' ? src.time : 'day' };
+}
 function useTrack(id) {
   if (id !== 'arena' && id !== 'soccer' && !TRACK_DEFS[id]) id = TRACK_IDS[0];
   if (trackId === id && world) return;
@@ -61,7 +66,7 @@ function useTrack(id) {
   trackId = id;
   setFlat(id === 'soccer');
   items.ground = id === 'arena' || id === 'soccer' ? heightAt : null; particles.ground = items.ground;
-  applyEnvironment({ weather: TRACK_DEFS[id]?.rain ? 'rain' : 'sun', time: 'day' });
+  applyEnvironment(previewEnv(id));
   if (id === 'soccer') minimap.setSoccer(HX, HZ, GW, GD); else if (id === 'arena') minimap.setArena(ARENA_R, OBSTACLES); else minimap.setTrack(track);
   world.root.visible = true;
   scene.background = world.sky;
@@ -489,6 +494,7 @@ function renderMenuSettings() {
     if (c.tournament !== undefined) { S.tournament = c.tournament; store.set('tc_tour', c.tournament ? '1' : '0'); S.tour = null; }
     if (c.weather) { S.weather = c.weather; store.set('tc_weather', c.weather); }
     if (c.time) { S.time = c.time; store.set('tc_time', c.time); }
+    if ((c.weather || c.time) && S.mode === 'menu') applyEnvironment(previewEnv(trackId));
     if (c.loadout) { S.loadout = c.loadout; store.set('tc_loadout', c.loadout); }
     if (c.laps != null) { S.laps = c.laps; S.lapsManual = true; }
     if (c.bots != null) S.bots = c.bots;
@@ -633,13 +639,14 @@ function goMenu() {
   me.team = 'red'; clearOpps(); setCar(me, S.carId, 0, S.color); ghostClear(); buildMenuColors(); buildMenuCustom();
   me.finished = false; resetItems();
   particles.clear(); skids.clear();
-  applyEnvironment({ weather: TRACK_DEFS[trackId]?.rain ? 'rain' : 'sun', time: 'day' });
+  applyEnvironment(previewEnv(trackId));
   showScreen('menu');
   clearChat();
   loadRanking();
   musicStart();
 }
 
+let lobbyEnvKey = '';
 const WX_L = { auto: 'losowa', sun: 'słonecznie', rain: 'deszcz', storm: 'burza' }, TM_L = { auto: 'losowa', day: 'dzień', dusk: 'zmierzch', night: 'noc' }, PK_L = { off: 'brak', rare: 'rzadko', normal: 'normalnie', often: 'często' };
 /** karta „Co jest grane”: tryb, trasa i ustawienia pokoju (widoczne dla wszystkich) */
 function renderLobbyInfo(r, isHost) {
@@ -697,6 +704,7 @@ function renderLobby() {
     buildSettings('lobby-settings', vals, isHost, (c) => { if (c.raceBots !== undefined) { c.bots = c.raceBots; delete c.raceBots; } socket?.emit('room:settings', c); }); }
   $('track-note').textContent = isHost ? '— możesz zmieniać w każdej chwili' : '— zmienia gospodarz';
   renderLobbyInfo(r, isHost);
+  { const key = `${r.settings.weather}|${r.settings.time}|${fieldOf(r.mode) || r.track}`; if (S.mode === 'lobby' && lobbyEnvKey !== key) { lobbyEnvKey = key; applyEnvironment(previewEnv(fieldOf(r.mode) || r.track)); } }
   const wantTrack = fieldOf(r.mode) || r.track;
   const trackChanged = wantTrack !== trackId;
   if (trackChanged) { useTrack(wantTrack); me.carIdShown = null; }
@@ -820,6 +828,7 @@ function renderSpec() {
   }
   const wantTrack = fieldOf(r.mode) || r.track;
   if (wantTrack !== trackId) useTrack(wantTrack);
+  $('btn-spec-join').classList.toggle('hidden', !(r.state === 'lobby' || r.state === 'finished') || r.players.length >= 4);
   syncOpps(false);
 }
 function markSpectator() {
@@ -839,7 +848,7 @@ function enterSpectator() {
 }
 function updateSpecUi() { $('spec-banner').classList.toggle('hidden', !(S.spectator && S.mode !== 'menu' && S.mode !== 'lobby')); }
 function enterLobby() {
-  setMode('lobby');
+  setMode('lobby'); lobbyEnvKey = '';
   me.carIdShown = null; clearOpps();
   renderLobby();
   showScreen('lobby');
@@ -2294,6 +2303,7 @@ function bindUi() {
   $('rooms-close').addEventListener('click', closeRooms); $('rooms-refresh').addEventListener('click', refreshRooms);
   $('rooms-modal').addEventListener('click', (e) => { if (e.target === $('rooms-modal')) closeRooms(); });
   $('btn-spec-leave').addEventListener('click', goMenu);
+  $('btn-spec-join').addEventListener('click', async () => { const id = S.room?.id; if (!id) return; if (socket) socket.emit('room:leave'); S.room = null; S.spectator = false; document.body.classList.remove('spectating'); S.joinCode = id; await joinRoom(false); if (!S.room) goMenu(); });
   $('replay-close').addEventListener('click', () => closeReplay(false));
   $('replay-cam').addEventListener('click', () => { replay.cam = (replay.cam + 1) % 4; $('replay-cam').textContent = ['Kamera: auto', 'Kamera: pościg', 'Kamera: z góry', 'Kamera: z boku'][replay.cam]; });
   $('btn-mute').addEventListener('click', toggleMute);
@@ -2314,7 +2324,7 @@ function bindUi() {
   });
   $('btn-change-nick').addEventListener('click', () => { $('inp-nick').value = S.nick; showScreen('nick'); $('inp-nick').focus(); });
   $('btn-create').addEventListener('click', createRoom);
-  $('btn-join').addEventListener('click', joinRoom);
+  $('btn-join').addEventListener('click', () => joinRoom(false));
   $('btn-solo').addEventListener('click', () => { initAudio(); startSolo(); });
   $('btn-copy').addEventListener('click', async () => {
     const inp = $('lobby-link');
