@@ -644,6 +644,7 @@ function goMenu() {
   clearChat();
   loadRanking();
   musicStart();
+  if (S.autoJoin && S.joinCode) { S.autoJoin = false; joinRoom(false); }
 }
 
 let lobbyEnvKey = '';
@@ -2352,7 +2353,7 @@ function bindUi() {
   bindUi();
   const code = new URLSearchParams(location.search).get('room');
   if (code && /^[A-Za-z0-9]{4,8}$/.test(code)) {
-    S.joinCode = code.toUpperCase();
+    S.joinCode = code.toUpperCase(); S.autoJoin = true; // link z zaproszeniem: po wpisaniu nicku od razu dołączamy
     $('join-code').textContent = S.joinCode;
     $('join-banner').classList.remove('hidden');
     $('btn-join').classList.remove('hidden'); $('btn-create').classList.add('hidden');
