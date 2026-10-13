@@ -15,6 +15,7 @@ import { buildSoccerWorld } from './soccerworld.js';
 import { Music } from './music.js';
 import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted, setRain, getSfxVolume, setSfxVolume } from './audio.js';
 
+const CAR_IDS = Object.keys(CAR_DEFS);
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const store = {
@@ -172,7 +173,7 @@ window.addEventListener('resize', resize);
 // ======================= Stan gry =======================
 const S = {
   nick: store.get('tc_nick', ''),
-  carPick: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'random', carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : ['aurora', 'vortex', 'blaze'][Math.random() * 3 | 0],
+  carPick: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : 'random', carId: CAR_DEFS[store.get('tc_car')] ? store.get('tc_car') : CAR_IDS[Math.random() * CAR_IDS.length | 0],
   custom: (() => { const d = { num: 7, pattern: 'stripes', rim: 'star', rimColor: '#d9dde6', plate: true }; try { return { ...d, ...JSON.parse(store.get('tc_custom') || '{}') }; } catch { return d; } })(),
   weather: ['auto', 'sun', 'rain', 'storm'].includes(store.get('tc_weather')) ? store.get('tc_weather') : 'auto', time: ['auto', 'day', 'dusk', 'night'].includes(store.get('tc_time')) ? store.get('tc_time') : 'auto',
   raceBots: Math.min(3, Math.max(0, parseInt(store.get('tc_rbots') || '0', 10) || 0)), tournament: store.get('tc_tour') === '1',
@@ -376,7 +377,7 @@ async function openProfile(nick) {
 
 /** losowanie auta i toru, jeśli gracz niczego nie wybrał (opcja „Losowy”) */
 function rollRandoms() {
-  if (S.carPick === 'random') S.carId = Object.keys(CAR_DEFS)[Math.random() * 3 | 0];
+  if (S.carPick === 'random') S.carId = CAR_IDS[Math.random() * CAR_IDS.length | 0];
   if (S.trackPick === 'random') { S.trackId = TRACK_IDS[Math.random() * TRACK_IDS.length | 0]; if (!S.lapsManual) S.laps = TRACK_DEFS[S.trackId].laps; }
 }
 function pickCar(id) {
@@ -384,16 +385,33 @@ function pickCar(id) {
   if (id === 'random') rollRandoms(); else S.carId = id;
   markCar(); if (S.mode === 'menu') setCar(me, S.carId, 0, S.color);
 }
+const STAT_DEFS = [['Prędkość', '#ff5a5f'], ['Przyspieszenie', '#ffb02e'], ['Prowadzenie', '#3fa9f5']];
 function buildCarList() {
   const wrap = $('car-list'); wrap.textContent = '';
   const entries = [...Object.entries(CAR_DEFS), ['random', { name: 'Losowy', tag: 'Losowe auto przy każdym starcie', stats: null }]];
   for (const [id, d] of entries) {
     const b = document.createElement('button'); b.className = 'car' + (id === 'random' ? ' rnd' : ''); b.dataset.id = id;
-    b.innerHTML = `<span class="dot" style="background:${d.color || ''}"></span><span><b>${d.name}</b><small>${d.tag}</small></span>${d.stats ? `<span class="stat">${d.stats.map((v) => `<div><i style="width:${Math.round(v * 100)}%"></i></div>`).join('')}</span>` : ''}`;
+    b.innerHTML = '<span class="dot"></span><b></b>'; b.querySelector('b').textContent = d.name;
     b.addEventListener('click', () => pickCar(id));
     wrap.append(b);
   }
   markCar();
+}
+/** opis wybranego auta: nazwa, krótki opis i trzy opisane paski (każdy w swoim kolorze) */
+function renderCarDetail() {
+  const box = $('car-detail'); if (!box) return;
+  const d = S.carPick === 'random' ? { name: 'Losowy', tag: 'Losowe auto przy każdym starcie', stats: null } : CAR_DEFS[S.carPick];
+  box.textContent = '';
+  const head = document.createElement('div'); head.className = 'cd-head'; const nm = document.createElement('b'); nm.textContent = d.name; const tg = document.createElement('small'); tg.textContent = d.tag; head.append(nm, tg); box.append(head);
+  const bars = document.createElement('div'); bars.className = 'cd-bars';
+  STAT_DEFS.forEach(([label, color], i) => {
+    const row = document.createElement('div'); row.className = 'cd-bar';
+    const l = document.createElement('span'); l.textContent = label;
+    const tr = document.createElement('div'); const fill = document.createElement('i'); fill.style.width = d.stats ? `${Math.round(d.stats[i] * 100)}%` : '0%'; fill.style.background = color; tr.append(fill);
+    const v = document.createElement('em'); v.textContent = d.stats ? String(Math.round(d.stats[i] * 10)) : '?'; v.style.color = color;
+    row.append(l, tr, v); bars.append(row);
+  });
+  box.append(bars);
 }
 const previewCache = {};
 function trackPreview(id) {
@@ -584,13 +602,13 @@ let menuTab = 'car';
 function showTab(name) {
   menuTab = name;
   document.querySelectorAll('#menu-tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.tab === name));
-  for (const n of ['car', 'track', 'settings', 'rank']) $('pane-' + n).classList.toggle('hidden', n !== name);
+  for (const n of ['car', 'track']) $('pane-' + n).classList.toggle('hidden', n !== name);
 }
 function pickMenuMode(g) {
   S.game = g; store.set('tc_game', g); applyModeUi();
   if (S.mode === 'menu') { toast('Ładowanie…', 800); setTimeout(() => { useTrack(fieldOf(g) || S.trackId); setCar(me, S.carId, 0, S.color); }, 30); }
 }
-function markCar() { document.querySelectorAll('.car').forEach((b) => { b.classList.toggle('sel', b.dataset.id === S.carPick); const d = b.querySelector('.dot'); if (d) d.style.background = S.color; }); }
+function markCar() { renderCarDetail(); document.querySelectorAll('.car').forEach((b) => { b.classList.toggle('sel', b.dataset.id === S.carPick); const d = b.querySelector('.dot'); if (d) d.style.background = S.color; }); }
 
 function goMenu() {
   clearTimers(); S.spectator = false; document.body.classList.remove('spectating'); closeReplay(true);
@@ -1418,7 +1436,7 @@ function showResultsArenaSolo(won) {
 function spawnBots() {
   const colors = CAR_COLORS.filter((c) => c !== S.color);
   for (let i = 0; i < S.bots; i++) {
-    const o = { id: 'bot' + i, bot: true, nick: BOT_NAMES[i], carId: ['vortex', 'blaze', 'aurora'][i % 3], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: currentLoadout() === 'full' ? 'rocket' : null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { t: 0, target: null, stuck: 0, rev: 0, revSteer: 1, cd: 2 + Math.random() * 3 } };
+    const o = { id: 'bot' + i, bot: true, nick: BOT_NAMES[i], carId: CAR_IDS[(i + 1) % CAR_IDS.length], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: currentLoadout() === 'full' ? 'rocket' : null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { t: 0, target: null, stuck: 0, rev: 0, revSteer: 1, cd: 2 + Math.random() * 3 } };
     opps.set(o.id, o); setCar(o, o.carId, o.slot, colors[i % colors.length]); o.st.hp = 100;
   }
 }
@@ -1692,7 +1710,7 @@ function renderRematch() {
 }
 
 // ---- boty wyścigowe ----
-const RBOT_CARS = ['vortex', 'blaze', 'aurora'];
+const RBOT_CARS = CAR_IDS.slice(1).concat(CAR_IDS[0]);
 function spawnRaceBots(n) {
   const colors = CAR_COLORS.filter((c) => c !== S.color);
   for (let i = 0; i < n; i++) {
@@ -2016,7 +2034,7 @@ function spawnSoccerBots() {
   const ro = soccerRoster();
   for (let i = 0; i < S.bots; i++) {
     const e = ro.find((x) => x.key === 'bot' + i);
-    const o = { id: 'bot' + i, bot: true, team: e?.team || 'blue', nick: BOT_NAMES[i], carId: ['vortex', 'blaze', 'aurora'][i % 3], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { stuck: 0, rev: 0, revSteer: 1 } };
+    const o = { id: 'bot' + i, bot: true, team: e?.team || 'blue', nick: BOT_NAMES[i], carId: CAR_IDS[(i + 1) % CAR_IDS.length], slot: i + 1, snaps: [], prevVf: 0, smokeAcc: 0, audio: null, vis: null, st: null, finished: false, hp: 100, weapon: null, shieldT: 0, fireT: 0, fireAcc: 0, nitroT: 0, hitCd: 0, ai: { stuck: 0, rev: 0, revSteer: 1 } };
     opps.set(o.id, o); setCar(o, o.carId, o.slot, o.color); o.st.hp = 100;
   }
 }
@@ -2179,8 +2197,8 @@ function updateCamera(dt) {
     const ol = oppList();
     const base = me.st || ol[0]?.st;
     const P = new THREE.Vector3(base ? base.x : 0, S.mode === 'menu' ? -2.3 : 0.8, base ? base.z : 0); // w menu auto wyżej w kadrze (nad garażem)
-    const a = T * 0.2 + 0.5, r = 15.5 + ol.length * 1.5;
-    pos = new THREE.Vector3(P.x + Math.cos(a) * r, 8.2 + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
+    const menuView = S.mode === 'menu', a = T * 0.2 + 0.5, r = menuView ? (S.game === 'race' ? 25 : 32) : 15.5 + ol.length * 1.5;
+    pos = new THREE.Vector3(P.x + Math.cos(a) * r, (menuView ? r * 0.5 : 8.2) + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
     look = P.clone(); fov = 36; shift = S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
   }
   if (!racingView) cam.racingT = undefined;

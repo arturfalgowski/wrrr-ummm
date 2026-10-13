@@ -435,3 +435,33 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
   .m2-right { max-height: none; }
   .m2-garage .cars { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- Menu v2.1: ustawienia po lewej, ranking po prawej, opis aut ---------- */
+.menu2 .m2-left { overflow-y: auto; max-height: calc(100vh - 90px); padding-right: 4px; }
+.m2-setlabel { margin-top: 8px; }
+.m2-set { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; backdrop-filter: blur(16px); display: grid; gap: 10px; }
+.m2-set .set { flex-direction: column; align-items: stretch; gap: 6px; }
+.m2-set .set > span { font-size: 12px; color: var(--muted); }
+.m2-set .seg { width: 100%; } .m2-set .seg button { flex: 1; padding: 7px 4px; }
+.m2-set .step { justify-content: space-between; }
+.m2-right { grid-column: 3; grid-row: 2 / 4; display: flex; flex-direction: column; gap: 12px; min-height: 0; max-height: calc(100vh - 90px); }
+.m2-rank { padding: 14px 16px; flex: 0 1 auto; overflow: auto; max-height: 46vh; }
+.m2-rank h3 { margin: 0 0 8px; }
+.m2-tabs { padding: 12px 14px; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.m2-tabs .tabs { margin: 0 0 10px; }
+.m2-tabs .tabpane { flex: 1; min-height: 0; overflow: auto; max-height: none; }
+.m2-garage .cars { grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.m2-garage .cars .car { display: flex; align-items: center; gap: 6px; padding: 8px 8px; justify-content: center; }
+.m2-garage .cars .car .dot { display: block; width: 10px; height: 10px; flex: none; }
+.m2-garage .cars .car b { font-size: 12px; }
+.car-detail { width: 100%; display: grid; grid-template-columns: minmax(120px, 0.9fr) 2fr; gap: 14px; align-items: center; padding: 8px 4px 2px; }
+.cd-head b { display: block; font-size: 17px; }
+.cd-head small { display: block; font-size: 11px; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+.cd-bars { display: grid; gap: 6px; }
+.cd-bar { display: grid; grid-template-columns: 96px 1fr 18px; gap: 8px; align-items: center; font-size: 11px; }
+.cd-bar span { color: var(--muted); font-weight: 700; }
+.cd-bar div { height: 8px; border-radius: 5px; background: rgba(255,255,255,.12); overflow: hidden; }
+.cd-bar i { display: block; height: 100%; border-radius: 5px; }
+.cd-bar em { font-style: normal; font-weight: 800; text-align: right; }
+@media (max-width: 1050px) { .m2-right { grid-column: 1; grid-row: auto; max-height: none; } .m2-garage .cars { grid-template-columns: repeat(3, 1fr); } .car-detail { grid-template-columns: 1fr; } }
+.menu2 .m2-right { padding: 0; }

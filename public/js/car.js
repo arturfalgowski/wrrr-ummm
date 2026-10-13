@@ -19,6 +19,18 @@ const MODELS = {
     body: [[-2.35, 0.4], [-2.35, 1.0], [-1.95, 1.2], [-0.5, 1.2], [0.9, 1.02], [1.95, 0.84], [2.32, 0.6], [2.3, 0.4], [1.0, 0.32], [-1.0, 0.32]],
     cabin: [[-1.8, 1.14], [-1.3, 1.72], [0.0, 1.8], [0.7, 1.46], [1.1, 1.04]], open: false, spoiler: true, decalX: -0.3, plateX: -1.95, number: 23,
   },
+  // pickup terenowy: wysoko zawieszony, ogromne koła, kabina z paką
+  tytan: {
+    L: 5.4, W: 2.2, wheelX: 1.75, wheelZ: 1.4, wheelR: 0.95, wheelW: 0.95, lightY: 1.15, tailY: 1.3,
+    body: [[-2.7, 0.7], [-2.74, 1.5], [-1.0, 1.55], [-0.62, 1.58], [0.95, 1.58], [1.6, 1.42], [2.62, 1.34], [2.72, 1.0], [2.62, 0.7], [1.2, 0.62], [-1.2, 0.62]],
+    cabin: [[-0.6, 1.5], [-0.38, 2.4], [0.85, 2.46], [1.4, 1.52]], open: false, spoiler: false, decalX: 0.3, plateX: -2.1, number: 4, extras: 'truck',
+  },
+  // bolid: wąski kadłub, odkryte koła, skrzydła
+  kometa: {
+    L: 5.2, W: 1.0, wheelX: 1.6, wheelZ: 1.28, wheelR: 0.56, wheelW: 0.7, lightY: 0.52, tailY: 0.7,
+    body: [[-2.55, 0.28], [-2.58, 0.64], [-1.7, 0.82], [-0.7, 0.86], [0.3, 0.72], [1.3, 0.5], [2.62, 0.42], [2.62, 0.3], [1.3, 0.25], [-1.3, 0.25]],
+    cabin: null, open: false, spoiler: false, decalX: 0.15, plateX: -1.55, number: 88, extras: 'formula',
+  },
 };
 
 function chaikin(pts, iter) {
@@ -207,19 +219,50 @@ export function buildCar(id, number, color = null, custom = null) {
     sp.position.set(-M.L / 2 + 0.2, M.cabin ? 1.52 : 1.5, 0);
     body.add(sp);
   }
+  if (M.extras === 'formula') {
+    const acc = reg(paintMaterial({ paint: def.stripe || 0x222222 }), 'accent');
+    const bodyPaint = reg(paintMaterial({ paint: def.color, stripe: def.stripe, pattern: PATTERN_IDX[cust.pattern] ?? 1 }), 'body');
+    const box = (w, h, d, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; body.add(m); return m; };
+    box(0.85, 0.07, 2.7, M.L / 2 - 0.15, 0.3, 0, acc);                        // przedni spojler
+    for (const sz of [-1.35, 1.35]) box(0.95, 0.3, 0.06, M.L / 2 - 0.15, 0.42, sz, acc);
+    box(0.8, 0.08, 2.0, -M.L / 2 + 0.05, 1.32, 0, acc);                       // tylny spojler
+    for (const sz of [-1.0, 1.0]) box(0.9, 0.62, 0.06, -M.L / 2 + 0.05, 1.05, sz, acc);
+    for (const sz of [-0.3, 0.3]) box(0.14, 0.7, 0.1, -M.L / 2 + 0.25, 0.95, sz, darkMat);
+    for (const sz of [-0.74, 0.74]) { box(1.9, 0.34, 0.5, -0.1, 0.52, sz, bodyPaint); box(0.5, 0.24, 0.52, 0.9, 0.46, sz, darkMat); } // boczne wloty
+    box(0.7, 0.55, 0.42, -0.95, 1.12, 0, bodyPaint);                            // airbox
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 14), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.25, clearcoat: 1 }));
+    helmet.position.set(-0.2, 1.08, 0); helmet.castShadow = true; body.add(helmet);
+    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.305, 14, 10, -0.5, 1.0, 0.9, 0.6), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.1, metalness: 0.8 }));
+    visor.rotation.y = Math.PI / 2; visor.position.copy(helmet.position); body.add(visor);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.045, 6, 18, Math.PI), darkMat); halo.rotation.y = Math.PI / 2; halo.rotation.x = 0.1; halo.position.set(0.15, 0.95, 0); body.add(halo);
+    for (const [sx, sz] of [[M.wheelX, M.wheelZ], [M.wheelX, -M.wheelZ], [-M.wheelX, M.wheelZ], [-M.wheelX, -M.wheelZ]]) { // wahacze
+      const len = Math.abs(sz) - 0.45, arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 6), darkMat);
+      arm.rotation.x = Math.PI / 2; arm.position.set(sx, 0.5, Math.sign(sz) * (0.45 + len / 2)); body.add(arm);
+    }
+  }
+  if (M.extras === 'truck') {
+    const acc = reg(paintMaterial({ paint: def.stripe || 0x222222 }), 'accent');
+    const box = (w, h, d, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; body.add(m); return m; };
+    box(0.4, 0.55, M.W * 1.02, M.L / 2 + 0.05, 0.85, 0, darkMat);               // zderzaki
+    box(0.35, 0.45, M.W * 1.0, -M.L / 2 - 0.02, 0.9, 0, darkMat);
+    const bar = box(0.18, 0.16, 1.6, 0.35, 2.58, 0, new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffe9a0, emissiveIntensity: 1.6 })); void bar; // belka świateł
+    for (const sz of [-1.0, 1.0]) box(2.1, 0.12, 0.1, -1.75, 1.66, sz, acc);      // burty paki
+    box(0.1, 0.5, 2.0, -2.72, 1.8, 0, acc);                                       // klapa
+    for (const sz of [-0.85, 0.85]) { const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8), new THREE.MeshStandardMaterial({ color: 0xaab0bd, metalness: 0.9, roughness: 0.3 })); ex.position.set(-0.7, 2.1, sz); body.add(ex); }
+  }
   // światła
   const headMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffe9a0, emissiveIntensity: 1.8 });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff1a1a, emissiveIntensity: 0.9 });
   for (const sz of [-0.62, 0.62]) {
     const hl = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), headMat);
-    hl.scale.set(0.8, 0.7, 1); hl.position.set(M.L / 2 - 0.14, 0.7, sz);
+    hl.scale.set(0.8, 0.7, 1); hl.position.set(M.L / 2 - 0.14, M.lightY ?? 0.7, sz * (M.extras === 'formula' ? 0.45 : 1));
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.42), tailMat);
-    tl.position.set(-M.L / 2 + 0.04, 0.82, sz * 0.95);
+    tl.position.set(-M.L / 2 + 0.04, M.tailY ?? 0.82, sz * (M.extras === 'formula' ? 0.35 : 0.95));
     body.add(hl, tl);
   }
   // koła
   const wheels = { fl: null, fr: null, rl: null, rr: null };
-  const ww = 0.58;
+  const ww = M.wheelW ?? 0.58;
   const spots = { fl: [M.wheelX, M.wheelZ], fr: [M.wheelX, -M.wheelZ], rl: [-M.wheelX, M.wheelZ], rr: [-M.wheelX, -M.wheelZ] };
   for (const k of Object.keys(spots)) {
     const w = makeWheel(M.wheelR, ww, cust.rim, rimM);

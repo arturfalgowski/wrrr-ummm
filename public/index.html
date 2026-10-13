@@ -118,11 +118,14 @@
     <div class="m2-label">Tryb gry</div>
     <div class="m2-modes" id="mode-list"></div>
     <div class="banner hidden" id="join-banner">Zaproszenie do wyścigu <b id="join-code"></b></div>
+    <div class="m2-label m2-setlabel">Ustawienia</div>
+    <div class="settings m2-set" id="menu-settings"></div>
   </aside>
   <section class="m2-bottom">
     <div class="m2-garage">
       <div class="m2-label">Garaż</div>
       <div class="cars" id="car-list"></div>
+      <div class="car-detail" id="car-detail"></div>
       <div class="swatches" id="menu-colors"></div>
     </div>
     <div class="m2-dock">
@@ -136,27 +139,20 @@
       <div class="err" id="menu-err"></div>
     </div>
   </section>
-  <aside class="m2-right card">
-    <nav class="tabs" id="menu-tabs">
-      <button data-tab="car" class="sel">Wygląd</button>
-      <button data-tab="track" id="tab-btn-track">Tor</button>
-      <button data-tab="settings" id="tab-btn-settings">Ustawienia</button>
-      <button data-tab="rank" id="tab-btn-rank">Ranking</button>
-    </nav>
-    <div class="tabpane" id="pane-car">
-      <h3>Personalizacja auta</h3>
-      <div class="settings" id="menu-custom"></div>
-    </div>
-    <div class="tabpane hidden" id="pane-track">
-      <div class="tracks" id="track-list"></div>
-    </div>
-    <div class="tabpane hidden" id="pane-settings">
-      <div class="settings" id="menu-settings"></div>
-    </div>
-    <div class="tabpane hidden" id="pane-rank">
+  <aside class="m2-right">
+    <div class="card m2-rank">
+      <h3>Ranking</h3>
       <div class="seg rank-tabs" id="rank-tabs"><button data-m="race" class="sel">Wyścig</button><button data-m="arena">Arena</button><button data-m="soccer">Piłka</button></div>
-      <ol id="rank-menu" class="ranklist"></ol>
+      <ol id="rank-menu" class="ranklist compact"></ol>
       <div class="muted" style="font-size:11px;margin-top:8px">Kliknij gracza, aby zobaczyć profil.</div>
+    </div>
+    <div class="card m2-tabs">
+      <nav class="tabs" id="menu-tabs">
+        <button data-tab="car" class="sel">Personalizacja</button>
+        <button data-tab="track" id="tab-btn-track">Tor</button>
+      </nav>
+      <div class="tabpane" id="pane-car"><div class="settings" id="menu-custom"></div></div>
+      <div class="tabpane hidden" id="pane-track"><div class="tracks" id="track-list"></div></div>
     </div>
   </aside>
 </section>

@@ -8,6 +8,10 @@ export const CAR_DEFS = {
     maxSpeed: 50, accel: 19, brake: 44, grip: 6.4, turn: 2.05, stats: [0.9, 0.5, 0.52] },
   blaze: { name: 'Szerszeń', tag: 'Zwinny i dynamiczny', color: '#ff7a1a', stripe: '#1a1a24',
     maxSpeed: 41, accel: 27, brake: 48, grip: 9.0, turn: 2.7, stats: [0.42, 0.88, 0.9] },
+  tytan: { name: 'Tytan', tag: 'Terenowy pickup: ciężki, stabilny, trudno go wytrącić', color: '#2fbf71', stripe: '#f2f2f5',
+    maxSpeed: 38, accel: 21, brake: 42, grip: 9.6, turn: 2.15, stats: [0.3, 0.55, 0.72] },
+  kometa: { name: 'Kometa', tag: 'Bolid: rakieta na prostej, wymaga wprawy', color: '#8a5cf0', stripe: '#ffd84d',
+    maxSpeed: 54, accel: 25, brake: 50, grip: 5.4, turn: 2.2, stats: [1.0, 0.75, 0.38] },
 };
 
 const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
