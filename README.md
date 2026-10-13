@@ -115,3 +115,6 @@ pokoi, odliczania, kolejności mety i rankingu — nie waliduje fizyki, więc ni
 - Ustawienia: limit czasu (brak / 1:30 / 3 / 5 / 10 min), limit goli (brak / 3 / 5 / 7 / 10), ataki (bronie, bomby, rakiety, nitro — domyślnie wyłączone), boty, pogoda i pora dnia. Remis po czasie = dogrywka na złotego gola.
 - Multiplayer: piłkę symuluje gospodarz pokoju (`soccer:ball`), serwer liczy wynik i czas (`soccer:score`, `soccer:goal`, `soccer:kickoff`).
 - Kod: `public/js/soccer.js` (boisko, fizyka piłki, bot), `public/js/soccerworld.js` (wizualizacja).
+
+## Tory
+Siedem torów, w tym dwa długie miejskie: **Śródmieście** (ok. 2,7 km, dzień, wiadukt, hopka) i **Neon Sektor** (ok. 2,9 km, cyberpunk, zawsze noc i deszcz). W menu zakładka „Tor" pokazuje podgląd całego toru z góry.

@@ -81,13 +81,14 @@ function resolveEnvLocal(trackId) {
   return { weather, time };
 }
 function applyEnvironment(env) {
-  envNow = env;
+  envNow = TRACK_DEFS[trackId]?.forceTime ? { ...env, time: TRACK_DEFS[trackId].forceTime } : env;
   const e = world?.env; if (!e) return;
-  const { weather: wx, time: t } = env;
+  const { weather: wx } = env;
+  const t = TRACK_DEFS[trackId]?.forceTime || env.time; // np. Neon Sektor zawsze nocą
   const sky = e.baseSky.clone(), sunC = e.sunBase.color.clone(), hS = e.hemiBase.sky.clone(), hG = e.hemiBase.ground.clone();
   let sunI = e.sunBase.intensity, hemiI = e.hemiBase.intensity, expo = 1.05, envI = 0.42;
   if (t === 'dusk') { sky.lerp(new THREE.Color(0xe0875a), 0.6); sunC.set(0xff8a4a); sunI *= 0.7; hemiI *= 0.8; hS.lerp(new THREE.Color(0xffb48a), 0.4); expo = 1.1; }
-  if (t === 'night') { sky.set(0x0a1226); sunC.set(0x7d93ff); sunI = 0.6; hemiI = 0.32; hS.set(0x3a4a8a); hG.set(0x141824); expo = 1.3; envI = 0.12; }
+  if (t === 'night') { sky.set(world.nightSky ?? 0x0a1226); sunC.set(0x7d93ff); sunI = 0.6; hemiI = 0.32; hS.set(0x3a4a8a); hG.set(0x141824); expo = 1.3; envI = 0.12; }
   if (wx === 'rain') { sky.lerp(new THREE.Color(t === 'night' ? 0x0d141f : 0x7d8791), 0.55); sunI *= 0.45; envI = Math.max(envI, 0.8); }
   if (wx === 'storm') { sky.lerp(new THREE.Color(t === 'night' ? 0x070b12 : 0x454d58), 0.75); sunI *= 0.22; hemiI *= 0.85; envI = Math.max(envI, 0.7); }
   if (t === 'night') envI = 0.14; else if (t === 'dusk') envI *= 0.7;
@@ -96,6 +97,7 @@ function applyEnvironment(env) {
   scene.background = sky; scene.fog = new THREE.Fog(sky, 300, 1500);
   renderer.toneMappingExposure = expo; scene.environmentIntensity = envI;
   if (e.nightMesh) e.nightMesh.visible = t === 'night';
+  world.setTime?.(t);
   rain.visible = wx !== 'sun';
   rain.material.uniforms.uAmt.value = wx === 'storm' ? 1 : 0.55; rain.material.uniforms.uWind.value = wx === 'storm' ? 2.2 : 0.9;
   if (world.asphaltMat) { const wet = wx !== 'sun'; world.asphaltMat.roughness = wet ? 0.32 : 0.88; world.asphaltMat.metalness = wet ? 0.25 : 0; world.asphaltMat.color.set(wet ? 0xa9abb8 : 0xffffff); }
@@ -490,7 +492,7 @@ function renderMenuSettings() {
     renderMenuSettings();
   });
 }
-const THEME_SW = { lato: ['#5f9c49', '#a1694a'], pustynia: ['#d9b878', '#a9764f'], zima: ['#e8eef6', '#8d96a6'], jesien: ['#96723a', '#94704a'], wyspa: ['#4ac07a', '#e4d29a'] };
+const THEME_SW = { miasto: ['#585b66', '#8c8d98'], cyber: ['#1a142e', '#2b2150'], lato: ['#5f9c49', '#a1694a'], pustynia: ['#d9b878', '#a9764f'], zima: ['#e8eef6', '#8d96a6'], jesien: ['#96723a', '#94704a'], wyspa: ['#4ac07a', '#e4d29a'] };
 function buildTrackList(wrapId, selected, onPick, canPick, withRandom = false) {
   const wrap = $(wrapId); wrap.textContent = '';
   if (withRandom) {
@@ -2199,9 +2201,14 @@ function updateCamera(dt) {
     const P = new THREE.Vector3(base ? base.x : 0, S.mode === 'menu' ? -2.3 : 0.8, base ? base.z : 0); // w menu auto wyżej w kadrze (nad garażem)
     const menuView = S.mode === 'menu', a = T * 0.2 + 0.5, r = menuView ? (S.game === 'race' ? 25 : 32) : 15.5 + ol.length * 1.5;
     pos = new THREE.Vector3(P.x + Math.cos(a) * r, (menuView ? r * 0.5 : 8.2) + Math.sin(T * 0.4) * 0.8, P.z + Math.sin(a) * r);
-    look = P.clone(); fov = 36; shift = S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
+    look = P.clone(); fov = 36;
+    if (menuView && menuTab === 'track' && S.game === 'race' && track?.bounds) { // zakładka Tor: widok z góry obejmujący cały tor
+      const b = track.bounds, ex = b.maxX - b.minX, ez = b.maxZ - b.minZ, d = Math.max(ez * 2.1, ex * 1.5);
+      look = new THREE.Vector3((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2); pos = look.clone().add(new THREE.Vector3(0, d * 0.92, d * 0.4));
+    } shift = S.mode === 'lobby' ? 0.13 : 0; tilt = 0.35;
   }
   if (!racingView) cam.racingT = undefined;
+  { const ov = S.mode === 'menu' && menuTab === 'track' && S.game === 'race'; if (world.skyline) for (const o of world.skyline) o.visible = !ov; rain.visible = envNow.weather !== 'sun' && !ov; } // w podglądzie toru chowamy wieżowce
   const k = cam.first ? 1 : 1 - Math.exp(-dt * (racingView ? 2.6 + Math.min(1, cam.racingT / 1.4) * 8 : 2.4));
   cam.first = false;
   cam.pos.lerp(pos, k); cam.look.lerp(look, k);

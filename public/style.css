@@ -465,3 +465,8 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 .cd-bar em { font-style: normal; font-weight: 800; text-align: right; }
 @media (max-width: 1050px) { .m2-right { grid-column: 1; grid-row: auto; max-height: none; } .m2-garage .cars { grid-template-columns: repeat(3, 1fr); } .car-detail { grid-template-columns: 1fr; } }
 .menu2 .m2-right { padding: 0; }
+@media (max-width: 1050px) {
+  .screen.menu2 { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .menu2 .m2-left { overflow: visible; max-height: none; }
+  .menu2 .m2-bottom { align-content: start; }
+}

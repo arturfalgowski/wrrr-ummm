@@ -84,6 +84,16 @@ export const THEMES = {
     gravel: '#8d96a6', gravel2: '#a6aebb', gravelA: 'rgba(255,255,255,0.35)', gravelB: 'rgba(60,70,90,0.28)', asphalt: '#4c4b5e',
     foliage: ['#5b4331', '#2a6b50', '#3b8062', '#eef5f8'], trees: 260, rock: 0x9aa2b2, rocks: 80, bush: [0.45, 0.2, 0.55], bushes: 70 },
 };
+THEMES.miasto = { sky: 0xb4c4e2, hemi: [0xd4e0ff, 0x6f7280, 0.9], sun: [0xffe6c4, 3.0], grass: [88, 91, 102], light: [112, 116, 128], dark: [66, 69, 80], flowers: false, city: true,
+    gravel: '#8c8d98', gravel2: '#a2a3ae', gravelA: 'rgba(255,255,255,0.18)', gravelB: 'rgba(30,30,40,0.3)', asphalt: '#3d3d49',
+    foliage: ['#5b4331', '#3f8a52', '#4ea363', '#66bc7a'], trees: 70, rock: 0x8a8d99, rocks: 0, bush: [0.32, 0.4, 0.34], bushes: 0,
+    boards: [['HOTEL PLAZA', '#1b2a4a', '#ffd84d'], ['METRO', '#c62828', '#ffffff'], ['CAFE NOIR', '#2b2b33', '#ffb347'], ['BANK', '#0f6a7d', '#ffffff'], ['KINO', '#6d3bd0', '#fff4e6'], ['PIZZA', '#d6242c', '#ffe9a8']],
+    facade: { palette: ['#ffe9a8', '#fff3c4', '#bfe3ff'], lit: 0.4, wall: ['#7b8091', '#8d8478', '#6f7a88', '#9a8f86'], hmin: 14, hmax: 40 } };
+THEMES.cyber = { sky: 0x1a0b33, hemi: [0x8a6cff, 0x1a0b33, 0.6], sun: [0xb07cff, 1.4], grass: [26, 20, 46], light: [56, 38, 104], dark: [12, 9, 26], flowers: false, city: true, neon: true,
+    gravel: '#2b2150', gravel2: '#382a66', gravelA: 'rgba(120,200,255,0.2)', gravelB: 'rgba(0,0,0,0.4)', asphalt: '#1c1832',
+    foliage: ['#2a2040', '#2a2040', '#2a2040', '#2a2040'], trees: 0, rock: 0x2a2540, rocks: 0, bush: [0.7, 0.5, 0.2], bushes: 0, nightSky: 0x150a2e,
+    boards: [['NEON', '#12082a', '#25f4ff'], ['SYNTHWAVE', '#1a0b33', '#ff2bd6'], ['RAMEN 24H', '#0b1a2e', '#ffd84d'], ['NEXUS', '#1b0b2e', '#7cff6b'], ['HOLO', '#0a1f33', '#ff6bd6'], ['GLITCH', '#200a2e', '#25f4ff']],
+    facade: { palette: ['#ff2bd6', '#25f4ff', '#ffd84d', '#7c5cff', '#7cff6b'], lit: 0.62, wall: ['#2b2740', '#241f38', '#322b4d', '#1e1a30'], hmin: 16, hmax: 70 } };
 const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
 function asphaltTexture(base = '#58536f') {
@@ -150,7 +160,7 @@ export function buildWorld(scene, renderer, track) {
   const T = THEMES[track.def.theme];
   const root = new THREE.Group();
   scene.add(root);
-  const world = { time: { value: 0 }, root, theme: T };
+  const world = { time: { value: 0 }, root, theme: T, nightSky: T.nightSky };
   const N = track.N;
   const rnd = rng(2024);
 
@@ -249,7 +259,7 @@ export function buildWorld(scene, renderer, track) {
       pil.forEach(([x, z, h], i) => pm.setMatrixAt(i, mm.compose(pp.set(x, h / 2 - 0.2, z), qq.identity(), ss.set(1, h, 1))));
       pm.castShadow = true; pm.receiveShadow = true; root.add(pm);
     }
-    for (const hp of track.humps) { // laguna pod łukiem
+    if (!T.city) for (const hp of track.humps) { // laguna pod łukiem
       const inRange = (i) => i >= hp.i0 - 24 && i <= hp.i1 + 24;
       const sand = new THREE.Mesh(strip(track, -62, 62, 0.02, { pred: inRange }), new THREE.MeshStandardMaterial({ color: 0xe8d9a8, roughness: 1 }));
       const sea = new THREE.Mesh(strip(track, -52, 52, 0.06, { pred: (i) => i >= hp.i0 - 12 && i <= hp.i1 + 12 }), new THREE.MeshStandardMaterial({ color: 0x1fa6c4, roughness: 0.08, metalness: 0.5, transparent: true, opacity: 0.85 }));
@@ -279,7 +289,7 @@ export function buildWorld(scene, renderer, track) {
     const m = new THREE.Mesh(g, kerbMat); m.receiveShadow = true; root.add(m);
   }
   // linie krawędziowe i przerywana oś
-  const lineMat = new THREE.MeshStandardMaterial({ color: 0xf0eef6, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const lineMat = new THREE.MeshStandardMaterial({ color: T.neon ? 0x25f4ff : 0xf0eef6, emissive: T.neon ? 0x25f4ff : 0x000000, emissiveIntensity: T.neon ? 1.6 : 0, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const s of [-1, 1]) {
     const a = s * (ROAD_HALF - 0.75), b = s * (ROAD_HALF - 0.4);
     const m = new THREE.Mesh(strip(track, Math.min(a, b), Math.max(a, b), (k) => 0.03 + hy[k], {}), lineMat); m.receiveShadow = true; root.add(m);
@@ -303,7 +313,7 @@ export function buildWorld(scene, renderer, track) {
   }
 
   // ---------- Bariery ----------
-  const railMat = new THREE.MeshStandardMaterial({ color: 0xcdd2dc, metalness: 0.55, roughness: 0.38, side: THREE.DoubleSide });
+  const railMat = new THREE.MeshStandardMaterial({ color: T.neon ? 0x2a2450 : 0xcdd2dc, metalness: 0.55, roughness: 0.38, side: THREE.DoubleSide, emissive: T.neon ? 0x25f4ff : 0x000000, emissiveIntensity: T.neon ? 0.55 : 0 });
   const postMat = new THREE.MeshStandardMaterial({ color: 0x8b91a0, roughness: 0.6 });
   const postGeo = new THREE.BoxGeometry(0.22, 1.15, 0.22);
   const posts = new THREE.InstancedMesh(postGeo, postMat, Math.ceil(N / 5) * 2 + 4);
@@ -312,7 +322,7 @@ export function buildWorld(scene, renderer, track) {
   for (const side of [-1, 1]) {
     const rail = new THREE.Mesh(wall(track, (k) => side * track.bar[k], (k) => hy[k] + 0.32, (k) => hy[k] + (track.bar[k] < 12 ? 1.5 : 0.98), { uScale: 4 }), railMat);
     rail.castShadow = true; root.add(rail);
-    const cap = new THREE.Mesh(wall(track, (k) => side * track.bar[k], (k) => hy[k] + (track.bar[k] < 12 ? 1.5 : 0.98), (k) => hy[k] + (track.bar[k] < 12 ? 1.56 : 1.04), {}), new THREE.MeshStandardMaterial({ color: 0x9aa0ae, side: THREE.DoubleSide, roughness: 0.5 }));
+    const cap = new THREE.Mesh(wall(track, (k) => side * track.bar[k], (k) => hy[k] + (track.bar[k] < 12 ? 1.5 : 0.98), (k) => hy[k] + (track.bar[k] < 12 ? 1.56 : 1.04), {}), new THREE.MeshStandardMaterial({ color: T.neon ? (side > 0 ? 0xff2bd6 : 0x25f4ff) : 0x9aa0ae, emissive: T.neon ? (side > 0 ? 0xff2bd6 : 0x25f4ff) : 0x000000, emissiveIntensity: T.neon ? 3 : 0, side: THREE.DoubleSide, roughness: 0.5 }));
     root.add(cap);
     for (let i = 0; i < N; i += 5) {
       const off = side * (track.bar[i] + 0.18);
@@ -442,7 +452,7 @@ export function buildWorld(scene, renderer, track) {
   function steel1() { return new THREE.MeshStandardMaterial({ color: 0xdfe3ec, metalness: 0.5, roughness: 0.35 }); }
 
   // ---------- Billboardy (zwrócone do kamery) ----------
-  const boards = [['NITRO', '#d6242c', '#fff4e6'], ['APEX TIRES', '#1b2a4a', '#ffd84d'], ['SPEEDLINE', '#0f8a9c', '#ffffff'], ['TURBO', '#ff7a1a', '#14141c'], ['DRIFT KING', '#6d3bd0', '#fff4e6'], ['PIT STOP', '#2a7a43', '#ffffff']];
+  const boards = T.boards || [['NITRO', '#d6242c', '#fff4e6'], ['APEX TIRES', '#1b2a4a', '#ffd84d'], ['SPEEDLINE', '#0f8a9c', '#ffffff'], ['TURBO', '#ff7a1a', '#14141c'], ['DRIFT KING', '#6d3bd0', '#fff4e6'], ['PIT STOP', '#2a7a43', '#ffffff']];
   const standMid = track.at(34, outerStand ? 24 : -24);
   const exclusions = [[standMid.x, standMid.z, 40]];
   const placedBoards = [];
@@ -467,7 +477,7 @@ export function buildWorld(scene, renderer, track) {
   }
 
   // ---------- Siatka odległości do toru (dla dekoracji) ----------
-  const CELL = 2.5, R = 40;
+  const CELL = T.city ? 4 : 2.5, R = T.city ? 90 : 40;
   const gw = Math.ceil(GW / CELL), gh = Math.ceil(GH / CELL);
   const dist = new Float32Array(gw * gh).fill(1e3);
   for (let i = 0; i < N; i += 2) {
@@ -521,7 +531,7 @@ export function buildWorld(scene, renderer, track) {
     add(new THREE.ConeGeometry(1.4, 2.6, 8), 6.1, T.foliage[3]);
     const geo = mergeGeometries(parts);
     const dens = Math.sqrt(track.length / 600);
-    const spots = scatter(Math.round(T.trees * dens), BARRIER + 7.5, 60, 5.4, 9000);
+    const spots = T.trees > 0 ? scatter(Math.round(T.trees * dens), BARRIER + (T.city ? 14 : 7.5), T.city ? 70 : 60, 5.4, 9000) : [];
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = world.time;
@@ -548,7 +558,7 @@ export function buildWorld(scene, renderer, track) {
 
   // ---------- Skały i krzewy ----------
   {
-    const rocks = scatter(Math.round(T.rocks * Math.sqrt(track.length / 600)), BARRIER + 5, 70, 7);
+    const rocks = T.rocks > 0 ? scatter(Math.round(T.rocks * Math.sqrt(track.length / 600)), BARRIER + 5, 70, 7) : [];
     const rm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: T.rock, flatShading: true, roughness: 0.9 }), rocks.length);
     rocks.forEach(([x, z], i) => {
       const s = 0.8 + rnd() * 1.8;
@@ -556,7 +566,7 @@ export function buildWorld(scene, renderer, track) {
       rm.setMatrixAt(i, m4.compose(v3.set(x, s * 0.35, z), q4, s3.set(s * 1.2, s * 0.8, s)));
     });
     rm.castShadow = rm.receiveShadow = true; root.add(rm);
-    const bushes = scatter(Math.round(T.bushes * Math.sqrt(track.length / 600)), BARRIER + 4.5, 70, 4.2);
+    const bushes = T.bushes > 0 ? scatter(Math.round(T.bushes * Math.sqrt(track.length / 600)), BARRIER + 4.5, 70, 4.2) : [];
     const bm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), bushes.length);
     const bc2 = new THREE.Color();
     bushes.forEach(([x, z], i) => {
@@ -566,6 +576,82 @@ export function buildWorld(scene, renderer, track) {
     });
     s3.set(1, 1, 1);
     bm.castShadow = bm.receiveShadow = true; root.add(bm);
+  }
+
+  // ---------- Miasto: wieżowce z oświetlonymi oknami, lampy, przejścia dla pieszych, neony ----------
+  if (T.city) {
+    const F = T.facade, fr = rng(77);
+    const tile = (emissive) => canvasTex(256, 256, (x, wd, ht) => {
+      const rr = rng(emissive ? 91 : 91);
+      if (!emissive) { x.fillStyle = '#ffffff'; x.fillRect(0, 0, wd, ht); } else { x.fillStyle = '#000'; x.fillRect(0, 0, wd, ht); }
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+        const lit = rr() < F.lit, col = F.palette[(rr() * F.palette.length) | 0];
+        const px = i * 64 + 12, py = j * 64 + 12;
+        if (emissive) { if (lit) { x.fillStyle = col; x.fillRect(px, py, 40, 38); } }
+        else { x.fillStyle = lit ? col : '#1a2234'; x.fillRect(px, py, 40, 38); x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(px, py, 40, 6); }
+      }
+    }, { aniso: 8 });
+    const facade = tile(false), facadeE = tile(true);
+    for (const t of [facade, facadeE]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    const bmat = new THREE.MeshStandardMaterial({ map: facade, emissiveMap: facadeE, emissive: 0xffffff, emissiveIntensity: T.neon ? 1.1 : 0.12, roughness: 0.55, metalness: 0.2 });
+    world.windowMat = bmat;
+    const variants = [];
+    for (let v = 0; v < 10; v++) {
+      const bw = 9 + fr() * 6, bd = 9 + fr() * 6, bh = F.hmin + fr() * (F.hmax - F.hmin);
+      const g = new THREE.BoxGeometry(bw, bh, bd);
+      const uv = g.attributes.uv;
+      for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) {
+        const i = f * 4 + k;
+        if (f === 2 || f === 3) { uv.setXY(i, 0.02, 0.02); continue; }
+        const wd = f < 2 ? bd : bw;
+        uv.setXY(i, uv.getX(i) * (wd / 16), uv.getY(i) * (bh / 16));
+      }
+      g.translate(0, bh / 2, 0);
+      variants.push({ g, bw, bd, bh, list: [] });
+    }
+    const spots = scatter(Math.round(900 * Math.sqrt(track.length / 2800)), BARRIER + 19, 95, 17.5, 14000);
+    const tintC = new THREE.Color();
+    // wysokość zależy od odległości od toru: blisko niskie (żeby nie zasłaniały auta), dalej wyższe
+    spots.forEach(([x, z]) => {
+      const allow = 0.95 * (distAt(x, z) - 8), ok = variants.filter((v) => v.bh <= allow);
+      const pool = ok.length ? ok : [variants.reduce((a, b) => (a.bh < b.bh ? a : b))];
+      pool[(rnd() * pool.length) | 0].list.push([x, z]);
+    });
+    for (const v of variants) {
+      if (!v.list.length) continue;
+      const im = new THREE.InstancedMesh(v.g, bmat, v.list.length);
+      v.list.forEach(([x, z], i) => {
+        q4.setFromEuler(eul.set(0, (Math.floor(rnd() * 4) * Math.PI) / 2, 0));
+        im.setMatrixAt(i, m4.compose(v3.set(x, 0, z), q4, s3.set(1, 1, 1)));
+        im.setColorAt(i, tintC.set(F.wall[(rnd() * F.wall.length) | 0]).multiplyScalar(1.35));
+      });
+      im.castShadow = true; im.receiveShadow = true; root.add(im); (world.skyline ||= []).push(im);
+    }
+    // latarnie wzdłuż toru
+    { const lampHead = new THREE.MeshStandardMaterial({ color: 0xfff0c0, emissive: T.neon ? 0xff2bd6 : 0xffe2a8, emissiveIntensity: T.neon ? 3 : 1.4 });
+      const nL = Math.ceil(N / 36) * 2; const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.2, 7.5, 6), postMat, nL), heads = new THREE.InstancedMesh(new THREE.BoxGeometry(2.4, 0.3, 0.6), lampHead, nL); let lc2 = 0;
+      for (const side of [-1, 1]) for (let i = 6; i < N; i += 36) {
+        if (hy[i] > 0.4 || track.bar[i] < 12) continue;
+        const off = side * (BARRIER + 1.6), px = track.x[i] - track.tz[i] * off, pz = track.z[i] + track.tx[i] * off;
+        poles.setMatrixAt(lc2, m4.compose(v3.set(px, 3.75, pz), q4.identity(), s3.set(1, 1, 1)));
+        q4.setFromEuler(eul.set(0, -track.psi[i] + Math.PI / 2, 0));
+        heads.setMatrixAt(lc2, m4.compose(v3.set(px - track.tz[i] * -side * 0.9, 7.5, pz + track.tx[i] * -side * 0.9), q4, s3.set(1, 1, 1))); lc2++;
+      }
+      poles.count = heads.count = lc2; poles.castShadow = true; root.add(poles, heads); }
+    // przejścia dla pieszych na prostych odcinkach
+    { const zeb = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8, 0.02, 6.2), new THREE.MeshStandardMaterial({ color: 0xf2f0f6, roughness: 0.6, emissive: T.neon ? 0xff2bd6 : 0x000000, emissiveIntensity: T.neon ? 1.2 : 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 400); let zc = 0;
+      for (let i = 150; i < N - 40; i += 230) {
+        if (Math.abs(track.kappa[i]) > 0.004 || hy[i] > 0.1) continue;
+        for (let k = -3; k <= 3; k++) { const ii = (i + k * 2 + N) % N; q4.setFromEuler(eul.set(0, -track.psi[ii], 0)); zeb.setMatrixAt(zc++, m4.compose(v3.set(track.x[ii], 0.045, track.z[ii]), q4, s3.set(1, 1, 1))); }
+      }
+      zeb.count = zc; zeb.receiveShadow = true; root.add(zeb); }
+    // neonowe słupy światła w oddali (cyberpunk)
+    if (T.neon) {
+      const pillars = scatter(46, BARRIER + 20, 90, 24), pm2 = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 1, 1.1), new THREE.MeshBasicMaterial({ color: 0xffffff }), pillars.length), pc2 = new THREE.Color();
+      pillars.forEach(([x, z], i) => { const h = 70 + rnd() * 90; pm2.setMatrixAt(i, m4.compose(v3.set(x, h / 2, z), q4.identity(), s3.set(1, h, 1))); pm2.setColorAt(i, pc2.set(['#ff2bd6', '#25f4ff', '#7c5cff'][(rnd() * 3) | 0])); });
+      s3.set(1, 1, 1); root.add(pm2); (world.skyline ||= []).push(pm2);
+    }
+    world.setTime = (t) => { bmat.emissiveIntensity = T.neon ? 1.1 : t === 'night' ? 1.7 : t === 'dusk' ? 0.9 : 0.12; };
   }
 
   // ---------- Punkty dopasowania kamery ----------

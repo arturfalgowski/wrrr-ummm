@@ -38,6 +38,18 @@ export const TRACK_DEFS = {
     theme: 'wyspa',
     features: { humps: [{ u0: 0.3, u1: 0.46, h: 7.2 }], jumps: [{ u: 0.74 }], puddles: [{ u0: 0.9, u1: 0.945, kind: 'water' }] },
   },
+  miasto: {
+    name: 'Śródmieście', tag: 'Ponad 2,7 km ulic: wiadukt, hopka, kałuże', laps: 2, scale: 2.3, start: [0, 100], stand: 'inner',
+    points: [[-40, 100], [40, 100], [110, 100], [140, 80], [148, 40], [120, 15], [80, 10], [60, -10], [75, -35], [120, -45], [150, -70], [140, -105], [100, -115], [40, -110], [10, -85], [-20, -60], [-55, -70], [-90, -100], [-130, -95], [-150, -60], [-135, -25], [-100, -10], [-70, 20], [-95, 45], [-140, 55], [-152, 85], [-125, 102], [-90, 100]],
+    theme: 'miasto',
+    features: { humps: [{ u0: 0.3, u1: 0.4, h: 6.5 }], jumps: [{ u: 0.64 }], puddles: [{ u0: 0.12, u1: 0.16, kind: 'water' }, { u0: 0.82, u1: 0.86, kind: 'water' }] },
+  },
+  cyber: {
+    name: 'Neon Sektor', tag: 'Cyberpunk: ponad 2,9 km w deszczu i neonach', laps: 2, scale: 2.2, start: [0, 61], stand: 'inner',
+    points: [[-120, 60], [-40, 60], [40, 62], [110, 50], [150, 20], [140, -20], [100, -35], [60, -20], [40, 10], [10, 25], [-20, 10], [-30, -25], [-10, -55], [40, -75], [100, -85], [150, -110], [130, -145], [70, -150], [10, -130], [-50, -120], [-110, -130], [-160, -105], [-170, -60], [-140, -25], [-160, 10], [-165, 40]],
+    theme: 'cyber', rain: true, forceTime: 'night',
+    features: { humps: [{ u0: 0.17, u1: 0.27, h: 7.5 }, { u0: 0.7, u1: 0.78, h: 9 }], jumps: [{ u: 0.46 }, { u: 0.92 }], puddles: [{ u0: 0.55, u1: 0.6, kind: 'water' }, { u0: 0.33, u1: 0.36, kind: 'water' }] },
+  },
 };
 export const TRACK_IDS = Object.keys(TRACK_DEFS);
 

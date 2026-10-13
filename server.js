@@ -9,9 +9,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const TRACKS = ['dolina', 'owal', 'serpentyna', 'jesien', 'wyspa'];
-const LAPS = { dolina: 3, owal: 3, serpentyna: 2, jesien: 3, wyspa: 3 };
-const RAINY_TRACKS = ['jesien'];
+const TRACKS = ['dolina', 'owal', 'serpentyna', 'jesien', 'wyspa', 'miasto', 'cyber'];
+const LAPS = { dolina: 3, owal: 3, serpentyna: 2, jesien: 3, wyspa: 3, miasto: 2, cyber: 2 };
+const RAINY_TRACKS = ['jesien', 'cyber'];
 // paleta kolorów aut — zgodna z CAR_COLORS w public/js/physics.js
 const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 const PATTERNS = ['none', 'stripes', 'flames', 'checker'];
