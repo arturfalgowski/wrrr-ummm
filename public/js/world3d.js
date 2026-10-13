@@ -77,8 +77,8 @@ function sandTexture(T) {
   const rnd = rng(41), base = T.sandRoad ?? '#cfa968';
   return canvasTex(256, 512, (x, w, h) => {
     x.fillStyle = base; x.fillRect(0, 0, w, h);
-    for (let i = 0; i < 9000; i++) { x.fillStyle = rnd() > 0.5 ? `rgba(255,236,190,${0.05 + rnd() * 0.1})` : `rgba(90,60,25,${0.05 + rnd() * 0.12})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); }
-    for (const cxr of [w * 0.32, w * 0.68]) { const g = x.createLinearGradient(cxr - 18, 0, cxr + 18, 0); g.addColorStop(0, 'rgba(80,55,25,0)'); g.addColorStop(0.5, 'rgba(80,55,25,0.34)'); g.addColorStop(1, 'rgba(80,55,25,0)'); x.fillStyle = g; x.fillRect(cxr - 18, 0, 36, h); }
+    for (let i = 0; i < 9000; i++) { x.fillStyle = rnd() > 0.5 ? `rgba(255,200,140,${0.04 + rnd() * 0.08})` : `rgba(90,60,25,${0.05 + rnd() * 0.12})`; x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); }
+    for (const cxr of [w * 0.32, w * 0.68]) { const g = x.createLinearGradient(cxr - 18, 0, cxr + 18, 0); g.addColorStop(0, 'rgba(80,55,25,0)'); g.addColorStop(0.5, 'rgba(30,18,8,0.45)'); g.addColorStop(1, 'rgba(80,55,25,0)'); x.fillStyle = g; x.fillRect(cxr - 18, 0, 36, h); }
     x.fillStyle = 'rgba(255,248,225,0.85)'; x.fillRect(w * 0.04, 0, 6, h); x.fillRect(w * 0.96 - 4, 0, 4, h);
   });
 }
@@ -93,7 +93,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   const rnd = rng(2025 + track.N);
   const N = track.N;
   let meanY = 0; for (let i = 0; i < N; i++) meanY += track.py[i]; meanY /= N;
-  const groundY = T.water ? Math.floor(track.bounds.minY) - (T.groundDrop ?? 1.2) : Math.floor(meanY - 2.5);
+  const groundY = T.water ? Math.floor(track.bounds.minY) - (T.groundDrop ?? 1.2) : Math.floor(T.groundBelow ? track.bounds.minY - 2 : meanY - 2.5);
   world.groundY = groundY; world.waterY = T.water ? groundY : null;
   const cx = (track.bounds.minX + track.bounds.maxX) / 2, cz = (track.bounds.minZ + track.bounds.maxZ) / 2;
   world.center = new THREE.Vector3(cx, groundY, cz);
@@ -158,7 +158,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   const sstep = (t) => t * t * (3 - 2 * t), clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
   const baseH = (x, z) => {
     const e = clamp01(Math.min(x - gb.x0, gb.x1 - x, z - gb.z0, gb.z1 - z) / 140);
-    return base0 + relief * sstep(e) * (Math.sin(x * 0.0042 + 1) * Math.cos(z * 0.0036) + 0.5 * Math.sin(x * 0.011 + z * 0.0087 + 2) + 0.5);
+    return base0 + relief * sstep(e) * (Math.sin(x * 0.0042 + 1) * Math.cos(z * 0.0036) + 0.5 * Math.sin(x * 0.011 + z * 0.0087 + 2) + 1.5) / 3;
   };
   const H = new Float32Array(gw * gh);
   for (let a = 0; a < gh; a++) for (let b = 0; b < gw; b++) {

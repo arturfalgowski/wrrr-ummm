@@ -140,12 +140,12 @@ function islands(ctx, count) {
 export const THEMES3D = {
   stadion: {
     name: 'Polska', ground: ['#4a9a52', '#7ac27a', '#2f7a40'], asphalt: '#4a4658', centerLine: 'rgba(245,243,250,0.85)', slab: 0xb7b2aa, kerb: [0xd6242c, 0xf5f2ee], barrier: ['#e84a4a', '#f4f4f8'], barrierCap: 0x9aa0ae, cpColor: 0x25d4ff,
-    startPhase: 0.2, balloons: 3, birds: 14, roof: 0x2a2f55, relief: 5,
+    startPhase: 0.2, balloons: 3, birds: 14, roof: 0x2a2f55, relief: 4, groundBelow: true,
     decor(world, ctx) { pines(ctx, 260); rocks(ctx, 50, 0xa7a5b4); grandstand(ctx, world.track.startS + 30, -1); grandstand(ctx, world.track.finishS - 40, 1); floodlights(ctx, 8); ringMountains(ctx, 18, 0x6f8a9a, 0xe8eef6, { r0: 1100, r1: 2200, h: [90, 260] }); },
   },
   tokyo: {
     name: 'Japonia', ground: ['#0d0b1c', '#1c1838', '#08060f'], asphalt: '#1c1830', centerLine: 'rgba(37,244,255,0.85)', slab: 0x2b2650, kerb: [0x25f4ff, 0xff2bd6], barrier: ['#1b1740', '#2b2260'], barrierCap: 0xff2bd6, cpColor: 0xff2bd6, neon: true, neonColor: 0x25f4ff,
-    startPhase: 0.62, birds: 0, skyBias: 'night', relief: 0, tunnel: 0x34304f, portal: 0x5a4f8a, bridge: 0x3a3560,
+    startPhase: 0.62, birds: 0, skyBias: 'night', relief: 0, groundBelow: true, tunnel: 0x34304f, portal: 0x5a4f8a, bridge: 0x3a3560,
     decor(world, ctx) { skyline(ctx, 520, { hmin: 40, hmax: 160, palette: ['#ff2bd6', '#25f4ff', '#ffd84d', '#7c5cff', '#7cff6b'], lit: 0.62, minD: 34 }); neonPillars(ctx, 40, ['#ff2bd6', '#25f4ff', '#7c5cff']); },
   },
   alpy: {
@@ -154,13 +154,13 @@ export const THEMES3D = {
     decor(world, ctx) { pines(ctx, 300, { snow: true }); rocks(ctx, 90, 0x9aa2b2, { scale: [1, 6] }); ringMountains(ctx, 34, 0x6f7f95, 0xffffff, { r0: 500, r1: 1900, h: [180, 520] }); },
   },
   egipt: {
-    name: 'Egipt', ground: ['#d9b878', '#ecd29a', '#b88e52'], asphalt: '#5a5460', centerLine: 'rgba(255,240,200,0.9)', slab: 0xc9a566, kerb: [0xd9a02e, 0xf2e6c4], barrier: ['#c28f62', '#e6d2a8'], barrierCap: 0x8a6a44, cpColor: 0xffd25a,
-    startPhase: 0.36, balloons: 5, birds: 6, relief: 7, sandRoad: '#a8703a', tunnel: 0xb99a66, portal: 0xd8c08a, bridge: 0xb8955a,
+    name: 'Egipt', ground: ['#d9b878', '#ecd29a', '#b88e52'], asphalt: '#5a5460', centerLine: 'rgba(255,240,200,0.9)', slab: 0xc9a566, kerb: [0xd9a02e, 0xf2e6c4], barrier: ['#c8452e', '#f2ead8'], barrierCap: 0x8a6a44, cpColor: 0xffd25a,
+    startPhase: 0.36, balloons: 5, birds: 6, relief: 5, groundBelow: true, sandRoad: '#7a4a28', tunnel: 0xb99a66, portal: 0xd8c08a, bridge: 0xb8955a,
     decor(world, ctx) { palms(ctx, 150); rocks(ctx, 70, 0xc09270, { scale: [1, 5] }); pyramids(ctx, 10); dunes(ctx, 40); },
   },
   tropiki: {
     name: 'Hawaje', water: true, ground: [0x1fa6c4, 0x1aa0b8, 0x127f9a], asphalt: '#4b4b5a', centerLine: 'rgba(255,255,255,0.9)', slab: 0xe8e0cc, kerb: [0xff7a1a, 0xfff4e6], barrier: ['#ffffff', '#19b6c9'], barrierCap: 0xff7a1a, cpColor: 0xffb02e, groundDrop: 1.2,
-    startPhase: 0.44, balloons: 2, birds: 22, relief: 0, sandRoad: '#c99a58', bridge: 0xe8e0cc,
+    startPhase: 0.44, balloons: 2, birds: 22, relief: 0, sandRoad: '#8a5a30', bridge: 0xe8e0cc,
     decor(world, ctx) { islands(ctx, 18); palms(ctx, 90, { minD: 24, maxD: 90 }); ringMountains(ctx, 10, 0x4a6a58, 0x6a8a74, { r0: 1300, r1: 2300, h: [160, 360] }); },
   },
 };
