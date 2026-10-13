@@ -1658,7 +1658,7 @@ function updateGameplay(dt, active) {
     const N = track.N, idx = me.st.idx ?? 0;
     for (const b of track.boosts) {
       const di = (((idx - b.i0) % N) + N) % N;
-      if (di < b.len && Math.abs(me.st.d || 0) < ROAD_HALF * 0.9 && !me.st.air && me.padCd <= 0) { me.padCd = 1.2; me.nitroT = Math.max(me.nitroT, 1.7); sfx.nitro(); sparks(me.st.x, me.st.z, 22); toast('Nitro!', 700); }
+      if (di < b.len && Math.abs((me.st.d || 0) - b.lat) < 2.5 && !me.st.air && me.padCd <= 0) { me.padCd = 1.2; me.nitroT = Math.max(me.nitroT, 1.7); sfx.nitro(); sparks(me.st.x, me.st.z, 22); toast('Nitro!', 700); }
     }
   }
   { const sl = me.st, drifting = racingNow() && sl.hand && sl.speed > 16 && Math.abs(sl.vl) > 3.5;
@@ -1784,12 +1784,13 @@ function raceBotUpdate(o, dt) {
   o.hitCd -= dt;
   const finished = o.finishT != null;
   const bend = Math.abs(track.kappa[i0 % N]) > 0.02 ? 0.4 : 1;
-  const tg = track.at((st.idx ?? 0) + 8 + st.speed * 0.33, o.lat * bend);
+  let latT = o.lat; for (const b of track.boosts || []) { const ahead = (((b.i0 - (st.idx ?? 0)) % N) + N) % N; if (ahead < 75 || ahead > N - b.len) latT = b.lat; } // boty łapią pady, jadąc ich pasem
+  const tg = track.at((st.idx ?? 0) + 8 + st.speed * 0.33, latT * bend);
   const d = wrapA(Math.atan2(tg.z - st.z, tg.x - st.x) - st.yaw);
   let kmax = 0; for (let j = 0; j < 42; j += 6) kmax = Math.max(kmax, Math.abs(track.kappa[(i0 + j) % N]));
   const rb = clamp(((me.st?.progress ?? 0) - st.progress) / 700, -0.07, 0.07); // lekka „gumka”
   o.padT = (o.padT || 0) - dt;
-  for (const b of track.boosts || []) { const di = (((st.idx ?? 0) - b.i0) % N + N) % N; if (di < b.len) o.padT = 1.4; }
+  for (const b of track.boosts || []) { const di = (((st.idx ?? 0) - b.i0) % N + N) % N; if (di < b.len && Math.abs((st.d || 0) - b.lat) < 2.5) o.padT = 1.4; }
   st.nitro = o.padT > 0;
   const vlim = Math.min(st.def.maxSpeed * (o.skill + rb) * (o.padT > 0 ? 1.3 : 1), Math.sqrt(52 / Math.max(kmax, 0.004)));
   const inp = { throttle: st.speed < vlim ? 1 : 0, brake: st.speed > vlim * 1.1 ? 1 : 0, steer: clamp(d * 2.4, -1, 1), hand: false };

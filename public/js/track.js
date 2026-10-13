@@ -128,7 +128,7 @@ export class Track {
       const i0 = Math.round(j.u * n), len = j.len || 15, hh = j.h || 2.7; this.jumps.push({ i0, len, h: hh });
       for (let k = 0; k < len; k++) this.hy[(i0 + k) % n] = Math.max(this.hy[(i0 + k) % n], hh * (k / len));
     }
-    for (const b of f.boosts || []) this.boosts.push({ i0: Math.round(b.u * n), len: b.len || 16 });
+    (f.boosts || []).forEach((b, k) => this.boosts.push({ i0: Math.round(b.u * n), len: b.len || 16, lat: b.lat ?? (k % 2 ? 3.9 : -3.9) })); // pad zajmuje jeden pas, pasy na przemian
     for (const p of f.puddles || []) this.puddles.push({ i0: Math.round(p.u0 * n), i1: Math.round(p.u1 * n), kind: p.kind || 'water', l0: p.lat ? p.lat[0] : -1, l1: p.lat ? p.lat[1] : 1 });
   }
   /** wysokość jezdni (interpolacja) */

@@ -312,8 +312,8 @@ export function buildWorld(scene, renderer, track) {
     const base = new THREE.MeshStandardMaterial({ color: 0x1a1308, emissive: 0xff8a00, emissiveIntensity: 0.25, roughness: 0.6, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     for (const b of track.boosts) {
       const inPad = (i) => i >= b.i0 && i < b.i0 + b.len;
-      const g0 = new THREE.Mesh(strip(track, -5.6, 5.6, (k) => 0.036 + hy[k], { pred: inPad, vScale: b.len }), base); g0.receiveShadow = true;
-      const g1 = new THREE.Mesh(strip(track, -5, 5, (k) => 0.04 + hy[k], { pred: inPad, vScale: b.len / 2 }), padMat);
+      const g0 = new THREE.Mesh(strip(track, b.lat - 2.45, b.lat + 2.45, (k) => 0.036 + hy[k], { pred: inPad, vScale: b.len }), base); g0.receiveShadow = true;
+      const g1 = new THREE.Mesh(strip(track, b.lat - 2.1, b.lat + 2.1, (k) => 0.04 + hy[k], { pred: inPad, vScale: b.len / 2 }), padMat);
       g1.renderOrder = 2; root.add(g0, g1);
     }
     world.padTex = padTex;
