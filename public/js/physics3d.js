@@ -10,7 +10,7 @@ const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI)
 /** jedno auto: bolid Formuły 1 (zmienia się tylko kolor i personalizacja) */
 export const CAR_DEFS = {
   formula: { name: 'Bolid F1', tag: 'Lekki bolid: ogromna prędkość, szybkie skręty', color: '#e0457b', stripe: '#fff4e6',
-    maxSpeed: 68, accel: 40, brake: 66, grip: 10.5, turn: 3.3, stats: [1.0, 0.85, 0.85] },
+    maxSpeed: 82, accel: 58, brake: 98, grip: 11.5, turn: 3.4, stats: [1.0, 0.9, 0.9] },
 };
 export const CAR_COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 export function stripeFor(hex) {
@@ -35,8 +35,30 @@ export class CarState {
     this.air = false; this.landHit = 0; this.fell = false; this.airT = 0;
     this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0; this.surf = null;
     this.tiltX = 0; this.tiltZ = 0; this.spin = 0;
+    // strefy uszkodzeń 0..1: 0 koło p.-prawe, 1 p.-lewe, 2 t.-prawe, 3 t.-lewe, 4 dziób, 5 tył, 6 bok prawy, 7 bok lewy (prawa = +d)
+    this.parts = new Float32Array(8); this.pvmax = 1; this.pacc = 1; this.pgrip = 1; this.pbias = 0;
     this._f = {}; this._P = new THREE.Vector3(); this._V = new THREE.Vector3();
   }
+  /** przelicza wpływ uszkodzeń stref na jazdę (utrata koła: wolniej, gorsza przyczepność, ściąganie na stronę uszkodzenia) */
+  refreshParts() {
+    const p = this.parts; let lost = 0, worn = 0;
+    for (let i = 0; i < 4; i++) { if (p[i] >= 1) lost++; else worn += p[i]; }
+    this.pvmax = 1 - 0.16 * lost - 0.03 * worn - 0.05 * (p[4] + p[5]);
+    this.pacc = 1 - 0.12 * lost - 0.03 * worn;
+    this.pgrip = 1 - 0.14 * lost - 0.04 * worn;
+    this.pbias = ((p[0] - p[1]) * 0.3 + (p[2] - p[3]) * 0.12) * 1.0;
+  }
+  /** uderzenie w strefy: w = { indeks: waga }, amt = siła; zwraca indeksy kół, które właśnie odpadły */
+  hurt(w, amt) {
+    const lost = [];
+    for (const k in w) { const i = +k, before = this.parts[i]; this.parts[i] = Math.min(1, before + amt * w[k]); if (i < 4 && before < 1 && this.parts[i] >= 1) lost.push(i); }
+    this.refreshParts(); return lost;
+  }
+  /** naprawa stref o `a` (0..1); odpadnięte koło wraca, jeśli naprawa je „podniesie” poniżej 1 */
+  repairParts(a) { for (let i = 0; i < 8; i++) this.parts[i] = Math.max(0, this.parts[i] - a); this.refreshParts(); }
+  /** pakiet sieciowy stref: koła i karoseria po 4 poziomy (0..15) w jednej liczbie */
+  packParts() { let a = 0, b = 0; for (let i = 0; i < 4; i++) { a |= Math.round(this.parts[i] * 15) << (4 * i); b |= Math.round(this.parts[4 + i] * 15) << (4 * i); } return [a, b]; }
+  unpackParts(a, b) { for (let i = 0; i < 4; i++) { this.parts[i] = ((a >> (4 * i)) & 15) / 15; this.parts[4 + i] = ((b >> (4 * i)) & 15) / 15; } this.refreshParts(); }
   get speed() { return this.air ? this._V.length() : Math.hypot(this.vf, this.vl); }
 
   /** ustaw auto na torze: s, d (poprzeczne), kurs wzdłuż toru */
@@ -61,7 +83,7 @@ export class CarState {
     if (!f.surf) { this._detach(track, f); return; }
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
-    const vmax = def.maxSpeed * (this.nitro ? 1.3 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
+    const vmax = def.maxSpeed * (this.nitro ? 1.3 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage) * this.pvmax;
 
     // kierownica
     const target = input.steer;
@@ -74,8 +96,8 @@ export class CarState {
     const highDamp = 1 / (1 + (sp / (def.maxSpeed * 1.25)) ** 2 * 1.8);
     let yawRate = this.steer * def.turn * lowSpeed * highDamp * (vf >= 0 ? 1 : -1);
     this.hand = !!input.hand && Math.abs(vf) > 3;
-    yawRate += this.pull * this.damage * 0.3 * lowSpeed;
-    if (input.hand) yawRate *= 1.45;
+    yawRate += (this.pull * this.damage * 0.3 + this.pbias) * lowSpeed;
+    if (input.hand) yawRate *= 1.7;
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
     if (this.steer * vl < 0) { const t = clamp((Math.abs(slipAng) - 0.7) / 0.7, 0, 1); yawRate *= 1 - 0.8 * t * t * (3 - 2 * t); }
     if (this.inOil) { // plama oleju: auto traci kontrolę i wpada w poślizg
@@ -91,7 +113,7 @@ export class CarState {
     this.throttle = thr; this.brakeLit = false;
     if (thr > 0) {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
-      else vf += def.accel * (1 - 0.35 * this.damage) * (this.nitro ? 2.8 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h;
+      else vf += def.accel * (1 - 0.35 * this.damage) * this.pacc * (this.nitro ? 2.8 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h;
     }
     if (input.hand && vf > 3) this.brakeLit = true;
     if (input.brake > 0) {
@@ -110,13 +132,13 @@ export class CarState {
     vl -= G * GSLOPE * zy * h;
 
     // przyczepność boczna
-    let grip = def.grip * (track.gripMul ?? 1) * (f.grip ?? 1);
+    let grip = def.grip * (track.gripMul ?? 1) * (f.grip ?? 1) * this.pgrip;
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
-    if (input.hand) grip = Math.min(grip, 2.4);
+    if (input.hand) grip = Math.min(grip, 3.0);
     if (this.inOil) grip = Math.min(grip, 0.22);
     const speedBefore = Math.hypot(vf, vl);
     vl -= vl * (1 - Math.exp(-grip * h));
-    const keep = input.hand ? 0.7 : 0.9;
+    const keep = input.hand ? 0.8 : 0.9;
     const vfTarget = Math.sign(vf || 1) * Math.sqrt(Math.max(0, speedBefore * speedBefore - vl * vl));
     vf += (vfTarget - vf) * keep;
     this.vf = vf; this.vl = vl;
@@ -236,8 +258,8 @@ export class CarState {
     this.vf *= 0.8;
   }
   /** po upadku: wróć na checkpoint (s) z zerową prędkością */
-  respawnAt(track, s, speed = 0) {
-        this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
+  respawnAt(track, s, speed = 0, d = 0) {
+        this.air = false; this.fell = false; this.s = s; this.d = d; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
     this.progress = s; this.idx = s; this._pose(track);
   }
 }

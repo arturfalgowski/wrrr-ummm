@@ -286,7 +286,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   }
   // ---------- tunele: łuk betonowy, światła i portale ----------
   if (track.tunnels.length) {
-    const RT = 9.8, SEG = 14, shellMat = new THREE.MeshStandardMaterial({ color: T.tunnel ?? 0x7a7e8a, emissive: 0x2c2f38, emissiveIntensity: 1, roughness: 0.85, side: THREE.DoubleSide });
+    const RT = 9.8, SEG = 14, shellMat = new THREE.MeshStandardMaterial({ color: T.tunnel ?? 0x7a7e8a, emissive: T.neon ? 0x2e2870 : 0x2c2f38, emissiveIntensity: 1, roughness: 0.85, side: THREE.DoubleSide });
     const portalMat = new THREE.MeshStandardMaterial({ color: T.portal ?? 0xb9bcc6, roughness: 0.8, side: THREE.DoubleSide });
     const archPt = (i, r, th, out) => { const c = Math.cos(th) * r, u = Math.sin(th) * r; out.push(track.px[i] + track.rx[i] * c + track.ux[i] * u, track.py[i] + track.ry[i] * c + track.uy[i] * u, track.pz[i] + track.rz[i] * c + track.uz[i] * u); };
     const lightList = [];
@@ -302,9 +302,9 @@ export function buildWorld3D(scene, renderer, track, themeId) {
       }
       for (let i = i0 - 2; i <= i1 + 2; i += 10) lightList.push(i);
     }
-    const lm = new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0xffe9b0, emissiveIntensity: 2.4 });
+    const lm = new THREE.MeshStandardMaterial({ color: T.neon ? 0xbff9ff : 0xfff2cc, emissive: T.neon ? 0x25f4ff : 0xffe9b0, emissiveIntensity: 2.4 });
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.22, 3.2), lm, lightList.length * 2), m4l = new THREE.Matrix4(), bm = new THREE.Matrix4(); let li = 0;
-    for (const i of lightList) for (const th of [Math.PI * 0.32, Math.PI * 0.68]) { const o = []; archPt(i, RT - 0.25, th, o); bm.makeBasis(new THREE.Vector3(track.tx[i], track.ty[i], track.tz[i]), new THREE.Vector3(track.ux[i], track.uy[i], track.uz[i]), new THREE.Vector3(track.rx[i], track.ry[i], track.rz[i])); bm.setPosition(o[0], o[1], o[2]); im.setMatrixAt(li++, bm.multiply(m4l.makeRotationX(0))); }
+    for (const i of lightList) for (const th of [Math.PI * 0.32, Math.PI * 0.68]) { const o = []; archPt(i, RT - 0.25, th, o); bm.makeBasis(new THREE.Vector3(track.tx[i], track.ty[i], track.tz[i]), new THREE.Vector3(track.ux[i], track.uy[i], track.uz[i]), new THREE.Vector3(track.rx[i], track.ry[i], track.rz[i])); bm.setPosition(o[0], o[1], o[2]); im.setMatrixAt(li++, bm.multiply(m4l.makeRotationX(Math.atan2(-Math.cos(th), -Math.sin(th))))); }
     root.add(im);
   }
   const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(1, 1, 1), eul = new THREE.Euler();

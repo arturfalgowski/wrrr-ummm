@@ -592,3 +592,9 @@ body.spectating .hud-items { display: none !important; }
 .hpbar { margin-top: 8px; width: 110px; height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
 .hpbar i { display: block; height: 100%; width: 100%; background: #3ee08a; transition: width .2s, background .2s; }
 .hpbar.low i { background: #ff4a3a; }
+
+/* schemat uszkodzeń auta (widok z góry): kolor strefy od zielonego do czerwonego, odpadnięte koło — ciemne */
+#chip-hp { position: relative; }
+#car-dmg { display: block; margin: 6px auto 0; width: 30px; height: 52px; overflow: visible; }
+#car-dmg rect { fill: #3ee08a; stroke: rgba(0,0,0,.45); stroke-width: .8; transition: fill .25s, opacity .25s; }
+#car-dmg rect.lost { opacity: .3; }

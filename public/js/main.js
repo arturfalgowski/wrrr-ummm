@@ -59,7 +59,7 @@ function useTrack(id) {
   world.root.visible = true;
   particles.ground = null; particles.yOff = 0;
   minimap.setTrack(track); items.setTrack(track);
-  particles.clear(); skids.clear();
+  particles.clear(); skids.clear(); clearDebris();
   envSetStatic(previewEnv(id));
 }
 
@@ -102,18 +102,25 @@ function updateEnvFx(dt) {
   // reflektory aut w nocy i błyski burzy
   const night = (world?.nightK ?? 0) > 0.45;
   const cars = [me, ...oppList()].filter((c) => c.st && c.vis && c.vis.group.visible);
+  const L = track.length;
   headlights.forEach((l, i) => {
-    const c = cars[i]; if (!c || !night) { l.intensity = 0; return; }
-    const s = c.st, y = s.y + 0.9;
-    l.position.set(s.x + s.fx * 2.4, y + s.fy * 2.4, s.z + s.fz * 2.4); l.target.position.set(s.x + s.fx * 24, y + s.fy * 24 - 0.7, s.z + s.fz * 24); l.target.updateMatrixWorld();
-    l.intensity = 2600;
+    const c = cars[i >> 1], st = c?.st; if (!st) { l.intensity = 0; return; }
+    const tun = track.tunnelK[Math.max(0, Math.min(track.N - 1, Math.round(((st.s % L) + L) % L)))] > 0.5;
+    if (!(night || tun || wet > 0.7)) { l.intensity = 0; return; }
+    const side = (i & 1 ? 1 : -1) * 0.62; _hr.set(0, 0, 1).applyQuaternion(st.quat);
+    const y = st.y + 0.55;
+    l.position.set(st.x + st.fx * 2.3 + _hr.x * side, y + st.fy * 2.3 + _hr.y * side, st.z + st.fz * 2.3 + _hr.z * side);
+    l.target.position.set(st.x + st.fx * 26 + _hr.x * side * 0.9, y + st.fy * 26 - 0.6 + _hr.y * side * 0.9, st.z + st.fz * 26 + _hr.z * side * 0.9); l.target.updateMatrixWorld();
+    l.intensity = 1700;
   });
   if (wet > 0.9 && (S.mode === 'racing' || S.mode === 'countdown')) { nextFlash -= dt; if (nextFlash <= 0) { flash = 1; nextFlash = 6 + Math.random() * 9; thunderAt = performance.now() + 350 + Math.random() * 1400; } }
   if (thunderAt && performance.now() > thunderAt) { thunderAt = 0; sfx.thunder(); }
   if (flash > 0) { flash = Math.max(0, flash - dt * 2.8); const f = flash > 0.55 ? flash : flash > 0.35 ? 0.15 : flash; world.sun.intensity += f * 7; $('flash').style.opacity = String(f * 0.42); }
   else if ($('flash').style.opacity !== '0') $('flash').style.opacity = '0';
 }
-const headlights = Array.from({ length: 4 }, () => { const l = new THREE.SpotLight(0xfff0d0, 0, 120, 0.5, 0.7, 1.1); scene.add(l, l.target); return l; });
+const _hr = new THREE.Vector3();
+// dwa reflektory na auto (lewy, prawy), do 3 aut
+const headlights = Array.from({ length: 6 }, () => { const l = new THREE.SpotLight(0xfff0d0, 0, 110, 0.4, 0.7, 1.1); scene.add(l, l.target); return l; });
 
 // ======================= Deszcz =======================
 const rain = (() => {
@@ -168,7 +175,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { items: { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity, hp: 100, dead: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity };
+const me = { items: { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity, hp: 100, dead: 0, inv: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity };
 const opps = new Map(); // id -> { id, nick, st, vis, audio, snaps, bot?, ... }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -197,11 +204,12 @@ function setCar(who, slot, color) {
   who.vis = getVis(slot);
   applyCustom(who);
   who.color = color || S.color;
-  who.vis.group.visible = true; who.vis.setDamage(0); who.vis.setColor(who.color, stripeFor(who.color));
+  who.vis.group.visible = true; who.vis.setDamage(0); who.vis.partsKey = ''; who.vis.setColor(who.color, stripeFor(who.color));
   who.vis.setNight(world?.nightK ?? 0);
   who.st = new CarState(CAR_DEFS[CAR_ID]);
   const [p, lat] = gridPos(slot); who.st.place(track, track.startS + p, lat);
   scene.add(who.vis.group);
+  who.vis.setParts(who.st.parts); who.lostW = null;
   who.vis.sync(who.st, 0);
 }
 function clearOpps() { for (const [, o] of opps) { if (o.vis) scene.remove(o.vis.group); o.audio?.stop(); } opps.clear(); }
@@ -737,6 +745,7 @@ function sampleOpp(opp, now) {
   const L = (i) => a[i] + (b[i] - a[i]) * f;
   st.vf = L(6); st.vl = L(7); st.steer = L(5); st.throttle = a[9]; st.brakeLit = !!a[10]; st.nitro = !!a[13]; st.hand = !!a[14]; st.slip = Math.abs(st.vl);
   opp.finished = !!a[12];
+  if (a.length > 24) st.unpackParts(a[23] | 0, a[24] | 0);
   st.hp = a[15]; st.damage = 1 - a[15] / 100; if (a[16] && !st.dead) explodeAt(st); st.dead = a[16];
   if (a[21] || b[21]) st.remoteAir(track, L(0), L(17), L(1), L(3), L(22), L(4), L(8), 0.016);
   else {
@@ -746,13 +755,44 @@ function sampleOpp(opp, now) {
 }
 const packState = (s, c) => {
   const r = (v) => Math.round(v * 100) / 100;
-  return [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.s), s.throttle || 0, s.brakeLit ? 1 : 0, 0, c.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, Math.round(s.hp ?? 100), s.dead ? 1 : 0, r(s.y), 0, r(s.d), Math.round(s.phi * 1000) / 1000, s.air ? 1 : 0, r(s.vy)];
+  return [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.s), s.throttle || 0, s.brakeLit ? 1 : 0, 0, c.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, Math.round(s.hp ?? 100), s.dead ? 1 : 0, r(s.y), 0, r(s.d), Math.round(s.phi * 1000) / 1000, s.air ? 1 : 0, r(s.vy), ...s.packParts()];
 };
 function refreshOpp(o) { return o.bot ? true : sampleOpp(o, performance.now()); }
 
 // ======================= Efekty: dym, iskry, nitro =======================
 const _w = new THREE.Vector3();
 const wheelAt = (st, M, side) => { _w.set(-M.wheelX, 0.12, side * M.wheelZ).applyQuaternion(st.quat); return [st.x + _w.x, st.y + _w.y, st.z + _w.z]; };
+// ======================= Odpadające koła =======================
+const debrisGeo = new THREE.CylinderGeometry(0.56, 0.56, 0.7, 18).rotateX(Math.PI / 2), debrisMat = new THREE.MeshStandardMaterial({ color: 0x15151a, roughness: 0.85 });
+const debris = [], _dq = new THREE.Quaternion(), _dv = new THREE.Vector3();
+function spawnWheelDebris(c, i) {
+  const st = c.st, M = c.vis.model; if (!st || S.mode === 'menu') return;
+  const sx = i < 2 ? M.wheelX : -M.wheelX, sz = i % 2 === 0 ? M.wheelZ : -M.wheelZ;
+  _dv.set(sx, M.wheelR, sz).applyQuaternion(st.quat);
+  const m = new THREE.Mesh(debrisGeo, debrisMat); m.castShadow = true; m.position.set(st.x + _dv.x, st.y + _dv.y, st.z + _dv.z); m.quaternion.copy(st.quat); scene.add(m);
+  const side = Math.sign(sz), kick = 4 + Math.random() * 5;
+  _dv.set(0, 0, side).applyQuaternion(st.quat);
+  debris.push({ s: st.s, m, v: new THREE.Vector3(st.vx + _dv.x * kick, st.vy + 4 + Math.random() * 5, st.vz + _dv.z * kick), life: 7, axle: new THREE.Vector3(0, 0, 1) });
+  sparks(m.position.x, m.position.y, m.position.z, 16); sfx.tire(0.7);
+}
+function updateDebris(dt) {
+  for (let k = debris.length - 1; k >= 0; k--) {
+    const d = debris[k], p = d.m.position; d.life -= dt; d.v.y -= 24 * dt; p.addScaledVector(d.v, dt);
+    const nr = track.nearest(p.x, p.y, p.z, d.s, 60, 80); d.s = nr.s; const f = track.at(nr.s, {}), sy = f.py + f.ry * clamp(nr.d, -HW, HW);
+    if (p.y < sy + 0.56 && Math.abs(nr.d) < HW + 1) { if (d.v.y < -2) sfx.bounce(Math.min(1, -d.v.y / 14)); p.y = sy + 0.56; d.v.y = Math.abs(d.v.y) > 2 ? -d.v.y * 0.42 : 0; d.v.x *= 0.985; d.v.z *= 0.985; }
+    _dq.setFromAxisAngle(_dv.set(-d.v.z, 0, d.v.x).normalize(), Math.hypot(d.v.x, d.v.z) * dt / 0.56); d.m.quaternion.premultiply(_dq);
+    if (d.life <= 0 || p.y < sy - 60) { scene.remove(d.m); debris.splice(k, 1); }
+  }
+}
+const clearDebris = () => { for (const d of debris) scene.remove(d.m); debris.length = 0; };
+/** strefy uszkodzeń → wygląd auta; odpadnięcie koła uruchamia efekt lecącego koła */
+function syncParts(c) {
+  const st = c.st, v = c.vis; if (!st || !v) return;
+  v.setParts(st.parts);
+  const now = [st.parts[0] >= 1, st.parts[1] >= 1, st.parts[2] >= 1, st.parts[3] >= 1];
+  if (c.lostW) for (let i = 0; i < 4; i++) if (now[i] && !c.lostW[i]) spawnWheelDebris(c, i);
+  c.lostW = now;
+}
 function carFx(c, key, dt) {
   const st = c.st; if (!st || !c.vis) return;
   const sp = Math.abs(st.vf), M = c.vis.model;
@@ -1061,7 +1101,7 @@ function spawnCrate(id, type, u, l) {
 function applyPickup(type) {
   sfx.pickup(type);
   if (type === 'nitro') { me.boost = 100; toast('Nitro — pełny zbiornik'); }
-  else if (type === 'repair') { setHp(me.hp + 40); toast('Naprawa +40'); }
+  else if (type === 'repair') { setHp(me.hp + 40); me.st.repairParts(0.45); toast('Naprawa +40'); }
   else {
     const k = type === 'ammo' ? 'ammo' : type === 'oil' ? 'oil' : 'mine';
     me.items[k] = Math.min(2, me.items[k] + 1);
@@ -1091,11 +1131,29 @@ function useMine() {
   if (me.items.mine <= 0) { sfx.empty(); return; }
   me.items.mine--; const id = nextId(), s = me.st.s - 3.2; items.dropMine(id, s, me.st.d, 'me'); emitEvent({ t: 'bomb', id, x: s, z: me.st.d }); sfx.oil(); updateSlots();
 }
-function hitMe() { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); damageMe(7); }
-function damageBot(o, dmg) {
-  if (o.deadT > 0) return;
+// ---- strefy uszkodzeń: 0 koło p.-prawe, 1 p.-lewe, 2 t.-prawe, 3 t.-lewe, 4 dziób, 5 tył, 6 bok prawy, 7 bok lewy (prawa = +d) ----
+const PART_K = 0.045; // siła obrażeń (hp) → uszkodzenie stref (0..1)
+const ZONES_SHOT = { 5: 1, 2: 0.6, 3: 0.6, 6: 0.25, 7: 0.25 };
+const ZONES_MINE = { 0: 0.8, 1: 0.8, 2: 0.8, 3: 0.8, 6: 0.4, 7: 0.4, 4: 0.3, 5: 0.3 };
+const zonesWall = (st) => (st.d > 0 ? { 6: 1, 0: 0.8, 2: 0.45, 4: 0.3 } : { 7: 1, 1: 0.8, 3: 0.45, 4: 0.3 });
+const _zr = new THREE.Vector3();
+/** strefy zależne od kierunku zderzenia z innym autem (przód/tył/bok) */
+function zonesCar(st, o) {
+  const dx = o.x - st.x, dy = o.y - st.y, dz = o.z - st.z, len = Math.hypot(dx, dy, dz) || 1;
+  _zr.set(0, 0, 1).applyQuaternion(st.quat);
+  const f = (dx * st.fx + dy * st.fy + dz * st.fz) / len, r = (dx * _zr.x + dy * _zr.y + dz * _zr.z) / len, w = {};
+  if (f > 0) w[4] = f; else w[5] = -f;
+  w[r > 0 ? 6 : 7] = Math.abs(r) * 0.9 + 0.1;
+  const fr = f > 0 ? 0 : 2; w[fr + (r > 0 ? 0 : 1)] = 0.8; w[fr + (r > 0 ? 1 : 0)] = 0.3;
+  return w;
+}
+function lostWheelMsg(lost) { if (lost.length) { toast(lost.length > 1 ? 'Odpadły koła!' : 'Odpadło koło!', 1600); sfx.tire(0.8); } }
+function hitMe() { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); damageMe(7, ZONES_SHOT); }
+function damageBot(o, dmg, zones) {
+  if (o.deadT > 0 || o.inv > 0) return;
   o.hp = clamp((o.hp ?? 100) - dmg, 0, 100); o.st.hp = o.hp; o.st.damage = 1 - o.hp / 100;
-  if (o.hp <= 0) { o.deadT = 2.6; o.st.dead = 1; explodeAt(o.st); }
+  if (zones) o.st.hurt(zones, dmg * PART_K);
+  if (o.hp <= 0) { o.deadT = DEAD_T; o.deathS = o.st.s; o.deathD = o.st.d; o.st.dead = 1; explodeAt(o.st); }
 }
 /** wybuch miny: efekt, podrzut aut w promieniu 9 m (u mnie i u botów; zdalni gracze liczą go u siebie) */
 function blast(s, d, id, fromNet = false) {
@@ -1104,8 +1162,8 @@ function blast(s, d, id, fromNet = false) {
   for (let i = 0; i < 60; i++) { const a = Math.random() * 6.28, sp = 3 + Math.random() * 13; tmpC.setRGB(1, 0.35 + Math.random() * 0.45, 0.05); particles.emit(p.x, p.y, p.z, Math.cos(a) * sp, 2 + Math.random() * 9, Math.sin(a) * sp, 0.7 + Math.random() * 0.5, 1.5, 6, tmpC, 0.9, 1.4, 4); }
   const near = (st) => Math.abs(items.ds(st.s, s)) < 9 && Math.abs(st.d - d) < 9;
   const pw = (st) => 1 - Math.hypot(items.ds(st.s, s), st.d - d) / 12;
-  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); damageMe(14 + 26 * clamp(pw(me.st), 0, 1)); }
-  for (const o of oppList()) if (o.bot && near(o.st)) { o.st.knock(track); damageBot(o, 14 + 26 * clamp(pw(o.st), 0, 1)); }
+  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); damageMe(14 + 26 * clamp(pw(me.st), 0, 1), ZONES_MINE); }
+  for (const o of oppList()) if (o.bot && near(o.st)) { o.st.knock(track); damageBot(o, 14 + 26 * clamp(pw(o.st), 0, 1), ZONES_MINE); }
   if (!fromNet) emitEvent({ t: 'boom', id, x: s, z: d });
 }
 function onGameEvent(e) {
@@ -1128,7 +1186,7 @@ function updateItems(dt) {
     for (const o of oppList()) {
       if (Math.abs(items.ds(sh.s, o.st.s)) < 3.2 && Math.abs(sh.d - o.st.d) < 1.9) {
         items.killShot(sh); sparks(o.st.x, o.st.y, o.st.z, 10); sfx.hit();
-        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; damageBot(o, 7); } else emitEvent({ t: 'hit', to: o.id });
+        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; damageBot(o, 7, ZONES_SHOT); } else emitEvent({ t: 'hit', to: o.id });
         break;
       }
     }
@@ -1145,12 +1203,17 @@ function updateItems(dt) {
 // ======================= Rozgrywka =======================
 const cpFor = (s) => track.lastCp(s);
 const setHp = (v) => { me.hp = clamp(v, 0, 100); me.st.hp = me.hp; me.st.damage = 1 - me.hp / 100; setHpBar(me.hp); };
+const DEAD_T = 1.0;  // czas od wybuchu do powrotu auta [s]
+const INV_T = 1.8;   // nietykalność po powrocie [s]
 function respawnMe(manual = false, afterDeath = false) {
   const st = me.st; if (!st) return;
-  me.cp = track.lastCp(st.s);
-  st.respawnAt(track, me.cp, 24); me.nitroT = 0; me.boosting = false; me.driftT = 0; if (!afterDeath) me.falls++;
+  if (afterDeath) { // wraca dokładnie tam, gdzie wybuchło (z niewielką prędkością, na środku jezdni)
+    st.respawnAt(track, me.deathS ?? st.s, 9, clamp(me.deathD ?? 0, -4.5, 4.5));
+    st.parts.fill(0); st.refreshParts(); me.inv = INV_T;
+  } else { me.cp = track.lastCp(st.s); st.respawnAt(track, me.cp, 24); me.falls++; }
+  me.nitroT = 0; me.boosting = false; me.driftT = 0;
   if (afterDeath) { me.dead = 0; st.dead = 0; setHp(100); if (me.vis) me.vis.group.visible = true; }
-  cam.first = true; sfx.empty?.(); toast(afterDeath ? 'Auto odbudowane — wracasz na tor' : manual ? 'Powrót na ostatni punkt' : 'Wypadek — powrót na tor', 1600);
+  cam.first = true; sfx.empty?.(); toast(afterDeath ? 'Auto wróciło na tor' : manual ? 'Powrót na ostatni punkt' : 'Wypadek — powrót na tor', 1400);
 }
 function explodeAt(st) {
   sfx.explode();
@@ -1158,10 +1221,11 @@ function explodeAt(st) {
   for (let i = 0; i < 24; i++) { const a = Math.random() * 6.28; tmpC.setRGB(0.12, 0.12, 0.14); particles.emit(st.x, st.y + 1, st.z, Math.cos(a) * 3, 2 + Math.random() * 4, Math.sin(a) * 3, 1.6, 1.3, 4, tmpC, 0.6, 1.2); }
 }
 /** obrażenia mojego auta; po wyzerowaniu hp auto wybucha i wraca na tor po chwili */
-function damageMe(dmg) {
-  if (!racingNow() || me.dead > 0 || S.spectator || dmg <= 0) return;
+function damageMe(dmg, zones) {
+  if (!racingNow() || me.dead > 0 || me.inv > 0 || S.spectator || dmg <= 0) return;
   setHp(me.hp - dmg);
-  if (me.hp <= 0) { me.dead = 2.6; me.st.dead = 1; me.st.vf *= 0.3; me.st.vl = 0; explodeAt(me.st); if (me.vis) me.vis.group.visible = false; toast('Rozbity! Odbudowa za chwilę…', 2200); }
+  if (zones) lostWheelMsg(me.st.hurt(zones, dmg * PART_K));
+  if (me.hp <= 0) { me.dead = DEAD_T; me.deathS = me.st.s; me.deathD = me.st.d; me.st.dead = 1; me.st.vf *= 0.3; me.st.vl = 0; explodeAt(me.st); if (me.vis) me.vis.group.visible = false; toast('Rozbity!', 900); }
 }
 function stepMe(dt) {
   const st = me.st;
@@ -1171,6 +1235,7 @@ function stepMe(dt) {
   else { me.boosting = false; me.boostIdle -= dt; if (me.boostIdle <= 0) me.boost = Math.min(100, me.boost + 16 * dt); }
   if (me.nitroT > 0) me.nitroT -= dt;
   st.nitro = me.nitroT > 0 || me.boosting;
+  if (me.inv > 0) me.inv -= dt;
   const inp = me.finished || me.dead > 0 ? { throttle: 0, brake: me.dead > 0 ? 0.8 : 0.4, steer: 0, hand: false } : (me.auto ? botInput(st, track, me, dt) : input); // me.auto — tylko do testów
   const wasAir = st.air;
   st.step(track, inp, dt);
@@ -1178,8 +1243,8 @@ function stepMe(dt) {
   if (st.fell) { respawnMe(false); return; }
   if (wasAir && !st.air) { sfx.land(0.4 + Math.min(0.6, st.landHit / 12)); sparks(st.x, st.y, st.z, 8 + st.landHit * 2); }
   me.hitCd = (me.hitCd || 0) - dt;
-  if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; damageMe((st.hit - 5) * 0.9); }
-  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7); } }
+  if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; damageMe((st.hit - 5) * 0.9, zonesWall(st)); }
+  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7, zonesCar(st, o.st)); } }
   if (!racingNow()) return;
   if (!S.spectator) {
     const c = items.crateNear(st.s, st.d);
@@ -1202,8 +1267,9 @@ function stepMe(dt) {
 }
 function botStep(o, dt) {
   const st = o.st; if (!st) return;
+  if (o.inv > 0) o.inv -= dt;
   const finished = o.finishT != null;
-  if (o.deadT > 0) { o.deadT -= dt; st.step(track, { throttle: 0, brake: 1, steer: 0, hand: false }, dt); if (o.deadT <= 0) { st.respawnAt(track, cpFor(st.s), 24); o.hp = st.hp = 100; st.damage = 0; st.dead = 0; o.padT = 0; } return; }
+  if (o.deadT > 0) { o.deadT -= dt; st.step(track, { throttle: 0, brake: 1, steer: 0, hand: false }, dt); if (o.deadT <= 0) { st.respawnAt(track, o.deathS ?? st.s, 9, clamp(o.deathD ?? 0, -4.5, 4.5)); o.hp = st.hp = 100; st.damage = 0; st.dead = 0; o.padT = 0; st.parts.fill(0); st.refreshParts(); o.inv = INV_T; } return; }
   const inp = finished ? { throttle: 0, brake: 0.5, steer: 0, hand: false } : botInput(st, track, o, dt);
   o.padT -= dt; for (const p of track.pads) if (track.inPad(p, st.s) && Math.abs(st.d - p.lat) < 2.5) o.padT = 1.5;
   st.nitro = o.padT > 0 && !finished;
@@ -1284,12 +1350,22 @@ function updateCamera(dt) {
 // ======================= HUD =======================
 let hudCache = {};
 function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; const e = $(id); if (e) e.textContent = v; } }
+let hudDmgKey = '';
+const dmgColor = (v) => { const L = (a, b, t) => Math.round(a + (b - a) * t); if (v >= 1) return 'rgb(58,58,66)'; if (v < 0.5) { const t = v / 0.5; return `rgb(${L(62, 255, t)},${L(224, 194, t)},${L(138, 51, t)})`; } const t = (v - 0.5) / 0.5; return `rgb(255,${L(194, 74, t)},${L(51, 58, t)})`; };
 function updateHud() {
   if ($('hud').classList.contains('hidden') || !me.st) { $('speedfx').style.opacity = 0; return; }
   const subj = S.spectator ? spectateTarget() : me, st = subj?.st; if (!st) return;
   const sp = Math.abs(st.vf);
-  { const sp0 = S.mode === 'racing' ? st.speed : 0; $('speedfx').style.opacity = (clamp((sp0 - 52) / 40, 0, 1) * 0.5 + (st.nitro && sp0 > 20 ? 0.3 : 0)).toFixed(2); }
+  { const sp0 = S.mode === 'racing' ? st.speed : 0; $('speedfx').style.opacity = (clamp((sp0 - 62) / 48, 0, 1) * 0.5 + (st.nitro && sp0 > 20 ? 0.3 : 0)).toFixed(2); }
   setText('hud-speed', String(Math.round(st.speed * 3.8)));
+  { // schemat uszkodzeń: kolory stref
+    const key = Array.from(st.parts, (v) => Math.round(v * 15).toString(16)).join('') + Math.round(st.hp ?? 100);
+    if (key !== hudDmgKey) {
+      hudDmgKey = key;
+      for (let i = 0; i < 8; i++) { const e = $('dm' + i); if (e) { e.style.fill = dmgColor(st.parts[i]); e.classList.toggle('lost', i < 4 && st.parts[i] >= 1); } }
+      const b = $('dm-body'); if (b) b.style.fill = dmgColor(1 - (st.hp ?? 100) / 100);
+    }
+  }
   $('hud-bar').style.width = `${clamp(sp / (st.def.maxSpeed * 1.2), 0, 1) * 100}%`;
   if (S.mode === 'racing' && (!me.finished || S.spectator)) setText('hud-time', fmt(elapsed()));
   else if (me.finished) setText('hud-time', fmt(me.finishTime));
@@ -1346,27 +1422,27 @@ function frame(now) {
   }
 
   // wizualizacja
-  if (me.vis && me.st && !S.spectator) { me.vis.setDamage(me.st.damage || 0); me.vis.sync(me.st, dt); }
+  if (me.vis && me.st && !S.spectator) { me.vis.setDamage(me.st.damage || 0); syncParts(me); me.vis.sync(me.st, dt); if (me.dead <= 0) me.vis.group.visible = me.inv > 0 ? Math.floor(performance.now() / 90) % 2 === 0 : true; }
   for (const o of oppList()) {
-    o.vis.setDamage(o.st.damage || 0); o.vis.group.visible = !o.st.dead;
+    o.vis.setDamage(o.st.damage || 0); syncParts(o); o.vis.group.visible = !o.st.dead && !(o.inv > 0 && Math.floor(performance.now() / 90) % 2);
     o.st.accelNow += (((o.st.vf - o.prevVf) / Math.max(dt, 0.001)) - o.st.accelNow) * Math.min(1, dt * 6); o.prevVf = o.st.vf;
     o.vis.sync(o.st, dt);
   }
   if (racing || S.mode === 'menu' || S.mode === 'lobby') { if (me.st) carFx(me, 'me', dt); for (const o of oppList()) carFx(o, 'o' + o.id, dt); }
-  particles.update(dt, camera, renderer.domElement.height);
+  particles.update(dt, camera, renderer.domElement.height); updateDebris(dt);
   { const f = S.spectator ? spectateTarget()?.st : me.st; if (f) world.setFocus(f.x, f.y, f.z); }
   world.update(T, dt);
 
   // dźwięk
   if (audioReady()) {
     if (!me.audio) me.audio = new CarAudio(0.85, 0);
-    const maxS = me.st?.def.maxSpeed || 68;
-    me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st ? Math.max(clamp((me.st.slip - 4.5) / 8, 0, 1), me.st.hand && me.st.speed > 6 ? 0.95 : 0) * (active ? 1 : 0) : 0, rough: 0, active: racing && !S.spectator }, dt);
+    const maxS = me.st?.def.maxSpeed || 82, cornerSlip = (st) => clamp((Math.abs(st.steer) * Math.abs(st.vf) / st.def.maxSpeed - 0.3) / 0.35, 0, 1) * 0.65;
+    me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st && !me.st.air ? Math.max(clamp((me.st.slip - 3.5) / 7, 0, 1), cornerSlip(me.st), me.st.hand && me.st.speed > 6 ? 0.95 : 0) * (active ? 1 : 0) : 0, brake: racing && !me.finished ? input.brake : 0, nitro: !!me.st?.nitro, rough: 0, active: racing && !S.spectator }, dt);
     for (const o of oppList()) {
       if (!o.audio) o.audio = new CarAudio(0.35, 0);
       pv.set(o.st.x, o.st.y, o.st.z).project(camera); o.audio.panner.pan.value = Number.isFinite(pv.x) ? clamp(pv.x, -1, 1) * 0.6 : 0;
       o.audio.volume = 0.38 * clamp(1 - Math.hypot(o.st.x - (me.st?.x ?? 0), o.st.y - (me.st?.y ?? 0), o.st.z - (me.st?.z ?? 0)) / 220, 0.1, 1);
-      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: Math.max(clamp((o.st.slip - 4.5) / 8, 0, 1), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), rough: 0, active: racing }, dt);
+      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: o.st.air ? 0 : Math.max(clamp((o.st.slip - 3.5) / 7, 0, 1), cornerSlip(o.st), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), brake: o.st.brakeLit ? 0.9 : 0, nitro: !!o.st.nitro, rough: 0, active: racing }, dt);
     }
   }
 

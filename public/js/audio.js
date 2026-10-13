@@ -46,7 +46,19 @@ function tone({ type = 'sine', f = 440, f2 = null, dur = 0.15, gain = 0.2, attac
   o.start(t); o.stop(t + dur + 0.05);
 }
 
-/** Silnik + opony + trawa dla jednego auta (lokalnego lub przeciwnika). */
+/** widmo spalin: harmoniczne z wyraźnymi parzystymi (jak sportowy silnik wolnossący), cache wspólny dla aut */
+let engineWave = null;
+function getEngineWave() {
+  if (engineWave) return engineWave;
+  const N = 28, re = new Float32Array(N + 1), im = new Float32Array(N + 1);
+  for (let n = 1; n <= N; n++) im[n] = (1 / n ** 0.85) * (n % 2 === 0 ? 1.3 : 1) * (n === 3 ? 0.8 : 1) * (n > 14 ? 0.5 : 1);
+  engineWave = ctx.createPeriodicWave(re, im); return engineWave;
+}
+/** przełożenia skrzyni (górna prędkość biegu w ułamku prędkości maks.) i obroty */
+const GEAR_TOP = [0.16, 0.30, 0.45, 0.60, 0.75, 0.90, 1.05, 1.38];
+const RPM_IDLE = 3600, RPM_MAX = 12600;
+
+/** Silnik (skrzynia 8-biegowa, obroty zależne od prędkości, zmiany biegów, strzały, turbo), opony (pisk, hamowanie), wiatr i trawa dla jednego auta. */
 export class CarAudio {
   constructor(volume = 1, pan = 0) {
     this.on = !!ctx;
@@ -55,67 +67,128 @@ export class CarAudio {
     const panner = ctx.createStereoPanner(); panner.pan.value = pan; this.panner = panner;
     this.out.connect(panner).connect(master);
     this.volume = volume;
-    // silnik: dwa piły + kwadrat podbijający harmoniczne, przez lowpass i lekkie przesterowanie
-    this.o1 = ctx.createOscillator(); this.o1.type = 'sawtooth';
-    this.o2 = ctx.createOscillator(); this.o2.type = 'sawtooth';
-    this.o3 = ctx.createOscillator(); this.o3.type = 'square';
-    this.g1 = ctx.createGain(); this.g2 = ctx.createGain(); this.g3 = ctx.createGain();
-    this.g1.gain.value = 0.5; this.g2.gain.value = 0.35; this.g3.gain.value = 0.12;
-    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.Q.value = 2.5;
-    const shaper = ctx.createWaveShaper();
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = (i / 128) - 1; curve[i] = Math.tanh(x * 2.2); }
+    // silnik: dwa generatory ze wspólnym widmem (lekko rozstrojone = „grubość”), podstawa o połowę niżej i warkot szumowy ssania
+    const w = getEngineWave();
+    const mk = (type) => { const o = ctx.createOscillator(); if (type) o.type = type; else o.setPeriodicWave(w); return o; };
+    this.o1 = mk(); this.o2 = mk(); this.o3 = mk('square'); this.o4 = mk('triangle');
+    this.g1 = ctx.createGain(); this.g2 = ctx.createGain(); this.g3 = ctx.createGain(); this.g4 = ctx.createGain();
+    this.g1.gain.value = 0.55; this.g2.gain.value = 0.4; this.g3.gain.value = 0.07; this.g4.gain.value = 0.3;
+    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.Q.value = 1.4;
+    this.pk = ctx.createBiquadFilter(); this.pk.type = 'peaking'; this.pk.Q.value = 2.2; this.pk.gain.value = 7; // formant rezonansu rury wydechowej
+    const shaper = ctx.createWaveShaper(), curve = new Float32Array(512);
+    for (let i = 0; i < 512; i++) { const x = (i / 256) - 1; curve[i] = Math.tanh(x * 1.9) * 0.92 + 0.08 * x; }
     shaper.curve = curve;
+    this.tg = ctx.createGain(); this.tg.gain.value = 1; // tremolo „burble” na wolnym gazie
     this.eg = ctx.createGain(); this.eg.gain.value = 0;
-    this.o1.connect(this.g1).connect(this.lp); this.o2.connect(this.g2).connect(this.lp); this.o3.connect(this.g3).connect(this.lp);
-    this.lp.connect(shaper).connect(this.eg).connect(this.out);
-    [this.o1, this.o2, this.o3].forEach((o) => o.start());
-    // opony: szum przez filtr pasmowy
+    this.o1.connect(this.g1).connect(this.lp); this.o2.connect(this.g2).connect(this.lp); this.o3.connect(this.g3).connect(this.lp); this.o4.connect(this.g4).connect(this.lp);
+    this.lp.connect(this.pk).connect(shaper).connect(this.tg).connect(this.eg).connect(this.out);
+    this.lfo = ctx.createOscillator(); this.lfo.frequency.value = 23; this.lfoG = ctx.createGain(); this.lfoG.gain.value = 0; this.lfo.connect(this.lfoG).connect(this.tg.gain);
+    [this.o1, this.o2, this.o3, this.o4, this.lfo].forEach((o) => o.start());
+    // ssanie / turbulencja wydechu
+    this.in = noiseSrc(); this.ibp = ctx.createBiquadFilter(); this.ibp.type = 'bandpass'; this.ibp.Q.value = 0.9; this.ig = ctx.createGain(); this.ig.gain.value = 0;
+    this.in.connect(this.ibp).connect(this.ig).connect(this.out); this.in.start();
+    // świst turbosprężarki
+    this.to = ctx.createOscillator(); this.to.type = 'sine'; this.tog = ctx.createGain(); this.tog.gain.value = 0;
+    this.to.connect(this.tog).connect(this.out); this.to.start();
+    // wiatr
+    this.wn = noiseSrc(); this.wbp = ctx.createBiquadFilter(); this.wbp.type = 'bandpass'; this.wbp.Q.value = 0.5; this.wg = ctx.createGain(); this.wg.gain.value = 0;
+    this.wn.connect(this.wbp).connect(this.wg).connect(this.out); this.wn.start();
+    // opony: szum poślizgu (szeroki) + wąski, wysoki „pisk” z drżeniem (stick-slip) + osobny pisk blokującego się hamowania
     this.sn = noiseSrc();
     this.sbp = ctx.createBiquadFilter(); this.sbp.type = 'bandpass'; this.sbp.frequency.value = 1900; this.sbp.Q.value = 3.5;
     this.sg = ctx.createGain(); this.sg.gain.value = 0;
     this.sn.connect(this.sbp).connect(this.sg).connect(this.out); this.sn.start();
-    // wysoki „pisk” opon: dwa dostrojone generatory przez filtr pasmowy
     this.so1 = ctx.createOscillator(); this.so1.type = 'sawtooth'; this.so1.frequency.value = 1180;
     this.so2 = ctx.createOscillator(); this.so2.type = 'square'; this.so2.frequency.value = 1730;
-    this.sob = ctx.createBiquadFilter(); this.sob.type = 'bandpass'; this.sob.frequency.value = 1500; this.sob.Q.value = 6;
+    this.so3 = ctx.createOscillator(); this.so3.type = 'triangle'; this.so3.frequency.value = 2620;
+    this.sob = ctx.createBiquadFilter(); this.sob.type = 'bandpass'; this.sob.frequency.value = 1500; this.sob.Q.value = 7;
     this.sog = ctx.createGain(); this.sog.gain.value = 0;
-    this.so1.connect(this.sob); this.so2.connect(this.sob); this.sob.connect(this.sog).connect(this.out);
-    this.so1.start(); this.so2.start();
+    this.sam = ctx.createGain(); this.sam.gain.value = 1; // modulacja amplitudy pisku
+    this.slfo = ctx.createOscillator(); this.slfo.frequency.value = 38; this.slfoG = ctx.createGain(); this.slfoG.gain.value = 0.35; this.slfo.connect(this.slfoG).connect(this.sam.gain);
+    this.slfo2 = ctx.createOscillator(); this.slfo2.frequency.value = 7; this.slfoV = ctx.createGain(); this.slfoV.gain.value = 40; // drżenie wysokości
+    this.slfo2.connect(this.slfoV); this.slfoV.connect(this.so1.frequency); this.slfoV.connect(this.so2.frequency); this.slfoV.connect(this.so3.frequency);
+    this.so1.connect(this.sob); this.so2.connect(this.sob); this.so3.connect(this.sob); this.sob.connect(this.sam).connect(this.sog).connect(this.out);
+    [this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => o.start());
     // trawa / krawężnik: niski szum
     this.rn = noiseSrc();
     this.rlp = ctx.createBiquadFilter(); this.rlp.type = 'lowpass'; this.rlp.frequency.value = 500;
     this.rg = ctx.createGain(); this.rg.gain.value = 0;
     this.rn.connect(this.rlp).connect(this.rg).connect(this.out); this.rn.start();
-    this.rpm = 900; this.gear = 0;
+    this.rpm = RPM_IDLE; this.gear = 0; this.cut = 0; this.lastThr = 0; this.popCd = 0; this.shiftCd = 0; this.limT = 0;
   }
 
-  /** speed: 0..1 względem prędkości maksymalnej, throttle 0..1, slip 0..1, rough 0..1 */
-  update({ speed, throttle, slip, rough, active = true }, dt) {
+  /** krótki wybuch szumu (strzał z wydechu, stuk skrzyni) */
+  _burst(freq, gain, dur, q = 1, type = 'bandpass') {
+    const t = ctx.currentTime, src = noiseSrc(), f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    src.connect(f).connect(g).connect(this.out); src.start(t, Math.random()); src.stop(t + dur + 0.02);
+  }
+
+  /** speed: prędkość względem maksymalnej (może przekraczać 1 z nitro), throttle 0..1, slip 0..1, rough 0..1, brake 0..1 */
+  update({ speed, throttle, slip, rough, brake = 0, active = true, nitro = false }, dt) {
     if (!this.on) return;
     const t = ctx.currentTime;
     const sp = Math.abs(speed);
-    // 5 biegów — obroty „piłą”, czuć zmianę biegu
-    const gears = 5;
-    const g = Math.min(gears - 1, Math.floor(sp * gears * 0.98));
-    const within = sp * gears - g;
-    const target = 1700 + within * 5200 + throttle * 700;
-    const idle = 900 + throttle * 1800;
-    const want = sp < 0.03 ? idle : target;
-    this.rpm += (want - this.rpm) * Math.min(1, dt * (throttle > 0.1 ? 9 : 5));
-    const f = this.rpm / 60 * 2;
-    this.o1.frequency.setTargetAtTime(f, t, 0.03);
-    this.o2.frequency.setTargetAtTime(f * 1.005 + 0.6, t, 0.03);
-    this.o3.frequency.setTargetAtTime(f * 0.5, t, 0.03);
-    this.lp.frequency.setTargetAtTime(380 + this.rpm * 0.22 + throttle * 700, t, 0.05);
-    this.eg.gain.setTargetAtTime(active ? 0.22 + throttle * 0.28 : 0, t, 0.06);
+    // --- skrzynia: zmiana biegu przy dobiciu do obrotów / zbyt niskich obrotach ---
+    this.shiftCd -= dt; this.popCd -= dt;
+    const topOf = (g) => GEAR_TOP[g];
+    if (this.shiftCd <= 0 && this.gear < GEAR_TOP.length - 1 && sp > topOf(this.gear) * 0.985) { this.gear++; this.cut = 0.11; this.shiftCd = 0.35; if (throttle > 0.3) this._burst(260, 0.1, 0.07); }
+    else if (this.shiftCd <= 0 && this.gear > 0 && sp < topOf(this.gear - 1) * 0.8) { this.gear--; this.shiftCd = 0.3; this.rpm += 1800; if (sp > 0.25 && throttle < 0.4) this._burst(500, 0.12, 0.09); }
+    this.cut = Math.max(0, this.cut - dt);
+    const g = this.gear;
+    let want = Math.max(RPM_IDLE, RPM_MAX * sp / topOf(g));
+    if (sp < 0.04) want = RPM_IDLE + throttle * 5200; // start: obroty rosną przy wciśniętym gazie
+    else if (g === 0) want = Math.max(want, RPM_IDLE + throttle * 3600);
+    want = Math.min(RPM_MAX, want);
+    if (this.cut > 0) want = Math.max(RPM_IDLE, want - 2200); // przerwa w napędzie przy zmianie biegu
+    this.rpm += (want - this.rpm) * Math.min(1, dt * (this.cut > 0 ? 25 : throttle > 0.1 ? 14 : 7));
+    // ogranicznik obrotów: drżenie przy czerwonym polu
+    const red = Math.max(0, (this.rpm - RPM_MAX * 0.955) / (RPM_MAX * 0.045));
+    this.limT += dt;
+    const lim = red > 0.5 && throttle > 0.5 ? (Math.sin(this.limT * 78) > 0.1 ? 1 : 0.62) : 1;
+    const wob = 1 + (throttle > 0.2 ? Math.sin(this.limT * 9.3) * 0.004 + Math.sin(this.limT * 3.1) * 0.003 : 0);
+    const rpm = this.rpm * wob;
+    const f = rpm / 60 * 4; // częstotliwość zapłonów (silnik 8-cylindrowy, 4 zapłony na obrót)
+    this.o1.frequency.setTargetAtTime(f, t, 0.02);
+    this.o2.frequency.setTargetAtTime(f * 1.007 + 0.4, t, 0.02);
+    this.o3.frequency.setTargetAtTime(f * 0.5, t, 0.02);
+    this.o4.frequency.setTargetAtTime(f * 0.25, t, 0.03);
+    const open = 0.25 + throttle * 0.75;
+    this.lp.frequency.setTargetAtTime((650 + rpm * 0.55) * (0.55 + open * 0.8) * (this.cut > 0 ? 0.6 : 1), t, 0.04);
+    this.pk.frequency.setTargetAtTime(500 + rpm * 0.28, t, 0.05);
+    const load = throttle * 0.55 + 0.32;
+    this.eg.gain.setTargetAtTime(active ? (0.1 + load * 0.5) * lim * (this.cut > 0 ? 0.45 : 1) * (0.7 + 0.3 * Math.min(1, rpm / 9000)) : 0, t, 0.03);
+    // burble na zdjęciu gazu przy obrotach
+    this.lfoG.gain.setTargetAtTime(throttle < 0.12 && rpm > 5000 ? 0.28 : 0, t, 0.08);
+    this.lfo.frequency.setTargetAtTime(19 + rpm / 900, t, 0.1);
     this.out.gain.setTargetAtTime(this.volume, t, 0.1);
-    this.sg.gain.setTargetAtTime(Math.min(1, slip) * 0.42, t, 0.04);
-    this.sog.gain.setTargetAtTime(Math.min(1, slip) ** 1.3 * 0.16, t, 0.05);
-    const wob = 1 + Math.sin(t * 17) * 0.015 * slip;
-    this.so1.frequency.setTargetAtTime((1050 + slip * 330 + Math.abs(speed) * 160) * wob, t, 0.05);
-    this.so2.frequency.setTargetAtTime((1560 + slip * 420 + Math.abs(speed) * 200) * wob, t, 0.05);
-    this.sbp.frequency.setTargetAtTime(1500 + slip * 900, t, 0.05);
+    // ssanie i szum wydechu
+    this.ibp.frequency.setTargetAtTime(500 + rpm * 0.2, t, 0.05);
+    this.ig.gain.setTargetAtTime(active ? (0.04 + throttle * 0.2) * Math.min(1, rpm / 7000) : 0, t, 0.05);
+    // turbo: świst rośnie z obrotami i gazem, blow-off po puszczeniu pedału
+    this.to.frequency.setTargetAtTime(1500 + rpm * 0.35, t, 0.05);
+    this.tog.gain.setTargetAtTime(active ? throttle * Math.min(1, Math.max(0, (rpm - 5500) / 5000)) * 0.028 + (nitro ? 0.02 : 0) : 0, t, 0.06);
+    if (this.lastThr > 0.7 && throttle < 0.15 && rpm > 6500 && this.popCd <= 0) {
+      this.popCd = 0.8; this._burst(4200, 0.07, 0.4, 0.8, 'highpass');
+      for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) setTimeout(() => { if (this.on && ctx) this._burst(240 + Math.random() * 500, 0.16, 0.06, 1.2); }, 70 + i * (60 + Math.random() * 90));
+    }
+    this.lastThr = throttle;
+    // wiatr rośnie z kwadratem prędkości
+    this.wbp.frequency.setTargetAtTime(500 + sp * 1600, t, 0.1);
+    this.wg.gain.setTargetAtTime(active ? Math.min(1, sp * sp) * 0.2 : 0, t, 0.1);
+    // opony: szum + pisk (zakręt w poślizgu, drift) oraz pisk hamowania na dużej prędkości
+    const brk = brake > 0.5 && sp > 0.28 ? Math.min(1, (brake - 0.4) * 1.6) * Math.min(1, sp * 1.5) * 0.85 : 0;
+    const sq = Math.min(1, Math.max(slip, brk));
+    this.sg.gain.setTargetAtTime(Math.min(1, slip) * 0.34 + brk * 0.18, t, 0.04);
+    this.sog.gain.setTargetAtTime(sq ** 1.15 * 0.2, t, 0.05);
+    this.slfoG.gain.setTargetAtTime(0.18 + sq * 0.35, t, 0.1);
+    this.slfo.frequency.setTargetAtTime(30 + sq * 40, t, 0.1);
+    const base = 980 + slip * 380 + sp * 260 + brk * 140;
+    this.so1.frequency.setTargetAtTime(base, t, 0.05);
+    this.so2.frequency.setTargetAtTime(base * 1.49, t, 0.05);
+    this.so3.frequency.setTargetAtTime(base * 2.2, t, 0.05);
+    this.sob.frequency.setTargetAtTime(1250 + slip * 700 + sp * 500, t, 0.05);
+    this.sbp.frequency.setTargetAtTime(1500 + slip * 1000, t, 0.05);
     this.rg.gain.setTargetAtTime(Math.min(1, rough) * Math.min(1, sp * 2) * 0.5, t, 0.08);
   }
 
@@ -123,7 +196,7 @@ export class CarAudio {
     if (!this.on) return;
     const t = ctx.currentTime;
     this.out.gain.setTargetAtTime(0, t, 0.05);
-    setTimeout(() => { [this.o1, this.o2, this.o3, this.sn, this.rn, this.so1, this.so2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
+    setTimeout(() => { [this.o1, this.o2, this.o3, this.o4, this.lfo, this.in, this.to, this.wn, this.sn, this.rn, this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
   }
 }
 

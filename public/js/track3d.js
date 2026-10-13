@@ -20,10 +20,28 @@ export class Track3D {
     const k0 = new Float32Array(n); for (let i = 0; i < n; i++) k0[i] = wrapAng(psi[(i + 3) % n] - psi[(i - 3 + n) % n]) / (6 * DS);
     let start = 0, best = -1;
     for (let i = 0; i < n; i += 4) { let run = 0; for (let k = -40; k <= 160; k += 8) if (Math.abs(k0[(i + k + n) % n]) < 0.004) run++; if (run > best) { best = run; start = i; } }
+    if (def.startAt) { let bd = 1e18; for (let i = 0; i < n; i++) { const d = (raw[i].x - def.startAt[0] * SC) ** 2 + (raw[i].z - def.startAt[1] * SC) ** 2; if (d < bd) { bd = d; start = i; } } }
     const P = (i) => raw[(i + start) % n];
-    // wzniesienia: okresowe, więc tor zamyka się płynnie
+    // wzniesienia: profil `elev` = punkty [ułamek okrążenia od startu, wysokość] interpolowane gładko i okresowo (zamknięta pętla),
+    // albo (stare) sumy sinusów `hills`
     const hills = def.hills ?? [[0, 1, 0]];
-    const yAt = (i) => { let y = def.y0 ?? 0; for (const [A, k, ph] of hills) y += A * Math.sin((2 * Math.PI * k * i) / n + ph); return y; };
+    let yAt;
+    if (def.elev) {
+      const E = def.elev.map(([f, y]) => [f, y]).sort((a, b) => a[0] - b[0]), m = E.length;
+      const ex = (k) => { const q = Math.floor(k / m), r = ((k % m) + m) % m; return [E[r][0] + q, E[r][1]]; };
+      const prof = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const f = i / n; let k = 0; while (k < m && E[k][0] <= f) k++; k--; // odcinek [k, k+1], k może być -1 (przed pierwszym punktem)
+        const [f1, y1] = ex(k), [f2, y2] = ex(k + 1), [f0, y0] = ex(k - 1), [f3, y3] = ex(k + 2), t = (f - f1) / (f2 - f1);
+        // Catmull-Rom z nierównymi odstępami (styczne ze średnich nachyleń; ograniczone na ekstremach, żeby nie było przeregulowania)
+        const s1 = (y2 - y0) / (f2 - f0), s2 = (y3 - y1) / (f3 - f1), mono = (a, b) => (a * b <= 0 ? 0 : a);
+        const m1 = mono(s1, (y2 - y1) / (f2 - f1)) * (f2 - f1), m2 = mono(s2, (y3 - y2) / (f3 - f2)) * (f2 - f1);
+        const t2 = t * t, t3 = t2 * t;
+        prof[i] = (2 * t3 - 3 * t2 + 1) * y1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * y2 + (t3 - t2) * m2;
+      }
+      const w = Math.round(def.elevSmooth ?? 24), sm = smoothArr(prof, w);
+      yAt = (i) => (def.y0 ?? 0) + sm[i];
+    } else yAt = (i) => { let y = def.y0 ?? 0; for (const [A, k, ph] of hills) y += A * Math.sin((2 * Math.PI * k * i) / n + ph); return y; };
     const N = n + 1;
     const px = new Float32Array(N), py = new Float32Array(N), pz = new Float32Array(N);
     for (let i = 0; i < N; i++) { const p = P(i % n); px[i] = p.x; py[i] = yAt(i % n); pz[i] = p.z; }

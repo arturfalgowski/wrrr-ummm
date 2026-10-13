@@ -197,16 +197,17 @@ export function buildCar(id, number, color = null, custom = null) {
     sp.position.set(-M.L / 2 + 0.2, M.cabin ? 1.52 : 1.5, 0);
     body.add(sp);
   }
+  const nose = { wing: null, plates: [] }, tail = { wing: null, plates: [], posts: [] }, pods = {}; // elementy nadwozia reagujące na uszkodzenia stref
   if (M.extras === 'formula') {
     const acc = reg(paintMaterial({ paint: def.stripe || 0x222222 }), 'accent');
     const bodyPaint = reg(paintMaterial({ paint: def.color, stripe: def.stripe, pattern: PATTERN_IDX[cust.pattern] ?? 1 }), 'body');
     const box = (w, h, d, x, y, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; body.add(m); return m; };
-    box(0.85, 0.07, 2.7, M.L / 2 - 0.15, 0.3, 0, acc);                        // przedni spojler
-    for (const sz of [-1.35, 1.35]) box(0.95, 0.3, 0.06, M.L / 2 - 0.15, 0.42, sz, acc);
-    box(0.8, 0.08, 2.0, -M.L / 2 + 0.05, 1.32, 0, acc);                       // tylny spojler
-    for (const sz of [-1.0, 1.0]) box(0.9, 0.62, 0.06, -M.L / 2 + 0.05, 1.05, sz, acc);
-    for (const sz of [-0.3, 0.3]) box(0.14, 0.7, 0.1, -M.L / 2 + 0.25, 0.95, sz, darkMat);
-    for (const sz of [-0.74, 0.74]) { box(1.9, 0.34, 0.5, -0.1, 0.52, sz, bodyPaint); box(0.5, 0.24, 0.52, 0.9, 0.46, sz, darkMat); } // boczne wloty
+    nose.wing = box(0.85, 0.07, 2.7, M.L / 2 - 0.15, 0.3, 0, acc);            // przedni spojler
+    for (const sz of [-1.35, 1.35]) { const m = box(0.95, 0.3, 0.06, M.L / 2 - 0.15, 0.42, sz, acc); m.userData.side = sz; nose.plates.push(m); }
+    tail.wing = box(0.8, 0.08, 2.0, -M.L / 2 + 0.05, 1.32, 0, acc);           // tylny spojler
+    for (const sz of [-1.0, 1.0]) { const m = box(0.9, 0.62, 0.06, -M.L / 2 + 0.05, 1.05, sz, acc); m.userData.side = sz; tail.plates.push(m); }
+    for (const sz of [-0.3, 0.3]) tail.posts.push(box(0.14, 0.7, 0.1, -M.L / 2 + 0.25, 0.95, sz, darkMat));
+    for (const sz of [-0.74, 0.74]) { pods[sz > 0 ? 'r' : 'l'] = box(1.9, 0.34, 0.5, -0.1, 0.52, sz, bodyPaint); box(0.5, 0.24, 0.52, 0.9, 0.46, sz, darkMat); } // boczne wloty
     box(0.7, 0.55, 0.42, -0.95, 1.12, 0, bodyPaint);                            // airbox
     const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 14), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.25, clearcoat: 1 }));
     helmet.position.set(-0.2, 1.08, 0); helmet.castShadow = true; body.add(helmet);
@@ -232,12 +233,16 @@ export function buildCar(id, number, color = null, custom = null) {
   const wheels = { fl: null, fr: null, rl: null, rr: null };
   const ww = M.wheelW ?? 0.58;
   const spots = { fl: [M.wheelX, M.wheelZ], fr: [M.wheelX, -M.wheelZ], rl: [-M.wheelX, M.wheelZ], rr: [-M.wheelX, -M.wheelZ] };
+  const stubs = {};
   for (const k of Object.keys(spots)) {
     const w = makeWheel(M.wheelR, ww, cust.rim, rimM);
-    w.pivot.position.set(spots[k][0], M.wheelR, spots[k][1]);
+    w.tire = w.roll.children[0]; w.tire.material = tireMat.clone(); // własna opona: ciemnieje przy uszkodzeniu
+    w.pivot.position.set(spots[k][0], M.wheelR, spots[k][1]); w.pivot.rotation.order = 'YXZ';
     group.add(w.pivot);
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.34, 8), darkMat); stub.rotation.x = Math.PI / 2; stub.position.set(spots[k][0], M.wheelR, spots[k][1]); stub.visible = false; group.add(stub); stubs[k] = stub;
     wheels[k] = w;
   }
+  const WK = ['fl', 'fr', 'rl', 'rr']; // indeksy stref 0..3 (fl/rl = prawa strona, +z)
 
   // numer startowy i tablica z nickiem rzutowane promieniem na karoserię
   group.updateMatrixWorld(true);
@@ -267,7 +272,7 @@ export function buildCar(id, number, color = null, custom = null) {
     group, body, wheels, tailMat, def, model: M, headMat,
     /** noc: mocniej świecące reflektory */
     setNight(k) { headMat.emissiveIntensity = 1.8 + k * 5; },
-    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, tx: 0, tz: 0, color: null, stripeC: null, dmg: 0, cust,
+    pitch: 0, roll: 0, spin: 0, hk: 0, hdir: 0, tx: 0, tz: 0, color: null, stripeC: null, dmg: 0, cust, pz: [0, 0, 0, 0], partsKey: '', wob: 0,
     /** personalizacja: numer, wzór lakieru, felgi, tablica z nickiem */
     setCustom(c = {}) {
       const n = { ...cust, ...c };
@@ -297,8 +302,8 @@ export function buildCar(id, number, color = null, custom = null) {
       }
     },
     /** zniszczenia 0..1: wgniecenia karoserii + przypalony lakier */
-    setDamage(d) {
-      if (Math.abs(d - this.dmg) < 0.012) return;
+    setDamage(d, force = false) {
+      if (!force && Math.abs(d - this.dmg) < 0.012) return;
       this.dmg = d;
       if (this.color) this._paint();
       for (const t of dents) {
@@ -307,11 +312,36 @@ export function buildCar(id, number, color = null, custom = null) {
           const ox = t.orig[i * 3], oy = t.orig[i * 3 + 1], oz = t.orig[i * 3 + 2];
           const n = Math.sin(ox * 2.3 + oy * 1.7 + 0.6) * Math.cos(oz * 2.9 - ox * 1.1);
           const front = 1 + 0.9 * Math.min(1, Math.max(0, (ox - 0.15 * L) / (0.35 * L)));
-          const k = d * 0.2 * (0.3 + 0.7 * Math.max(0, n)) * front;
-          pos.setXYZ(i, ox - t.nrm[i * 3] * k, oy - t.nrm[i * 3 + 1] * k - d * 0.05 * Math.max(0, (ox / L)), oz - t.nrm[i * 3 + 2] * k);
+          const pz = this.pz, dd = Math.min(1, d * 0.45 + (oz > 0 ? pz[3] : pz[2]) * 0.7 + (ox > 0 ? pz[0] : pz[1]) * 0.5); // lokalne zniszczenie (bok, dziób/tył)
+          const k = dd * 0.2 * (0.3 + 0.7 * Math.max(0, n)) * front;
+          pos.setXYZ(i, ox - t.nrm[i * 3] * k, oy - t.nrm[i * 3 + 1] * k - dd * 0.05 * Math.max(0, (ox / L)), oz - t.nrm[i * 3 + 2] * k);
         }
         pos.needsUpdate = true; t.geo.computeVertexNormals();
       }
+    },
+    /** strefy uszkodzeń (8 liczb 0..1): koła odpadają, spojlery się łamią i odpadają, boki się wgniatają, opony ciemnieją */
+    setParts(p) {
+      let key = ''; for (let i = 0; i < 8; i++) key += Math.round(p[i] * 15).toString(16);
+      if (key === this.partsKey) return; this.partsKey = key;
+      for (let i = 0; i < 4; i++) {
+        const w = wheels[WK[i]], d = p[i], side = i % 2 === 0 ? 1 : -1, lost = d >= 1;
+        w.pivot.visible = !lost; stubs[WK[i]].visible = lost;
+        w.pivot.rotation.x = side * d * 0.5; w.pivot.position.y = M.wheelR * (1 - d * 0.16);
+        w.roll.scale.set(1 - d * 0.2, 1 - d * 0.2, 1); w.tire.material.color.setRGB(0.08 * (1 - d * 0.75), 0.08 * (1 - d * 0.75), 0.1 * (1 - d * 0.75));
+        if (lost) stubs[WK[i]].position.y = M.wheelR * 0.55;
+      }
+      const dn = p[4], dt = p[5];
+      if (nose.wing) {
+        nose.wing.visible = dn < 1; nose.wing.rotation.z = -dn * 0.45; nose.wing.position.y = 0.3 - dn * 0.12; nose.wing.scale.z = 1 - dn * 0.3;
+        for (const m of nose.plates) { m.visible = dn < (m.userData.side > 0 ? 0.55 : 0.8); m.rotation.x = m.userData.side * dn * 0.4; }
+      }
+      if (tail.wing) {
+        tail.wing.visible = dt < 1; tail.wing.rotation.z = dt * 0.5; tail.wing.rotation.x = dt * 0.28; tail.wing.position.y = 1.32 - dt * 0.12;
+        for (const m of tail.plates) { m.visible = dt < (m.userData.side > 0 ? 0.6 : 0.85); m.rotation.x = -m.userData.side * dt * 0.35; }
+        for (const m of tail.posts) m.visible = dt < 1;
+      }
+      for (const k of ['r', 'l']) { const m = pods[k]; if (!m) continue; const dd = p[k === 'r' ? 6 : 7], sg = k === 'r' ? 1 : -1; m.rotation.x = sg * dd * 0.28; m.position.z = sg * (0.74 - dd * 0.12); m.scale.y = 1 - dd * 0.4; m.visible = dd < 1; }
+      this.pz = [p[4], p[5], p[7], p[6]]; this.setDamage(this.dmg, true);
     },
     /** Aktualizacja wizualna dla toru 3D: pozycja i orientacja z fizyki (pętle, przechyły, lot), ruch kół i zawieszenia. */
     sync(st, dt) {
@@ -330,6 +360,8 @@ export function buildCar(id, number, color = null, custom = null) {
       for (const k of ['fl', 'fr']) wheels[k].pivot.rotation.y = steerAng;
       for (const k of ['fl', 'fr', 'rl', 'rr']) wheels[k].roll.rotation.z = this.spin;
       tailMat.emissiveIntensity = st.brakeLit ? 3.2 : 0.9;
+      // uszkodzone koła chwieją się (im mocniej uszkodzone i szybsze auto, tym bardziej)
+      if (this.partsKey !== '' && Math.abs(st.vf) > 3) { this.wob += dt * 38 * Math.min(1, Math.abs(st.vf) / 40); for (let i = 0; i < 4; i++) { const d = st.parts[i]; if (d > 0.25 && d < 1) { const w = wheels[WK[i]]; w.roll.rotation.x = Math.sin(this.wob + i * 1.7) * d * 0.09; } } }
     },
   };
 }
