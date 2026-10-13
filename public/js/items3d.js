@@ -6,6 +6,7 @@ export const ITEM_TYPES = {
   ammo: { color: '#ffb02e', name: 'Karabin' },
   oil: { color: '#a46bff', name: 'Olej' },
   bomb: { color: '#ff4a3a', name: 'Mina' },
+  rocket: { color: '#ff6a3d', name: 'Rakieta' },
   repair: { color: '#3ee08a', name: 'Naprawa' },
 };
 const crateGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
@@ -15,13 +16,15 @@ const shotGeo = new THREE.BoxGeometry(1.5, 0.28, 0.28);
 const oilGeo = new THREE.CircleGeometry(3.3, 28).rotateX(-Math.PI / 2);
 const oilMat = new THREE.MeshStandardMaterial({ color: 0x07060b, roughness: 0.04, metalness: 0.9, transparent: true, opacity: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false });
 const shotMat = new THREE.MeshBasicMaterial({ color: 0xffe28a });
+const rocketBody = new THREE.CylinderGeometry(0.2, 0.2, 2.0, 10), rocketNose = new THREE.ConeGeometry(0.2, 0.7, 10), rocketFin = new THREE.BoxGeometry(0.5, 0.04, 0.45), rocketFlame = new THREE.ConeGeometry(0.17, 1.2, 8);
+const rocketMat = new THREE.MeshStandardMaterial({ color: 0xe9ebf2, metalness: 0.5, roughness: 0.3 }), rocketRed = new THREE.MeshStandardMaterial({ color: 0xd8321f, roughness: 0.45 }), rocketFire = new THREE.MeshBasicMaterial({ color: 0xffa23a });
 const _m = new THREE.Matrix4(), _p = {}, _t = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
 
 export class Items3D {
   constructor(scene, particles) {
     this.scene = scene; this.particles = particles; this.track = null;
     this.root = new THREE.Group(); scene.add(this.root);
-    this.crates = new Map(); this.mines = []; this.oils = []; this.shots = [];
+    this.crates = new Map(); this.mines = []; this.oils = []; this.shots = []; this.rockets = [];
     this._thud = null;
   }
   setTrack(track) { this.clear(); this.track = track; }
@@ -73,7 +76,31 @@ export class Items3D {
     const sh = { s, d, vs, owner, mesh: m, age: 0, life: 1.5 }; this.shots.push(sh); return sh;
   }
   killShot(sh) { sh.life = 0; }
+  // ---- rakiety: lecą wzdłuż toru szybciej od auta i naprowadzają się na cel (zmiana pasa do 14 m/s) ----
+  rocket(s, d, vs, owner, target = null) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(rocketBody, rocketMat); body.rotation.z = Math.PI / 2;
+    const nose = new THREE.Mesh(rocketNose, rocketRed); nose.rotation.z = -Math.PI / 2; nose.position.x = 1.2;
+    for (let i = 0; i < 3; i++) { const fin = new THREE.Mesh(rocketFin, rocketRed); fin.position.x = -0.8; fin.rotation.x = (i / 3) * Math.PI * 2; fin.position.y = Math.sin(fin.rotation.x) * 0.25; fin.position.z = -Math.cos(fin.rotation.x) * 0.25; g.add(fin); }
+    const flame = new THREE.Mesh(rocketFlame, rocketFire); flame.rotation.z = Math.PI / 2; flame.position.x = -1.3;
+    g.add(body, nose, flame); g.castShadow = true; this.root.add(g);
+    const r = { s, d, vs, owner, target, mesh: g, flame, age: 0, life: 4, lastD: d }; this.rockets.push(r); return r;
+  }
+  killRocket(r) { r.life = 0; }
   update(dt, T) {
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i]; r.age += dt;
+      if (r.age > r.life) { this.root.remove(r.mesh); this.rockets.splice(i, 1); continue; }
+      if (r.target) { const tds = this.ds(r.target.s, r.s); if (tds < -5) r.target = null; else { const dd = Math.max(-14 * dt, Math.min(14 * dt, r.target.d - r.d)); r.d += dd; } }
+      r.d = Math.max(-6.6, Math.min(6.6, r.d)); r.s += r.vs * dt;
+      const f = this.track.at(r.s, _p), lat = Math.atan2((r.d - r.lastD) / Math.max(dt, 1e-3), r.vs); r.lastD = r.d;
+      r.mesh.position.set(f.px + f.rx * r.d + f.ux * 0.9, f.py + f.ry * r.d + f.uy * 0.9, f.pz + f.rz * r.d + f.uz * 0.9);
+      _t.set(f.tx, f.ty, f.tz); _u.set(f.ux, f.uy, f.uz); _r.set(f.rx, f.ry, f.rz); _m.makeBasis(_t, _u, _r); r.mesh.quaternion.setFromRotationMatrix(_m); r.mesh.rotateY(-lat);
+      r.flame.scale.set(0.8 + Math.random() * 0.6, 1, 1);
+      const pp = r.mesh.position;
+      _c2.setRGB(1, 0.55 + Math.random() * 0.3, 0.12); this.particles.emit(pp.x - f.tx * 1.5, pp.y - f.ty * 1.5, pp.z - f.tz * 1.5, 0, 0.3, 0, 0.22, 0.9, 0.2, _c2, 0.9, 2);
+      _c2.setRGB(0.75, 0.75, 0.78); this.particles.emit(pp.x - f.tx * 2, pp.y - f.ty * 2, pp.z - f.tz * 2, (Math.random() - 0.5) * 0.8, 0.5, (Math.random() - 0.5) * 0.8, 0.9, 0.7, 2.6, _c2, 0.4, 1.4);
+    }
     for (const c of this.crates.values()) {
       c.age += dt;
       const k = Math.min(1, c.age / 1.0);
@@ -97,7 +124,8 @@ export class Items3D {
     for (const m of this.mines) this.root.remove(m.mesh); this.mines.length = 0;
     for (const o of this.oils) this.root.remove(o.mesh); this.oils.length = 0;
     for (const s of this.shots) this.root.remove(s.mesh); this.shots.length = 0;
+    for (const r of this.rockets) this.root.remove(r.mesh); this.rockets.length = 0;
   }
 }
-const _c = new THREE.Color(1, 0.75, 0.25);
+const _c = new THREE.Color(1, 0.75, 0.25), _c2 = new THREE.Color();
 function tmpEmit(p, pos) { p.emit(pos.x, pos.y, pos.z, 0, 0.3, 0, 0.18, 0.7, 0.1, _c, 0.7, 2); }

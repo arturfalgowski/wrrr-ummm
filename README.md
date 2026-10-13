@@ -40,7 +40,7 @@ Pora dnia przesuwa się w trakcie wyścigu (pełna doba ≈ 5 min), pogoda może
 
 ## Broń i paczki
 
-Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (F: seria 4 s, trafiony rywal zwalnia i traci stan auta), **olej** (E: plama, auto traci kontrolę), **mina** (Q: wybuch podrzuca auta w promieniu 9 m i je uszkadza) i **naprawa** (+40% stanu auta). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
+Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (A: seria 4 s, trafiony rywal zwalnia i traci stan auta), **olej** (S: plama, auto traci kontrolę), **mina** (D: wybuch podrzuca auta w promieniu 9 m i je uszkadza) **rakieta** (F: naprowadzana na najbliższego rywala z przodu, duży wybuch) i **naprawa** (+40% stanu auta). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
 
 ## Dynamika jazdy
 
@@ -50,11 +50,11 @@ Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbi
 
 | Klawisz | Akcja |
 |---|---|
-| W / ↑, S / ↓ | gaz, hamulec / wsteczny |
-| A, D / ← → | skręt |
+| ↑ / ↓ | gaz, hamulec / wsteczny |
+| ← / → | skręt |
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (zbiornik ładuje się sam) |
-| F / E / Q | karabin / olej / mina |
+| A / S / D / F | karabin / olej / mina / rakieta |
 | R | powrót na ostatni bezpieczny punkt |
 | C | kamera: zza auta / izometryczna |
 | Enter, 1–9 | czat, szybkie reakcje |

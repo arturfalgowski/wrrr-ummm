@@ -166,7 +166,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
     if (i < 0) { H[k] = bh; continue; }
     const d = dist[k], side = Math.sign((x - track.px[i]) * track.rx[i] + (z - track.pz[i]) * track.rz[i]) || 1;
     const lat = Math.max(-HW - 1, Math.min(HW + 1, side * d));
-    const roadY = track.py[i] + track.ry[i] * lat, tk = track.tunnelK[i];
+    const roadY = track.py[i] + track.ry[i] * lat, tk = track.tunnelT[i]; // wzgórze nad tunelem narasta przed portalem, nie wewnątrz rury
     let bed = roadY - 0.8 - track.bridgeK[i] * BR_H;
     bed += tk * (track.py[i] + TUN_H - bed);
     const near0 = Math.min(i, nS - i), flat = near0 < 140 ? 38 : 0;

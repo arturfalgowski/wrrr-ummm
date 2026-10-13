@@ -18,7 +18,7 @@ const RIMS = ['star', 'mesh', 'solid', 'turbine'];
 const RIM_COLORS = ['#d9dde6', ...COLORS];
 const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
-const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'repair', 'repair'];
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'rocket', 'rocket', 'repair', 'repair'];
 const pick = (a) => a[Math.random() * a.length | 0];
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
 const MAX_CARS = 4;
@@ -407,9 +407,9 @@ io.on('connection', (socket) => {
   // zdarzenia gry (strzał, olej, mina, wybuch, trafienie) — współrzędne toru (x = s, z = d) przekazywane pozostałym
   socket.on('game:event', (e) => {
     const r = rooms.get(socket.data.roomId);
-    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom'].includes(e.t)) return;
+    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom', 'rocket'].includes(e.t)) return;
     const n = (v) => (Number.isFinite(v) ? v : 0);
-    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
+    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, k: e.k === 'rocket' ? 'rocket' : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
   });
 
   socket.on('disconnect', () => leaveRoom(socket));

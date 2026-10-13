@@ -86,7 +86,7 @@ export class Track3D {
     for (let i = 0; i < n; i++) { b.minX = Math.min(b.minX, px[i]); b.maxX = Math.max(b.maxX, px[i]); b.minZ = Math.min(b.minZ, pz[i]); b.maxZ = Math.max(b.maxZ, pz[i]); b.minY = Math.min(b.minY, py[i]); b.maxY = Math.max(b.maxY, py[i]); }
     this.bounds = b;
     // strefy nawierzchni i obiektów: kostka, piasek, most, tunel (ułamki długości okrążenia)
-    const zone = new Uint8Array(N), bridge = new Float32Array(N), tunnel = new Float32Array(N), grip = new Float32Array(N).fill(1);
+    const tunT = new Float32Array(N), zone = new Uint8Array(N), bridge = new Float32Array(N), tunnel = new Float32Array(N), grip = new Float32Array(N).fill(1);
     this.bridges = []; this.tunnels = [];
     const GRIP = { cobble: 0.9, sand: 0.8 };
     // pokrycie nawierzchni 0..1 wzdłuż toru: pełne w strefie, wygasa na TR m po obu stronach (nieregularne przejście rysuje shader)
@@ -101,13 +101,13 @@ export class Track3D {
       const i0 = Math.round(z.a * n), i1 = Math.round(z.b * n);
       if (z.type === 'cobble' || z.type === 'sand') { addCov(z.type === 'sand' ? covSand : covCob, i0, i1); for (let i = i0; i <= i1; i++) zone[i] = z.type === 'cobble' ? 1 : 2; }
       else if (z.type === 'bridge') { this.bridges.push({ i0, i1 }); for (let i = i0; i <= i1; i++) bridge[i] = 1; }
-      else if (z.type === 'tunnel') { this.tunnels.push({ i0, i1 }); for (let i = i0 - 7; i <= i1 + 7; i++) tunnel[i] = Math.min(1, (i - (i0 - 7)) / 14, ((i1 + 7) - i) / 14); }
+      else if (z.type === 'tunnel') { this.tunnels.push({ i0, i1 }); for (let i = i0 - 17; i <= i1 + 17; i++) { const a = i0 - 7, b = i1 + 7, v = i < a ? (i - (a - 10)) / 10 : i > b ? ((b + 10) - i) / 10 : 1; tunT[i] = Math.max(tunT[i], Math.max(0, Math.min(1, v))); } for (let i = i0 - 7; i <= i1 + 7; i++) tunnel[i] = Math.min(1, (i - (i0 - 7)) / 14, ((i1 + 7) - i) / 14); }
     }
     const blur = (a, w, passes) => { for (let p = 0; p < passes; p++) { const o = new Float32Array(N); for (let i = 0; i < N; i++) { let t = 0; for (let j = -w; j <= w; j++) t += a[(i + j + n) % n]; o[i] = t / (2 * w + 1); } o[n] = o[0]; a.set(o); } };
     blur(bridge, 36, 2);
     covSand[n] = covSand[0]; covCob[n] = covCob[0];
     for (let i = 0; i < N; i++) grip[i] = 1 - (1 - GRIP.sand) * covSand[i] - (1 - GRIP.cobble) * covCob[i]; // przyczepność zmienia się płynnie razem z nawierzchnią
-    Object.assign(this, { zone, bridgeK: bridge, tunnelK: tunnel, gripArr: grip, covSand, covCob });
+    Object.assign(this, { zone, tunnelT: tunT, bridgeK: bridge, tunnelK: tunnel, gripArr: grip, covSand, covCob });
   }
 
   /** czy pad p obejmuje punkt s (okrąża modulo długość okrążenia) */

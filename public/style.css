@@ -584,6 +584,7 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 .slot.has { color: #fff; }
 #slot-ammo.has { background: rgba(200,110,10,.78); box-shadow: 0 0 22px rgba(255,176,46,.55); }
 #slot-oil.has { background: rgba(100,50,200,.75); box-shadow: 0 0 22px rgba(164,107,255,.55); }
+#slot-rocket.has { background: rgba(214,80,30,.8); box-shadow: 0 0 22px rgba(255,106,61,.6); }
 #slot-mine.has { background: rgba(200,50,40,.78); box-shadow: 0 0 22px rgba(255,74,58,.55); }
 #slot-ammo.active { animation: pulse3 .25s ease-in-out infinite alternate; }
 @keyframes pulse3 { from { transform: scale(1); } to { transform: scale(1.06); } }
@@ -609,20 +610,18 @@ body.spectating .hud-items { display: none !important; }
 #startlights .lamp.amber { background: radial-gradient(circle at 35% 30%, #ffe3a0, #ff9d0a 45%, #a85a00 100%); box-shadow: inset 0 0 0 3px #08080b, 0 0 28px 6px rgba(255,160,20,.75); }
 #startlights .lamp.green { background: radial-gradient(circle at 35% 30%, #c8ffd9, #1fe36b 45%, #0a8a3a 100%); box-shadow: inset 0 0 0 3px #08080b, 0 0 32px 8px rgba(40,240,120,.8); }
 
-/* podium na mecie */
+/* podium na mecie: modele 3D na scenie, nad nimi etykiety; karta z wynikami u dołu */
 #fw-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 #scr-results .card { position: relative; z-index: 1; }
 .card.res.wide { width: min(760px, 94vw); max-width: none; }
 .res-winner { margin-top: 8px; font-size: clamp(22px, 4.4vw, 34px); font-weight: 900; letter-spacing: .02em; color: #ffe08a; text-shadow: 0 0 24px rgba(255,210,74,.55); font-variant-numeric: tabular-nums; }
-.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; margin: 18px 0 6px; min-height: 250px; }
-.pod { display: flex; flex-direction: column; align-items: center; width: clamp(96px, 26%, 200px); opacity: 0; transform: translateY(60px); animation: podIn .7s cubic-bezier(.2,.9,.25,1.1) var(--delay) forwards; }
-.pod .pname { font-weight: 800; font-size: 15px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pod.me .pname { color: #ffd9a0; }
-.pod .ptime { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
-.pod .pcar { width: 86%; margin: 4px 0 -2px; }
-.pod .pcar-svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 4px 6px rgba(0,0,0,.45)); }
-.pod .pblock { width: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; font-style: italic; color: rgba(20,16,32,.85); border-radius: 10px 10px 0 0; background: linear-gradient(180deg, color-mix(in srgb, var(--medal) 100%, #fff 25%), var(--medal) 55%, color-mix(in srgb, var(--medal) 100%, #000 35%)); box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 10px 30px rgba(0,0,0,.35); }
-.pod.p1 .pblock { height: 120px; } .pod.p2 .pblock { height: 88px; } .pod.p3 .pblock { height: 64px; }
-.pod.p1 .pname { font-size: 18px; color: #ffe08a; }
-@keyframes podIn { to { opacity: 1; transform: none; } }
-@media (max-width: 560px) { .podium { gap: 6px; min-height: 210px; } .pod .pblock { font-size: 28px; } .pod .pname { font-size: 13px; } }
+
+#scr-results { align-items: flex-end; padding-bottom: 18px; background: none; }
+#scr-results .card.res { max-height: 34vh; overflow: auto; padding-top: 14px; }
+#scr-results .res-title { font-size: clamp(26px, 4vw, 38px); }
+#pod-labels { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+#pod-labels .pl { position: absolute; transform: translate(-50%, -100%); text-align: center; white-space: nowrap; text-shadow: 0 2px 10px rgba(0,0,0,.75); }
+#pod-labels .pl b { display: block; font-size: clamp(15px, 2.2vw, 22px); font-weight: 900; color: #fff; }
+#pod-labels .pl span { font-size: clamp(13px, 1.8vw, 18px); color: #ffe08a; font-variant-numeric: tabular-nums; font-weight: 700; }
+#pod-labels .pl.p1 b { color: #ffe08a; font-size: clamp(18px, 2.8vw, 28px); }
+#pod-labels .pl.me b::after { content: ' (Ty)'; color: #ffd9a0; font-weight: 700; }

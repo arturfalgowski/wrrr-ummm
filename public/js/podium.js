@@ -2,29 +2,6 @@
 const MEDAL = ['#ffd24a', '#cfd6e2', '#d98b52'];
 const fmtT = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`; };
 
-/** boczny rysunek bolidu F1 w kolorze kierowcy */
-export function carSvg(color = '#888') {
-  return `<svg viewBox="0 0 120 44" class="pcar-svg" aria-hidden="true"><rect x="86" y="8" width="26" height="4" rx="1.5" fill="#1a1a22"/><rect x="104" y="6" width="3" height="18" fill="#1a1a22"/>
-  <path d="M10 28 L22 22 L60 16 L84 19 L106 25 L106 31 L10 31 Z" fill="${color}"/><path d="M52 16 L66 8 L72 8 L76 17 Z" fill="#14141c"/><circle cx="64" cy="11" r="4.2" fill="#f4f4f8"/>
-  <rect x="2" y="24" width="14" height="3" rx="1" fill="#1a1a22"/><circle cx="30" cy="31" r="9" fill="#15151a"/><circle cx="30" cy="31" r="4" fill="#cfd3dc"/><circle cx="90" cy="31" r="9" fill="#15151a"/><circle cx="90" cy="31" r="4" fill="#cfd3dc"/></svg>`;
-}
-
-/** rows: [{ nick, time|null, color, me, bot }] w kolejności miejsc; wypełnia #podium i zwraca zwycięzcę */
-export function renderPodium(root, rows) {
-  const top = rows.slice(0, 3), order = [1, 0, 2]; // układ: 2. | 1. | 3.
-  root.textContent = '';
-  for (const i of order) {
-    const r = top[i]; if (!r) continue;
-    const d = document.createElement('div'); d.className = `pod p${i + 1}` + (r.me ? ' me' : ''); d.style.setProperty('--delay', `${(2 - i) * 0.28}s`); d.style.setProperty('--medal', MEDAL[i]);
-    const nick = document.createElement('div'); nick.className = 'pname'; nick.textContent = r.nick + (r.me ? ' (Ty)' : r.bot ? ' (bot)' : '');
-    const tm = document.createElement('div'); tm.className = 'ptime'; tm.textContent = r.time != null ? fmtT(r.time) : 'w trasie…';
-    const car = document.createElement('div'); car.className = 'pcar'; car.innerHTML = carSvg(r.color || '#888');
-    const blk = document.createElement('div'); blk.className = 'pblock'; blk.textContent = String(i + 1);
-    d.append(nick, tm, car, blk); root.append(d);
-  }
-  return rows[0];
-}
-
 // ---------- fajerwerki i konfetti ----------
 let raf = 0, fw = null;
 export function stopFireworks() { cancelAnimationFrame(raf); raf = 0; fw = null; }
