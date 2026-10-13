@@ -405,6 +405,11 @@ function renderCarDetail() {
   const d = S.carPick === 'random' ? { name: 'Losowy', tag: 'Losowe auto przy każdym starcie', stats: null } : CAR_DEFS[S.carPick];
   box.textContent = '';
   const head = document.createElement('div'); head.className = 'cd-head'; const nm = document.createElement('b'); nm.textContent = d.name; const tg = document.createElement('small'); tg.textContent = d.tag; head.append(nm, tg); box.append(head);
+  const spec = document.createElement('div'); spec.className = 'cd-spec';
+  const sp = (l, v) => { const e = document.createElement('div'); e.innerHTML = '<span></span><b></b>'; e.firstChild.textContent = l; e.lastChild.textContent = v; spec.append(e); };
+  if (d.maxSpeed) { sp('Prędkość maks.', `${Math.round(d.maxSpeed * 3.8)} km/h`); sp('Z nitro', `${Math.round(d.maxSpeed * 1.32 * 3.8)} km/h`); sp('Wytrzymałość', '100 pkt'); sp('Hamowanie', `${d.brake}`); }
+  else { sp('Prędkość maks.', '—'); sp('Wytrzymałość', '100 pkt'); }
+  box.append(spec);
   const bars = document.createElement('div'); bars.className = 'cd-bars';
   STAT_DEFS.forEach(([label, color], i) => {
     const row = document.createElement('div'); row.className = 'cd-bar';
@@ -2214,6 +2219,7 @@ function updateCamera(dt) {
   cam.pos.lerp(pos, k); cam.look.lerp(look, k);
   cam.fov += (fov - cam.fov) * k; cam.shift += (shift - cam.shift) * k; cam.tilt += (tilt - cam.tilt) * k;
   camera.position.copy(cam.pos); camera.lookAt(cam.look);
+  if (world.occ) { world.occ.cam.value.copy(camera.position); const sm = me.st; if (sm && racingView) world.occ.car.value.set(sm.x, (sm.y || 0) + 1, sm.z); else world.occ.car.value.copy(cam.look); }
   camera.fov = cam.fov;
   const dist = cam.pos.distanceTo(cam.look);
   camera.near = Math.max(0.5, dist * 0.1); camera.far = dist * 4 + 1800;
@@ -2252,6 +2258,7 @@ function bindUi() {
   $('profile').addEventListener('click', (e) => { if (e.target === $('profile')) $('profile').classList.add('hidden'); });
   bindPause();
   $('menu-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { showTab(b.dataset.tab); sfx.tick(0.6); } });
+  $('btn-custom').addEventListener('click', () => { const b = $('custom-box'); const open = b.classList.toggle('hidden') === false; $('btn-custom').classList.toggle('open', open); sfx.tick(0.6); });
   $('btn-quick').addEventListener('click', () => { initAudio(); quickPlay(); });
   $('btn-rooms').addEventListener('click', openRooms);
   $('rooms-close').addEventListener('click', closeRooms); $('rooms-refresh').addEventListener('click', refreshRooms);

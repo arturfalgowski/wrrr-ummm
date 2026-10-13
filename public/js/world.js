@@ -593,8 +593,27 @@ export function buildWorld(scene, renderer, track) {
     }, { aniso: 8 });
     const facade = tile(false), facadeE = tile(true);
     for (const t of [facade, facadeE]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    // budynki między kamerą a autem są „rozpuszczane” rastrem (żeby nie zasłaniały jadącego auta)
+    const occ = { cam: { value: new THREE.Vector3(0, 1e4, 0) }, car: { value: new THREE.Vector3() }, rad: { value: 17 } };
+    world.occ = occ;
+    const occlude = (mat) => {
+      const prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh) => {
+        prev?.(sh);
+        sh.uniforms.uOccCam = occ.cam; sh.uniforms.uOccCar = occ.car; sh.uniforms.uOccRad = occ.rad;
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOccWP;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef USE_INSTANCING\nvOccWP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#else\nvOccWP = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vOccWP;\nuniform vec3 uOccCam;\nuniform vec3 uOccCar;\nuniform float uOccRad;')
+          .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+          { vec3 ab = uOccCar - uOccCam; float tt = clamp(dot(vOccWP - uOccCam, ab) / dot(ab, ab), 0.0, 1.0);
+            float dd = length(vOccWP - (uOccCam + ab * tt));
+            float fade = smoothstep(uOccRad * 0.55, uOccRad, dd);
+            if (tt < 0.97 && fade < 1.0) { float th = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (th > fade) discard; } }`);
+      };
+      mat.customProgramCacheKey = () => 'occlude';
+    };
     const bmat = new THREE.MeshStandardMaterial({ map: facade, emissiveMap: facadeE, emissive: 0xffffff, emissiveIntensity: T.neon ? 1.1 : 0.12, roughness: 0.55, metalness: 0.2 });
-    world.windowMat = bmat;
+    world.windowMat = bmat; occlude(bmat);
     const variants = [];
     for (let v = 0; v < 10; v++) {
       const bw = 9 + fr() * 6, bd = 9 + fr() * 6, bh = F.hmin + fr() * (F.hmax - F.hmin);
@@ -647,7 +666,7 @@ export function buildWorld(scene, renderer, track) {
       zeb.count = zc; zeb.receiveShadow = true; root.add(zeb); }
     // neonowe słupy światła w oddali (cyberpunk)
     if (T.neon) {
-      const pillars = scatter(46, BARRIER + 20, 90, 24), pm2 = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 1, 1.1), new THREE.MeshBasicMaterial({ color: 0xffffff }), pillars.length), pc2 = new THREE.Color();
+      const pillars = scatter(46, BARRIER + 20, 90, 24), pm2 = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 1, 1.1), (() => { const mm = new THREE.MeshBasicMaterial({ color: 0xffffff }); occlude(mm); return mm; })(), pillars.length), pc2 = new THREE.Color();
       pillars.forEach(([x, z], i) => { const h = 70 + rnd() * 90; pm2.setMatrixAt(i, m4.compose(v3.set(x, h / 2, z), q4.identity(), s3.set(1, h, 1))); pm2.setColorAt(i, pc2.set(['#ff2bd6', '#25f4ff', '#7c5cff'][(rnd() * 3) | 0])); });
       s3.set(1, 1, 1); root.add(pm2); (world.skyline ||= []).push(pm2);
     }

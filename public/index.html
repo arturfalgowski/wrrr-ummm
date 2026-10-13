@@ -125,8 +125,11 @@
     <div class="m2-garage">
       <div class="m2-label">Garaż</div>
       <div class="cars" id="car-list"></div>
-      <div class="car-detail" id="car-detail"></div>
-      <div class="swatches" id="menu-colors"></div>
+      <div class="m2-colorrow">
+        <div class="swatches" id="menu-colors"></div>
+        <button class="link m2-customlink" id="btn-custom">Personalizacja <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="m2-custom hidden" id="custom-box"><div class="settings" id="menu-custom"></div></div>
     </div>
     <div class="m2-dock">
       <button class="btn primary big" id="btn-solo">Trening solo</button>
@@ -148,10 +151,10 @@
     </div>
     <div class="card m2-tabs">
       <nav class="tabs" id="menu-tabs">
-        <button data-tab="car" class="sel">Personalizacja</button>
+        <button data-tab="car" class="sel">Auto</button>
         <button data-tab="track" id="tab-btn-track">Tor</button>
       </nav>
-      <div class="tabpane" id="pane-car"><div class="settings" id="menu-custom"></div></div>
+      <div class="tabpane" id="pane-car"><div class="car-detail" id="car-detail"></div></div>
       <div class="tabpane hidden" id="pane-track"><div class="tracks" id="track-list"></div></div>
     </div>
   </aside>
