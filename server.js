@@ -18,7 +18,7 @@ const RIMS = ['star', 'mesh', 'solid', 'turbine'];
 const RIM_COLORS = ['#d9dde6', ...COLORS];
 const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
-const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb'];
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'repair', 'repair'];
 const pick = (a) => a[Math.random() * a.length | 0];
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
 const MAX_CARS = 4;
@@ -78,6 +78,7 @@ const genId = () => {
 };
 const cleanNick = (n) => String(n ?? '').replace(/[<>&"'`]/g, '').trim().slice(0, 14);
 const cleanSettings = (s) => ({
+  laps: Number.isInteger(s?.laps) && s.laps >= 1 && s.laps <= 10 ? s.laps : 3,
   bots: Number.isInteger(s?.bots) && s.bots >= 0 && s.bots <= 3 ? s.bots : 0,
   public: s?.public === undefined ? true : !!s.public,
   weather: ['auto', 'sun', 'rain', 'storm'].includes(s?.weather) ? s.weather : 'auto',

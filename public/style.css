@@ -588,3 +588,7 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 #slot-ammo.active { animation: pulse3 .25s ease-in-out infinite alternate; }
 @keyframes pulse3 { from { transform: scale(1); } to { transform: scale(1.06); } }
 body.spectating .hud-items { display: none !important; }
+
+.hpbar { margin-top: 8px; width: 110px; height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
+.hpbar i { display: block; height: 100%; width: 100%; background: #3ee08a; transition: width .2s, background .2s; }
+.hpbar.low i { background: #ff4a3a; }

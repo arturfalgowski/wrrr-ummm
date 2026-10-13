@@ -6,6 +6,7 @@ export const ITEM_TYPES = {
   ammo: { color: '#ffb02e', name: 'Karabin' },
   oil: { color: '#a46bff', name: 'Olej' },
   bomb: { color: '#ff4a3a', name: 'Mina' },
+  repair: { color: '#3ee08a', name: 'Naprawa' },
 };
 const crateGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
 const ringGeo = new THREE.TorusGeometry(1.35, 0.07, 6, 28);
@@ -24,6 +25,8 @@ export class Items3D {
     this._thud = null;
   }
   setTrack(track) { this.clear(); this.track = track; }
+  /** różnica a−b po torze zamkniętym (najkrótsza, ze znakiem) */
+  ds(a, b) { const L = this.track.length; return ((a - b + L / 2) % L + L) % L - L / 2; }
   /** macierz bazowa (x = do przodu toru, y = normalna, z = prawo) w punkcie (s, d) */
   _frame(s, d, h = 0) {
     const f = this.track.at(s, _p);
@@ -49,7 +52,7 @@ export class Items3D {
     c.dying = 1; this.root.remove(c.g); this.crates.delete(id);
   }
   /** paczka w zasięgu (ds po torze, dd w poprzek) */
-  crateNear(s, d, rs = 3.4, rd = 3.4) { for (const c of this.crates.values()) if (c.landed && Math.abs(c.s - s) < rs && Math.abs(c.d - d) < rd) return c; return null; }
+  crateNear(s, d, rs = 3.4, rd = 3.4) { for (const c of this.crates.values()) if (c.landed && Math.abs(this.ds(c.s, s)) < rs && Math.abs(c.d - d) < rd) return c; return null; }
   // ---- miny ----
   dropMine(id, s, d, owner) {
     const m = new THREE.Mesh(mineGeo, new THREE.MeshStandardMaterial({ color: 0x20202a, emissive: 0xff2a1a, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.6 })); m.castShadow = true;
@@ -57,13 +60,13 @@ export class Items3D {
     const mine = { id, s, d, owner, mesh: m, age: 0, dead: false }; this.mines.push(mine); return mine;
   }
   removeMine(id) { const i = this.mines.findIndex((m) => m.id === id); if (i >= 0) { this.root.remove(this.mines[i].mesh); this.mines.splice(i, 1); } }
-  mineNear(s, d, rs = 2.8, rd = 2.8) { for (const m of this.mines) if (m.age > 0.8 && Math.abs(m.s - s) < rs && Math.abs(m.d - d) < rd) return m; return null; }
+  mineNear(s, d, rs = 2.8, rd = 2.8) { for (const m of this.mines) if (m.age > 0.8 && Math.abs(this.ds(m.s, s)) < rs && Math.abs(m.d - d) < rd) return m; return null; }
   // ---- olej ----
   dropOil(s, d, owner) {
     const m = new THREE.Mesh(oilGeo, oilMat); this._frame(s, d, 0.07); m.matrixAutoUpdate = false; m.matrix.copy(_m); this.root.add(m);
     this.oils.push({ s, d, owner, mesh: m, age: 0 });
   }
-  oilAt(s, d) { for (const o of this.oils) if (Math.abs(o.s - s) < 3.3 && Math.abs(o.d - d) < 3.3 && Math.hypot(o.s - s, o.d - d) < 3.4) return true; return false; }
+  oilAt(s, d) { for (const o of this.oils) if (Math.abs(this.ds(o.s, s)) < 3.3 && Math.abs(o.d - d) < 3.3 && Math.hypot(this.ds(o.s, s), o.d - d) < 3.4) return true; return false; }
   // ---- pociski ----
   shoot(s, d, vs, owner) {
     const m = new THREE.Mesh(shotGeo, shotMat); this.root.add(m);
@@ -82,7 +85,7 @@ export class Items3D {
     for (let i = this.oils.length - 1; i >= 0; i--) { const o = this.oils[i]; o.age += dt; if (o.age > 18) { this.root.remove(o.mesh); this.oils.splice(i, 1); } }
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const sh = this.shots[i]; sh.age += dt; sh.s += sh.vs * dt;
-      if (sh.age > sh.life || sh.s > this.track.length || sh.s < 0) { this.root.remove(sh.mesh); this.shots.splice(i, 1); continue; }
+      if (sh.age > sh.life) { this.root.remove(sh.mesh); this.shots.splice(i, 1); continue; }
       const f = this.track.at(sh.s, _p);
       sh.mesh.position.set(f.px + f.rx * sh.d + f.ux * 1.0, f.py + f.ry * sh.d + f.uy * 1.0, f.pz + f.rz * sh.d + f.uz * 1.0);
       _t.set(f.tx, f.ty, f.tz); _u.set(f.ux, f.uy, f.uz); _r.set(f.rx, f.ry, f.rz); _m.makeBasis(_t, _u, _r); sh.mesh.quaternion.setFromRotationMatrix(_m);

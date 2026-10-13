@@ -126,9 +126,6 @@ export class CarState {
     let vt = vf * c - vl * sn, vr = vf * sn + vl * c;
     const ds = vt * h / Math.max(0.35, 1 - f.kg * this.d);
     this.s += ds; this.d += vr * h; this.phi -= f.kg * ds;
-    const L = track.length - 1;
-    if (this.s > L) { this.s = L; this.vf *= 0.5; }
-    if (this.s < 0) { this.s = 0; this.vf *= 0.5; }
 
     // ściany po bokach (tam, gdzie są) albo zejście z jezdni
     const f2 = track.at(this.s, this._f);
@@ -170,6 +167,13 @@ export class CarState {
     // lądowanie: najbliższy punkt toru
     const nr = track.nearest(P.x, P.y, P.z, this.s, 25, 160);
     const f = track.at(nr.s, this._f);
+    // niewidzialna ściana nad bandą: auto nie wylatuje poza tor
+    if (Math.abs(nr.d) > HW - 0.9 && nr.h < 8 && nr.h > -3) {
+      const side = Math.sign(nr.d), over = nr.d - side * (HW - 0.9);
+      P.x -= f.rx * over; P.y -= f.ry * over; P.z -= f.rz * over; nr.d = side * (HW - 0.9);
+      const vo = (V.x * f.rx + V.y * f.ry + V.z * f.rz) * side;
+      if (vo > 0) { V.x -= f.rx * vo * side * 1.3; V.y -= f.ry * vo * side * 1.3; V.z -= f.rz * vo * side * 1.3; this.hit = Math.max(this.hit, vo * 0.6); }
+    }
     const vn = V.x * f.ux + V.y * f.uy + V.z * f.uz;
     if (this.airT > 0.12 && nr.surf && Math.abs(nr.d) < HW + 0.6 && nr.h <= 0.2 && nr.h > -3.5 && vn < -0.5) {
       // dotyk: wyznacz kurs względem toru z orientacji auta
@@ -223,7 +227,7 @@ export class CarState {
   }
 
   /** wybuch miny: auto podskakuje i leci w bok (może wypaść z toru) */
-  knock(track, hop = 9, lateral = 7) {
+  knock(track, hop = 6, lateral = 3.5) {
     this.slowT = 1.3;
     if (this.air) { this._V.y += hop * 0.5; return; }
     const f = track.at(this.s, this._f); this._detach(track, f);
@@ -233,8 +237,7 @@ export class CarState {
   }
   /** po upadku: wróć na checkpoint (s) z zerową prędkością */
   respawnAt(track, s, speed = 0) {
-    const f = track.at(s, {}); if (!f.surf) { const c = track.safeS(s, 600); if (c != null) s = c; }
-    this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
+        this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
     this.progress = s; this.idx = s; this._pose(track);
   }
 }
@@ -274,7 +277,7 @@ export function carVsCar(me, opp, track) {
 export function botInput(st, track, bot, dt) {
   const def = st.def, s = st.s, f = {};
   let latT = bot.lat ?? 0;
-  for (const p of track.pads || []) { const ahead = p.s0 - s; if (ahead > -p.len && ahead < 70) latT = p.lat; }
+  for (const p of track.pads || []) { if (track.inPad(p, s) || track.padAhead(p, s) < 70) latT = p.lat; }
   const la = 7 + st.speed * 0.3;
   const ang = Math.atan2(latT - st.d, la);
   const steerCmd = clamp(wrap(clamp(ang, -0.55, 0.55) - st.phi) * 2.8, -1, 1);

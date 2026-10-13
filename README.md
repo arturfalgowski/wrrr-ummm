@@ -1,6 +1,6 @@
 # Wrrr Ummm
 
-Wyścigi w stylu TrackMania dla 1–4 graczy w przeglądarce: tory 3D z pętlami, skokami, przechyłami, padami nitro i bronią na torze (karabin, olej, miny), jeden bolid F1 (zmieniasz kolor i personalizację).
+Wyścigi okrążeniowe dla 1–4 graczy w przeglądarce: zamknięte tory 3D z bandami na całej długości, przechyłami, padami nitro, bronią na torze (karabin, olej, miny), uszkodzeniami i jednym bolidem F1 (zmieniasz kolor i personalizację).
 Three.js (WebGL) + Node.js + Socket.IO + SQLite. Modele, tekstury, efekty i dźwięki są generowane w kodzie.
 
 ## Uruchomienie
@@ -17,19 +17,20 @@ Wymaga Node.js ≥ 22.13 (ranking używa wbudowanego `node:sqlite`). Zmienna `PO
 1. Wpisz nick, wybierz kolor bolidu i personalizację (numer, wzór lakieru, felgi, tablica).
 2. **Trening solo** (z botami 0–3 i duchem rekordu) albo **Stwórz pokój** → wyślij link znajomym (link od razu wprowadza do pokoju).
 3. W lobby wszyscy widzą tryb, tor, ustawienia i czat; każdy wybiera kolor i personalizację. Host może w każdej chwili zmienić tor i ustawienia i klika **Rozpocznij wyścig**.
-4. Trasa jest od A do B: wygrywa najszybszy czas do mety. Spadniesz z toru — wracasz na ostatni checkpoint (stoją na prostych, bezpiecznych odcinkach; klawisz **R** robi to ręcznie).
+4. Tor to zamknięta pętla: liczba okrążeń (1–10, domyślnie 3) to ustawienie wyścigu. Wygrywa, kto pierwszy przejedzie ostatnie okrążenie. Bandy otaczają cały tor; klawisz **R** wraca na ostatni bezpieczny punkt.
+5. **Uszkodzenia:** uderzenia w bandę, w auta, trafienia i miny zmniejszają „Stan auta”. Poniżej 60% auto dymi, poniżej 30% płonie i jest wolniejsze; przy 0% wybucha i po chwili wraca na tor. Paczka **Naprawa** dodaje 40%.
 
 ## Tory (każdy w innym kraju)
 
-| Tor (ok. 4,7–5,7 km) | Kraj | Atrakcje |
+| Tor (okrążenie 2,5–3,1 km) | Kraj | Charakter |
 |---|---|---|
-| Stadion Mistrzów | Polska | pętla, dwa skoki, pochylone nawroty, trybuny |
-| Neo Tokio | Japonia | noc, neony, dwie pętle, skok |
-| Przełęcz Alpejska | Szwajcaria | zjazd z gór, skok nad przepaścią, pętla |
-| Pustynia Faraonów | Egipt | trzy duże skoki, pętla, piramidy |
-| Wyspy Hawajskie | Hawaje | nad oceanem, dwie pętle, dwa skoki, zachód słońca |
+| Stadion Mistrzów | Polska | klasyczny owal z szykaną, trybuny |
+| Neo Tokio | Japonia | noc, neony, techniczne zakręty |
+| Przełęcz Alpejska | Szwajcaria | góry, wzniesienia, serpentyny |
+| Pustynia Faraonów | Egipt | szerokie łuki, długie proste, piramidy |
+| Wyspy Hawajskie | Hawaje | nad oceanem, zachód słońca |
 
-Tory są budowane w `public/js/tracks3d.js` z elementów (proste, łuki z przechyłem, rampy, pętle, skoki) — `track3d.js` składa z nich trasę 3D.
+Tory są zamkniętymi krzywymi (`public/js/tracks3d.js`: punkty, skala, delikatne wzniesienia); `track3d.js` składa z nich pętlę 3D z bandami i przechyłami.
 
 ## Dynamiczne otoczenie
 
@@ -37,7 +38,7 @@ Pora dnia przesuwa się w trakcie wyścigu (pełna doba ≈ 5 min), pogoda może
 
 ## Broń i paczki
 
-Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (F: seria 4 s, trafiony rywal zwalnia), **olej** (E: plama, auto traci kontrolę) i **mina** (Q: wybuch podrzuca auta w promieniu 9 m i może zrzucić je z toru). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
+Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (F: seria 4 s, trafiony rywal zwalnia i traci stan auta), **olej** (E: plama, auto traci kontrolę), **mina** (Q: wybuch podrzuca auta w promieniu 9 m i je uszkadza) i **naprawa** (+40% stanu auta). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
 
 ## Dynamika jazdy
 
@@ -52,7 +53,7 @@ Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbi
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (zbiornik ładuje się sam) |
 | F / E / Q | karabin / olej / mina |
-| R | powrót na ostatni checkpoint |
+| R | powrót na ostatni bezpieczny punkt |
 | C | kamera: zza auta / izometryczna |
 | Enter, 1–9 | czat, szybkie reakcje |
 | M | wyciszenie |

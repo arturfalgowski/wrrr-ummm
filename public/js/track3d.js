@@ -1,135 +1,95 @@
-// Tory w stylu TrackMania: trasa 3D budowana „żółwiem” z elementów (proste, łuki, rampy, pętle, przerwy, przechyły).
-// Zwraca próbki co 1 m z pełną ramą (T, U, R) — fizyka jazdy po powierzchni liczy się w współrzędnych toru (s, d).
+// Tor jako zamknięta pętla 3D (okrążenia): trasa z krzywej, delikatne wzniesienia, przechylone zakręty, bandy po obu stronach.
+// Fizyka jazdy liczy się w współrzędnych toru (s — postęp wzdłuż trasy, d — odległość od osi, dodatnia po prawej).
 import * as THREE from 'three';
 
 export const HW = 8;        // połowa szerokości jezdni
 export const DS = 1;        // odstęp próbek [m]
-const DEG = Math.PI / 180;
-
-// ---- elementy toru (pomocnicze konstruktory) ----
-export const S = (len, o = {}) => ({ t: 's', len, ...o });                       // prosta
-export const C = (deg, r, o = {}) => ({ t: 'c', a: deg, r, ...o });              // łuk w poziomie, + = w prawo
-export const P = (deg, r, o = {}) => ({ t: 'p', a: deg, r, ...o });              // łuk w pionie, + = pod górę
-export const LOOP = (r, yawDeg = 32, o = {}) => ({ t: 'loop', r, yaw: yawDeg, ...o }); // pętla 360° (przesunięcie boczne dzięki odchyleniu)
-export const GAP = (len, o = {}) => ({ t: 'gap', len, ...o });                  // przerwa w jezdni (skok)
-/** skok: rampa w górę, łuk bez jezdni (balistyczny), lądowanie z wyrównaniem; r ≈ zasięg lotu */
-export const JUMP = (up = 20, r = 140, o = {}) => [P(up, 35, o), S(8, { ...o, walls: false }), P(-2 * up, r, { ...o, gap: true, walls: false }), P(up, 35, { ...o, walls: false })];
-/** podjazd i zjazd: wznosi się o deg stopni na łuku r, prosta flat, wraca */
-export const HILL = (deg, r, flat = 20, o = {}) => [P(deg, r, o), S(flat, o), P(-deg, r, o)];
-
-const rotv = (v, ax, a) => { // obrót wektora v wokół osi ax (jednostkowej) o kąt a
-  const c = Math.cos(a), s = Math.sin(a), d = ax.x * v.x + ax.y * v.y + ax.z * v.z;
-  const cx = ax.y * v.z - ax.z * v.y, cy = ax.z * v.x - ax.x * v.z, cz = ax.x * v.y - ax.y * v.x;
-  v.x = v.x * c + cx * s + ax.x * d * (1 - c); v.y = v.y * c + cy * s + ax.y * d * (1 - c); v.z = v.z * c + cz * s + ax.z * d * (1 - c);
-};
-const norm = (v) => { const l = Math.hypot(v.x, v.y, v.z) || 1; v.x /= l; v.y /= l; v.z /= l; };
-const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
-const sstep = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const wrapAng = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const smoothArr = (a, w) => { const n = a.length, o = new Float32Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let j = -w; j <= w; j++) s += a[(i + j + n) % n]; o[i] = s / (2 * w + 1); } return o; };
 
 export class Track3D {
   constructor(def) {
-    this.def = def; this.id = def.id;
-    const ops = def.ops.flat(Infinity);
-    const P0 = { x: 0, y: def.y0 ?? 0, z: 0 };
-    const T = { x: 1, y: 0, z: 0 }, U = { x: 0, y: 1, z: 0 };
-    const px = [], py = [], pz = [], tx = [], ty = [], tz = [], ux = [], uy = [], uz = [], rx = [], ry = [], rz = [];
-    const wallA = [], surfA = [], bankA = [];
-    let bank = 0;
-    const pads = [];
-    const push = (ro, wall, surf) => { // zapisz próbkę z uwzględnieniem przechyłu (rolla) wokół T
-      const Rb = cross(T, U); // prawa strona (bez przechyłu)
-      const c = Math.cos(ro), s = Math.sin(ro);
-      const Ub = { x: U.x * c + Rb.x * s, y: U.y * c + Rb.y * s, z: U.z * c + Rb.z * s };
-      const Rr = cross(T, Ub);
-      px.push(P0.x); py.push(P0.y); pz.push(P0.z); tx.push(T.x); ty.push(T.y); tz.push(T.z);
-      ux.push(Ub.x); uy.push(Ub.y); uz.push(Ub.z); rx.push(Rr.x); ry.push(Rr.y); rz.push(Rr.z);
-      wallA.push(wall ? 1 : 0); surfA.push(surf ? 1 : 0); bankA.push(ro);
-    };
-    const WUP = { x: 0, y: 1, z: 0 };
-    const advance = (yawRate, pitchRate, worldYaw = false) => { // jeden krok DS: obrót ramy, potem przesunięcie
-      if (yawRate && worldYaw) { rotv(T, WUP, -yawRate * DS); rotv(U, WUP, -yawRate * DS); } // pętla: skręt wokół pionu świata
-      else if (yawRate) rotv(T, U, -yawRate * DS);          // + = w prawo (T obraca się w stronę R)
-      if (pitchRate) { const R = cross(T, U); norm(R); rotv(T, R, pitchRate * DS); rotv(U, R, pitchRate * DS); } // + = nosem w górę
-      norm(T); const R2 = cross(T, U); norm(R2); const U2 = cross(R2, T); norm(U2); U.x = U2.x; U.y = U2.y; U.z = U2.z;
-      P0.x += T.x * DS; P0.y += T.y * DS; P0.z += T.z * DS;
-    };
-    // ruch „do przodu”: yawRate > 0 => w prawo (obrót T w stronę R)
-    for (const op of ops) {
-      const walls = op.walls ?? true, surf = op.t !== 'gap' && !op.gap;
-      let len = op.len ?? 0, yaw = 0, pit = 0;
-      if (op.t === 'c') { len = Math.abs(op.a) * DEG * op.r; yaw = Math.sign(op.a) / op.r; }
-      else if (op.t === 'p') { len = Math.abs(op.a) * DEG * op.r; pit = Math.sign(op.a) / op.r; }
-      else if (op.t === 'loop') { len = 2 * Math.PI * op.r; pit = 1 / op.r; }
-      const n = Math.max(1, Math.round(len / DS));
-      const bankTo = op.bank ?? null, bank0 = bank;
-      const Y = (op.yaw ?? 0) * DEG;
-      if (op.pad) pads.push({ s0: px.length + (op.pad.at ?? 8), len: op.pad.len ?? 16, lane: op.pad.lane ?? 1 });
-      for (let i = 0; i < n; i++) {
-        if (bankTo !== null) bank = bank0 + (bankTo - bank0) * sstep((i + 1) / n);
-        let yr = yaw;
-        if (op.t === 'loop') { // odchylenie kursu w pierwszej i ostatniej ćwiartce → boczne przesunięcie wyjścia pętli
-          const dev = (u) => (u < 0.25 ? Math.sin(Math.PI * (u / 0.25)) : u > 0.75 ? Math.sin(Math.PI * ((u - 0.75) / 0.25)) : 0);
-          yr = Y * (dev((i + 1) / n) - dev(i / n)) / DS;
-        }
-        push(bank * DEG, walls && op.t !== 'loop', surf);
-        advance(yr, pit, op.t === 'loop');
-      }
-      if (op.t === 'loop') { // po pętli wyrównaj ramę do poziomu (usuwa drobny dryf kątowy)
-        T.y = 0; norm(T); U.x = 0; U.y = 1; U.z = 0; P0.y = Math.round(P0.y * 1000) / 1000;
-      }
+    this.def = def; this.id = def.id; this.closed = true;
+    const SC = def.scale ?? 1;
+    const curve = new THREE.CatmullRomCurve3(def.points.map(([x, z]) => new THREE.Vector3(x * SC, 0, z * SC)), true, 'centripetal');
+    curve.arcLengthDivisions = 6000;
+    const L0 = curve.getLength(), n = Math.round(L0 / DS);
+    const raw = curve.getSpacedPoints(n).slice(0, n);
+    // krzywizna w planie → wybór miejsca startu na najdłuższej prostej
+    const psi = raw.map((p, i) => { const a = raw[(i + n - 1) % n], b = raw[(i + 1) % n]; return Math.atan2(b.z - a.z, b.x - a.x); });
+    const k0 = new Float32Array(n); for (let i = 0; i < n; i++) k0[i] = wrapAng(psi[(i + 3) % n] - psi[(i - 3 + n) % n]) / (6 * DS);
+    let start = 0, best = -1;
+    for (let i = 0; i < n; i += 4) { let run = 0; for (let k = -40; k <= 160; k += 8) if (Math.abs(k0[(i + k + n) % n]) < 0.004) run++; if (run > best) { best = run; start = i; } }
+    const P = (i) => raw[(i + start) % n];
+    // wzniesienia: okresowe, więc tor zamyka się płynnie
+    const hills = def.hills ?? [[0, 1, 0]];
+    const yAt = (i) => { let y = def.y0 ?? 0; for (const [A, k, ph] of hills) y += A * Math.sin((2 * Math.PI * k * i) / n + ph); return y; };
+    const N = n + 1;
+    const px = new Float32Array(N), py = new Float32Array(N), pz = new Float32Array(N);
+    for (let i = 0; i < N; i++) { const p = P(i % n); px[i] = p.x; py[i] = yAt(i % n); pz[i] = p.z; }
+    const tx = new Float32Array(N), ty = new Float32Array(N), tz = new Float32Array(N);
+    for (let i = 0; i < N; i++) { const a = (i + n - 1) % n, b = (i + 1) % n; let dx = px[b] - px[a], dy = py[b] - py[a], dz = pz[b] - pz[a]; if (i === 0 || i === n) { dx = px[1] - px[n - 1]; dy = py[1] - py[n - 1]; dz = pz[1] - pz[n - 1]; } const l = Math.hypot(dx, dy, dz) || 1; tx[i] = dx / l; ty[i] = dy / l; tz[i] = dz / l; }
+    // krzywizna pozioma (+ w prawo) i przechył
+    const psi2 = new Float32Array(N); for (let i = 0; i < N; i++) psi2[i] = Math.atan2(tz[i], tx[i]);
+    const kp = new Float32Array(n); for (let i = 0; i < n; i++) kp[i] = wrapAng(psi2[(i + 6) % n] - psi2[(i - 6 + n) % n]) / (12 * DS);
+    const kps = smoothArr(kp, 10);
+    const maxBank = (def.maxBank ?? 15) * Math.PI / 180, bankGain = def.bankGain ?? 9;
+    const bank = new Float32Array(N); for (let i = 0; i < N; i++) bank[i] = Math.max(-maxBank, Math.min(maxBank, kps[i % n] * bankGain));
+    const ux = new Float32Array(N), uy = new Float32Array(N), uz = new Float32Array(N), rx = new Float32Array(N), ry = new Float32Array(N), rz = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      // prawa strona (bez przechyłu) = T × (0,1,0), normalna bazowa = R × T
+      let bx = -tz[i], by = 0, bz = tx[i]; const bl = Math.hypot(bx, bz) || 1; bx /= bl; bz /= bl;
+      let nx = by * tz[i] - bz * ty[i], ny = bz * tx[i] - bx * tz[i], nz = bx * ty[i] - by * tx[i]; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+      const c = Math.cos(bank[i]), s = Math.sin(bank[i]);
+      const Ux = nx * c + bx * s, Uy = ny * c + by * s, Uz = nz * c + bz * s;
+      ux[i] = Ux; uy[i] = Uy; uz[i] = Uz;
+      // R = T × U
+      rx[i] = ty[i] * Uz - tz[i] * Uy; ry[i] = tz[i] * Ux - tx[i] * Uz; rz[i] = tx[i] * Uy - ty[i] * Ux;
     }
-    push(bank * DEG, true, true); // ostatnia próbka
-    const N = px.length;
-    this.N = N; this.length = (N - 1) * DS;
-    const f32 = (a) => Float32Array.from(a);
-    Object.assign(this, { px: f32(px), py: f32(py), pz: f32(pz), tx: f32(tx), ty: f32(ty), tz: f32(tz), ux: f32(ux), uy: f32(uy), uz: f32(uz), rx: f32(rx), ry: f32(ry), rz: f32(rz), wall: Uint8Array.from(wallA), surf: Uint8Array.from(surfA), bank: f32(bankA) });
-    // krzywizny: kg — w poprzek jezdni (w prawo), ku — w stronę normalnej (dolina > 0)
+    Object.assign(this, { N, length: n * DS, px, py, pz, tx, ty, tz, ux, uy, uz, rx, ry, rz, bank, wall: new Uint8Array(N).fill(1), surf: new Uint8Array(N).fill(1) });
+    this.x = px; this.z = pz; // zgodność z minimapą
+    // krzywizny: kg — w poprzek jezdni (w prawo), ku — w stronę normalnej
     const kg = new Float32Array(N), ku = new Float32Array(N);
     for (let i = 0; i < N; i++) {
-      const a = Math.max(0, i - 2), b = Math.min(N - 1, i + 2), dd = (b - a) * DS;
+      const a = (i + n - 2) % n, b = (i + 2) % n, dd = 4 * DS;
       const dx = (tx[b] - tx[a]) / dd, dy = (ty[b] - ty[a]) / dd, dz = (tz[b] - tz[a]) / dd;
-      kg[i] = dx * rx[i] + dy * ry[i] + dz * rz[i];
-      ku[i] = dx * ux[i] + dy * uy[i] + dz * uz[i];
+      kg[i] = dx * rx[i] + dy * ry[i] + dz * rz[i]; ku[i] = dx * ux[i] + dy * uy[i] + dz * uz[i];
     }
-    this.kg = kg; this.ku = ku;
-    this.x = this.px; this.z = this.pz; // zgodność z minimapą
-    this.pads = pads.map((p) => ({ ...p, lat: p.lane * 3.9 }));
-    // znaczniki: start (s) i meta, checkpointy co ok. 220 m
-    this.startS = def.startS ?? 36;
-    this.finishS = this.length - (def.runout ?? 70);
+    this.kg = smoothArr(kg.subarray(0, n), 4).slice(); this.kg = Float32Array.from([...this.kg, this.kg[0]]);
+    this.ku = ku;
+    this.startS = 0; this.finishS = this.length;
+    // pady nitro na prostych (pasy na przemian) i punkty powrotu (respawn)
+    const straightAt = (i, half = 30, tol = 0.006) => { for (let k = -half; k <= half; k += 6) if (Math.abs(this.kg[((i + k) % n + n) % n]) > tol || Math.abs(this.ty[((i + k) % n + n) % n]) > 0.1) return false; return true; };
+    this.pads = []; let lane = 1;
+    for (let i = 90; i < n - 60; i += 12) { const last = this.pads[this.pads.length - 1]; if ((!last || i - last.s0 > 280) && straightAt(i + 12, 24)) { this.pads.push({ s0: i, len: 16, lane, lat: lane * 3.9 }); lane = -lane; } }
     this.checkpoints = [];
-    for (let s = this.startS + 200; s < this.finishS - 60; s += 220) { const c = this.safeS(s, 90); if (c != null && (!this.checkpoints.length || c > this.checkpoints[this.checkpoints.length - 1] + 110)) this.checkpoints.push(c); }
-    // obwiednia (minimapa, kamera menu)
+    for (let i = 60; i < n - 30; i += 8) { const last = this.checkpoints[this.checkpoints.length - 1]; if ((last == null || i - last > 220) && straightAt(i, 36, 0.008)) this.checkpoints.push(i); }
     const b = { minX: 1e9, maxX: -1e9, minZ: 1e9, maxZ: -1e9, minY: 1e9, maxY: -1e9 };
-    for (let i = 0; i < N; i++) { b.minX = Math.min(b.minX, px[i]); b.maxX = Math.max(b.maxX, px[i]); b.minZ = Math.min(b.minZ, pz[i]); b.maxZ = Math.max(b.maxZ, pz[i]); b.minY = Math.min(b.minY, py[i]); b.maxY = Math.max(b.maxY, py[i]); }
+    for (let i = 0; i < n; i++) { b.minX = Math.min(b.minX, px[i]); b.maxX = Math.max(b.maxX, px[i]); b.minZ = Math.min(b.minZ, pz[i]); b.maxZ = Math.max(b.maxZ, pz[i]); b.minY = Math.min(b.minY, py[i]); b.maxY = Math.max(b.maxY, py[i]); }
     this.bounds = b;
   }
 
-  /** czy miejsce nadaje się na checkpoint/respawn: płasko, prosto, z jezdnią, bez przerwy tuż przed i pętli w pobliżu */
-  safeAt(i) {
-    const N = this.N;
-    for (let k = -20; k <= 20; k += 5) { const j = Math.min(N - 1, Math.max(0, i + k)); if (!this.surf[j] || Math.abs(this.ty[j]) > 0.13 || Math.abs(this.kg[j]) > 0.022 || this.uy[j] < 0.9) return false; }
-    for (let k = 20; k <= 90; k += 5) { const j = Math.min(N - 1, i + k); if (!this.surf[j]) return false; } // rozbieg przed skokiem
-    for (let k = -60; k <= 60; k += 6) { const j = Math.min(N - 1, Math.max(0, i + k)); if (this.uy[j] < 0.7) return false; } // nie przy pętli
-    return true;
+  /** czy pad p obejmuje punkt s (okrąża modulo długość okrążenia) */
+  inPad(p, s) { const L = this.length; return ((s - p.s0) % L + L) % L < p.len; }
+  /** odległość naprzód (modulo okrążenie) do początku pada */
+  padAhead(p, s) { const L = this.length; return ((p.s0 - s) % L + L) % L; }
+  /** ostatni checkpoint przed s (do respawnu); przed linią startu — tuż za nią */
+  lastCp(s) {
+    const L = this.length, base = Math.floor(s / L) * L, rel = s - base;
+    let c = null; for (const k of this.checkpoints) if (k <= rel - 8) c = base + k;
+    if (c == null) { if (base > 0 && this.checkpoints.length) return base - L + this.checkpoints[this.checkpoints.length - 1]; return Math.min(s, 0) - 12; }
+    return c;
   }
-  /** najbliższe bezpieczne s (szuka w tył do `back` m, potem w przód) */
-  safeS(s, back = 400) {
-    const i0 = Math.round(s);
-    for (let d = 0; d <= back; d += 2) { const i = i0 - d; if (i >= this.startS - 20 && i > 40 && this.safeAt(i)) return i; if (d && i0 + d < this.N - 120 && this.safeAt(i0 + d)) return i0 + d; }
-    return null;
-  }
-  /** najbliższy punkt jezdni nadający się na paczkę (płasko, z nawierzchnią, nie w pętli) */
+  /** miejsce na paczkę: płasko; zwraca s */
   pickS(s) {
-    const i0 = Math.round(s), N = this.N;
-    for (let d = 0; d < 250; d += 2) for (const i of [i0 - d, i0 + d]) if (i > this.startS + 40 && i < this.finishS - 40 && i < N && this.surf[i] && this.uy[i] > 0.92 && Math.abs(this.ty[i]) < 0.25 && this.surf[Math.min(N - 1, i + 30)]) return i;
-    return Math.round(s);
+    const L = this.length;
+    for (let d = 0; d < 200; d += 2) for (const sg of [-1, 1]) { const i = (((Math.round(s) + sg * d) % L) + L) % L; if (Math.abs(this.ty[i]) < 0.2 && Math.abs(this.kg[i]) < 0.03) return i; }
+    return ((Math.round(s) % L) + L) % L;
   }
-  /** rama toru w punkcie s (interpolacja): wypełnia `o` pozycją, T, U, R, kg, ku, ściana, powierzchnia */
+  /** rama toru w punkcie s (interpolacja, cyklicznie): wypełnia `o` pozycją, T, U, R, kg, ku */
   at(s, o = {}) {
-    const N = this.N;
-    let f = s / DS; if (f < 0) f = 0; if (f > N - 1.001) f = N - 1.001;
-    const i = Math.floor(f), t = f - i, j = i + 1, l = (a, b) => a + (b - a) * t;
+    const L = this.length;
+    let f = (((s % L) + L) % L) / DS; const i = Math.min(this.N - 2, Math.floor(f)), t = f - i, j = i + 1, l = (a, b) => a + (b - a) * t;
     o.px = l(this.px[i], this.px[j]); o.py = l(this.py[i], this.py[j]); o.pz = l(this.pz[i], this.pz[j]);
     o.tx = l(this.tx[i], this.tx[j]); o.ty = l(this.ty[i], this.ty[j]); o.tz = l(this.tz[i], this.tz[j]);
     o.ux = l(this.ux[i], this.ux[j]); o.uy = l(this.uy[i], this.uy[j]); o.uz = l(this.uz[i], this.uz[j]);
@@ -137,8 +97,7 @@ export class Track3D {
     let k = Math.hypot(o.tx, o.ty, o.tz) || 1; o.tx /= k; o.ty /= k; o.tz /= k;
     k = Math.hypot(o.ux, o.uy, o.uz) || 1; o.ux /= k; o.uy /= k; o.uz /= k;
     k = Math.hypot(o.rx, o.ry, o.rz) || 1; o.rx /= k; o.ry /= k; o.rz /= k;
-    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]);
-    o.wall = this.wall[t < 0.5 ? i : j]; o.surf = this.surf[t < 0.5 ? i : j];
+    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]); o.wall = 1; o.surf = 1;
     return o;
   }
   /** pozycja świata punktu (s, d) na powierzchni (+ wysokość h nad nią) */
@@ -146,17 +105,16 @@ export class Track3D {
     const f = this.at(s, this._tmp || (this._tmp = {}));
     o.x = f.px + f.rx * d + f.ux * h; o.y = f.py + f.ry * d + f.uy * h; o.z = f.pz + f.rz * d + f.uz * h; return o;
   }
-  /** najbliższy punkt jezdni (tylko próbki z nawierzchnią) w oknie [s0 - back, s0 + fwd] → { s, d, h, along, dist, surf } */
+  /** najbliższy punkt jezdni w oknie [s0 - back, s0 + fwd] → { s (ciągłe), d, h, along, dist, surf } */
   nearest(x, y, z, s0, back = 40, fwd = 110) {
-    const N = this.N, a = Math.max(0, Math.floor((s0 - back) / DS)), b = Math.min(N - 1, Math.ceil((s0 + fwd) / DS));
-    let best = 1e18, bi = -1;
-    for (let i = a; i <= b; i++) { if (!this.surf[i]) continue; const dx = x - this.px[i], dy = y - this.py[i], dz = z - this.pz[i], dd = dx * dx + dy * dy + dz * dz; if (dd < best) { best = dd; bi = i; } }
-    if (bi < 0) return { s: s0, d: 0, h: 99, along: 99, dist: 1e9, surf: false };
-    const dx = x - this.px[bi], dy = y - this.py[bi], dz = z - this.pz[bi];
-    const along = dx * this.tx[bi] + dy * this.ty[bi] + dz * this.tz[bi];
-    const s = Math.min((N - 1) * DS, Math.max(0, bi * DS + along));
+    const n = this.N - 1, a = Math.floor((s0 - back) / DS), b = Math.ceil((s0 + fwd) / DS);
+    let best = 1e18, bk = a;
+    for (let k = a; k <= b; k++) { const i = ((k % n) + n) % n, dx = x - this.px[i], dy = y - this.py[i], dz = z - this.pz[i], dd = dx * dx + dy * dy + dz * dz; if (dd < best) { best = dd; bk = k; } }
+    const i = ((bk % n) + n) % n, dx = x - this.px[i], dy = y - this.py[i], dz = z - this.pz[i];
+    const along = dx * this.tx[i] + dy * this.ty[i] + dz * this.tz[i];
+    const s = bk * DS + along;
     const f = this.at(s, this._tmp2 || (this._tmp2 = {}));
     const ex = x - f.px, ey = y - f.py, ez = z - f.pz;
-    return { s, d: ex * f.rx + ey * f.ry + ez * f.rz, h: ex * f.ux + ey * f.uy + ez * f.uz, along, dist: Math.sqrt(best), surf: f.surf === 1 && Math.abs(along) < 2.5 };
+    return { s, d: ex * f.rx + ey * f.ry + ez * f.rz, h: ex * f.ux + ey * f.uy + ez * f.uz, along, dist: Math.sqrt(best), surf: Math.abs(along) < 2.5 };
   }
 }

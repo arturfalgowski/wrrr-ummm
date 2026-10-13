@@ -148,7 +148,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
     const ov = new THREE.Group(), lineMat = new THREE.MeshBasicMaterial({ color: T.overview ?? 0xffc233, side: THREE.DoubleSide, fog: false, depthTest: false, transparent: true, opacity: 0.95 });
     const band = new THREE.Mesh(ribbon(track, -22, 22, 2.5), lineMat); band.renderOrder = 20; ov.add(band);
     const mark = (s, color) => { const f = track.at(s, {}); const m = new THREE.Mesh(new THREE.CylinderGeometry(36, 36, 160, 20), new THREE.MeshBasicMaterial({ color, fog: false, depthTest: false, transparent: true, opacity: 0.9 })); m.position.set(f.px, f.py + 80, f.pz); m.renderOrder = 21; ov.add(m); };
-    mark(track.startS, 0x37e08a); mark(track.finishS, 0xff4f6e);
+    mark(track.startS, 0x37e08a);
     ov.visible = false; root.add(ov); world.overview = ov;
     world.setOverview = (on) => { ov.visible = on; };
   }
@@ -183,16 +183,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
     line.rotation.x = -Math.PI / 2; line.rotation.z = Math.PI / 2; line.position.set(0, 0.07, 0); g.add(line);
     root.add(g);
   };
-  gate(track.startS, 'START', '#12141d', '#ffd84d');
-  gate(track.finishS, 'META', '#ffffff', '#12141d');
-  const cpMat = new THREE.MeshBasicMaterial({ color: T.cpColor, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-  for (const s of track.checkpoints) {
-    const g = new THREE.Group(); g.matrixAutoUpdate = false; g.matrix.copy(frame(s));
-    const arch = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2 + 2, 8), cpMat); arch.rotation.y = Math.PI / 2; arch.position.set(0, 4, 0); g.add(arch);
-    for (const z of [-(HW + 1), HW + 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 8.4, 8), new THREE.MeshBasicMaterial({ color: T.cpColor })); p.position.set(0, 4.2, z); g.add(p); }
-    root.add(g);
-  }
-
+  gate(track.startS, 'START / META', '#12141d', '#ffd84d');
   // ---------- słupy podporowe ----------
   {
     const list = [];

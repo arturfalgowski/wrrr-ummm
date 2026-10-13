@@ -1,48 +1,31 @@
-// Definicje torów w stylu TrackMania (A → B). Każdy tor ma motyw otoczenia („kraj”), porę dnia i listę elementów.
-import { Track3D, S, C, P, LOOP, HILL, JUMP } from './track3d.js';
+// Definicje torów: zamknięte pętle (okrążenia) z bandami na całej długości. Punkty [x, z] w metrach × scale, hills = [amplituda, fale, faza].
+import { Track3D } from './track3d.js';
 
 export const TRACK_DEFS = {
   stadion: {
-    name: 'Stadion Mistrzów', tag: 'Klasyczny stadion: pętla, skoki i pochylone nawroty', theme: 'stadion', y0: 0,
-    ops: [S(110, { pad: { lane: -1 } }), C(90, 75, { bank: 18 }), S(70, { bank: 0 }), C(-90, 75, { bank: -18 }), S(90, { bank: 0 }),
-      JUMP(18, 100), S(70), LOOP(30, 42), S(80, { pad: { lane: 1 } }), C(180, 62, { bank: 26 }), S(70, { bank: 0 }), HILL(14, 200, 30),
-      C(-120, 70, { bank: -20 }), S(60, { bank: 0, pad: { lane: -1 } }), JUMP(22, 112), S(190), C(90, 85, { bank: 20 }),
-      S(90, { bank: 0 }), LOOP(30, -44), S(90, { pad: { lane: 1 } }), C(-180, 70, { bank: -26 }), S(70, { bank: 0 }), HILL(14, 200, 30), C(120, 100, { bank: 22 }), S(120, { bank: 0 }),
-      JUMP(20, 105), S(200), C(-90, 80, { bank: -20 }), S(90, { bank: 0 }), JUMP(18, 100), S(190), C(60, 100, { bank: 16 }), S(80, { bank: 0 }), LOOP(32, 46), S(110, { pad: { lane: 1 } }),
-      C(100, 90, { bank: 22 }), S(160, { bank: 0 })],
+    name: 'Stadion Mistrzów', tag: 'Klasyczny owal z szykaną i długą prostą startową', theme: 'stadion', y0: 0, scale: 4.8, maxBank: 14,
+    points: [[-40, 45], [10, 47], [55, 45], [90, 30], [96, 2], [80, -24], [56, -32], [40, -16], [20, -6], [-4, -16], [-18, -42], [-50, -52], [-86, -40], [-98, -10], [-82, 18], [-64, 34]],
+    hills: [[2.5, 2, 0.6]],
   },
   tokyo: {
-    name: 'Neo Tokio', tag: 'Nocne miasto: dwie pętle, wiadukty i neony', theme: 'tokyo', y0: 0,
-    ops: [S(120, { pad: { lane: 1 } }), C(-60, 55, { bank: -15 }), S(60, { bank: 0 }), C(60, 55, { bank: 15 }), S(80, { bank: 0 }), HILL(12, 220, 40),
-      LOOP(28, 44), S(90, { pad: { lane: -1 } }), C(90, 60, { bank: 20 }), S(40, { bank: 0 }), JUMP(20, 105), S(190), C(-150, 70, { bank: -24 }),
-      S(90, { bank: 0, pad: { lane: 1 } }), C(60, 60, { bank: 16 }), S(50, { bank: 0 }), LOOP(30, -44), S(100), C(-90, 65, { bank: -20 }), S(160, { bank: 0 }),
-      S(80, { pad: { lane: -1 } }), C(60, 60, { bank: 18 }), S(60, { bank: 0 }), C(-60, 60, { bank: -18 }), S(80, { bank: 0 }), HILL(14, 200, 40), S(60), LOOP(28, 44), S(90, { pad: { lane: 1 } }),
-      C(150, 80, { bank: 24 }), S(70, { bank: 0 }), JUMP(20, 105), S(200), C(-120, 90, { bank: -22 }), S(90, { bank: 0 }), JUMP(22, 112), S(190), C(100, 80, { bank: 20 }), S(80, { bank: 0 }),
-      LOOP(30, -46), S(150)],
+    name: 'Neo Tokio', tag: 'Nocne miasto: techniczne zakręty między wieżowcami', theme: 'tokyo', y0: 0, scale: 3.7, maxBank: 12,
+    points: [[-70, 50], [0, 52], [70, 50], [112, 36], [124, 6], [104, -14], [74, -10], [58, 8], [34, 20], [10, 8], [8, -18], [34, -34], [58, -58], [40, -84], [6, -88], [-24, -70], [-60, -62], [-100, -52], [-124, -22], [-116, 14], [-96, 38]],
+    hills: [[2, 3, 0]],
   },
   alpy: {
-    name: 'Przełęcz Alpejska', tag: 'Zjazd z gór: nawroty, skok nad przepaścią i pętla', theme: 'alpy', y0: 70,
-    ops: [S(110, { pad: { lane: -1 } }), P(-8, 260), S(240), C(-110, 65, { bank: -22 }), S(80, { bank: 0, pad: { lane: 1 } }), C(110, 65, { bank: 22 }), S(100, { bank: 0 }),
-      P(8, 260), S(60), JUMP(20, 105), S(200), LOOP(30, 42), S(90), C(180, 60, { bank: 26 }), S(70, { bank: 0 }), P(-8, 260), S(200, { pad: { lane: -1 } }), P(8, 260),
-      S(80), C(-90, 75, { bank: -20 }), S(150, { bank: 0 }),
-      S(60), P(-8, 260), S(200), C(130, 70, { bank: 24 }), S(70, { bank: 0, pad: { lane: -1 } }), C(-130, 70, { bank: -24 }), S(90, { bank: 0 }), P(8, 260), S(60), JUMP(22, 112), S(200),
-      LOOP(30, -44), S(90, { pad: { lane: 1 } }), C(-150, 75, { bank: -24 }), S(80, { bank: 0 }), JUMP(18, 100), S(200), C(90, 90, { bank: 20 }), S(120, { bank: 0 })],
+    name: 'Przełęcz Alpejska', tag: 'Górska pętla: wzniesienia i serpentyny', theme: 'alpy', y0: 70, scale: 4.0, maxBank: 16,
+    points: [[-60, 60], [0, 62], [60, 56], [104, 38], [118, 6], [96, -22], [64, -30], [48, -54], [66, -84], [42, -112], [0, -104], [-20, -78], [-52, -70], [-84, -86], [-120, -66], [-124, -28], [-100, -2], [-110, 28], [-92, 50]],
+    hills: [[14, 2, 0.3], [5, 5, 1.2]],
   },
   egipt: {
-    name: 'Pustynia Faraonów', tag: 'Szerokie łuki, trzy duże skoki i pętla przy piramidach', theme: 'egipt', y0: 0,
-    ops: [S(150, { pad: { lane: 1 } }), C(70, 120, { bank: 14 }), S(100, { bank: 0 }), JUMP(18, 100), S(190), C(-100, 110, { bank: -18 }), S(60, { bank: 0, pad: { lane: -1 } }),
-      HILL(12, 200, 40), C(130, 90, { bank: 22 }), S(80, { bank: 0 }), JUMP(22, 112), S(190), C(-70, 100, { bank: -16 }), S(90, { bank: 0 }), LOOP(32, 46), S(120, { pad: { lane: 1 } }),
-      C(-120, 100, { bank: -20 }), S(90, { bank: 0 }), JUMP(20, 105), S(200), C(60, 120, { bank: 12 }), S(160, { bank: 0 }),
-      S(80, { pad: { lane: 1 } }), C(120, 110, { bank: 20 }), S(90, { bank: 0 }), JUMP(22, 112), S(190), C(-150, 100, { bank: -22 }), S(80, { bank: 0 }), LOOP(32, -46), S(100, { pad: { lane: -1 } }),
-      C(100, 110, { bank: 18 }), S(80, { bank: 0 }), HILL(12, 200, 40), C(-120, 100, { bank: -20 }), S(90, { bank: 0 }), JUMP(20, 105), S(200), C(80, 110, { bank: 14 }), S(160, { bank: 0 })],
+    name: 'Pustynia Faraonów', tag: 'Szerokie łuki wokół piramid i długie proste', theme: 'egipt', y0: 0, scale: 3.0, maxBank: 12,
+    points: [[-90, 60], [-30, 60], [30, 60], [90, 62], [140, 48], [168, 8], [152, -28], [112, -32], [86, -58], [104, -86], [142, -96], [156, -126], [118, -144], [66, -132], [26, -98], [-20, -114], [-76, -124], [-132, -104], [-164, -58], [-150, -8], [-136, 34], [-122, 58]],
+    hills: [[4, 2, 1]],
   },
   tropiki: {
-    name: 'Wyspy Hawajskie', tag: 'Nad oceanem: pochylony nawrót, dwie pętle i skoki', theme: 'tropiki', y0: 6,
-    ops: [S(120, { pad: { lane: -1 } }), C(-90, 70, { bank: -24 }), S(70, { bank: 0 }), C(90, 70, { bank: 24 }), S(90, { bank: 0 }), LOOP(30, 44), S(90, { pad: { lane: 1 } }),
-      C(180, 150, { bank: 20 }), S(70, { bank: 0 }), JUMP(20, 105), S(190), C(-60, 90, { bank: -18 }), S(70, { bank: 0 }), LOOP(28, -44), S(110),
-      C(-120, 75, { bank: -22 }), S(180, { bank: 0, pad: { lane: 1 } }), JUMP(22, 112), S(190), C(70, 90, { bank: 18 }), S(150, { bank: 0 }),
-      S(80, { pad: { lane: -1 } }), C(90, 75, { bank: 24 }), S(80, { bank: 0 }), LOOP(30, 44), S(90, { pad: { lane: 1 } }), C(-120, 80, { bank: -22 }), S(90, { bank: 0 }), JUMP(20, 105), S(200),
-      C(150, 90, { bank: 22 }), S(70, { bank: 0 }), LOOP(28, -44), S(100), C(-90, 85, { bank: -20 }), S(100, { bank: 0 }), JUMP(22, 112), S(190), C(70, 100, { bank: 16 }), S(150, { bank: 0 })],
+    name: 'Wyspy Hawajskie', tag: 'Wyspa nad oceanem: zatoki i nadmorskie szykany', theme: 'tropiki', y0: 6, scale: 4.3, maxBank: 14,
+    points: [[-80, 40], [-30, 52], [30, 50], [80, 38], [112, 10], [100, -22], [66, -34], [40, -22], [20, -44], [30, -76], [4, -98], [-34, -88], [-48, -58], [-80, -48], [-112, -22], [-110, 12]],
+    hills: [[4, 3, 0.4]],
   },
 };
 export const TRACK_IDS = Object.keys(TRACK_DEFS);

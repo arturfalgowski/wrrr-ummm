@@ -163,11 +163,12 @@ const S = {
   color: CAR_COLORS.includes(store.get('tc_color')) ? store.get('tc_color') : '#e0457b',
   trackPick: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : 'random', trackId: TRACK_DEFS[store.get('tc_track')] ? store.get('tc_track') : TRACK_IDS[Math.random() * TRACK_IDS.length | 0],
   ghost: store.get('tc_ghost') !== '0', pickups: ['off', 'rare', 'normal', 'often'].includes(store.get('tc_pickups')) ? store.get('tc_pickups') : 'normal', loadout: store.get('tc_loadout') === 'full' ? 'full' : 'normal',
+  laps: Math.min(10, Math.max(1, parseInt(store.get('tc_laps') || '3', 10))),
   mode: 'menu', // menu | lobby | countdown | racing | finished
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { items: { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity };
+const me = { items: { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity, hp: 100, dead: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity };
 const opps = new Map(); // id -> { id, nick, st, vis, audio, snaps, bot?, ... }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -226,18 +227,21 @@ function spawnSoloBots(n) {
     opps.set(o.id, o); setCar(o, o.slot, colors[(i * 3) % colors.length]);
   }
 }
+const lapsNow = () => (S.solo ? S.laps : (S.room?.settings?.laps ?? 3));
+function setHpBar(v) { const e = $('hud-hp'); if (e) { e.style.width = `${clamp(v, 0, 100)}%`; e.parentElement.classList.toggle('low', v < 35); } }
 function resetRace() {
+  S.raceLaps = lapsNow();
   const slot = S.solo ? 0 : mySlot();
   const mp = S.solo ? null : myRoomPlayer();
   setCar(me, slot, mp?.color ?? S.color);
   if (!S.solo && S.room) syncOpps(true); else { clearOpps(); if (S.solo && S.raceBots > 0) spawnSoloBots(S.raceBots); }
   items.clear(); soloSpawn.t = 5;
-  Object.assign(me, { items: S.loadout === 'full' ? { ammo: 1, oil: 1, mine: 1 } : { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: track.startS, cpIdx: 0, padCd: 0, driftT: 0, falls: 0 });
+  Object.assign(me, { items: S.loadout === 'full' ? { ammo: 1, oil: 1, mine: 1 } : { ammo: 0, oil: 0, mine: 0 }, fireT: 0, fireAcc: 0, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: -12, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, hp: 100, dead: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity });
   S.results = null; S.resultSounded = false;
   particles.clear(); skids.clear();
   $('hud-time').textContent = '0:00.00';
   $('chip-pos').classList.toggle('hidden', !opps.size);
-  setText('hud-cp', `0/${track.checkpoints.length}`); updateSlots();
+  setText('hud-cp', `1/${S.raceLaps}`); setHpBar(100); updateSlots();
   ghostSetup();
   recGhost.length = 0; replay.buf = []; replay.done = false;
 }
@@ -322,9 +326,8 @@ function trackPreview(id) {
   return (previewCache[id] = `<svg class="prev" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`);
 }
 function trackFacts(id) {
-  const def = TRACK_DEFS[id], ops = def.ops.flat(Infinity), t = worlds[id]?.track ?? buildTrack(id);
-  const loops = ops.filter((o) => o.t === 'loop').length, jumps = ops.filter((o) => o.gap).length;
-  return `${(t.finishS / 1000).toFixed(1)} km · ${loops ? loops + ' pętl' + (loops === 1 ? 'a' : 'e') + ' · ' : ''}${jumps} skok${jumps === 1 ? '' : jumps < 5 ? 'i' : 'ów'}`;
+  const t = worlds[id]?.track ?? buildTrack(id);
+  return `okrążenie ${(t.length / 1000).toFixed(1)} km · ${S.laps} okr. = ${(t.length * S.laps / 1000).toFixed(1)} km`;
 }
 function buildSettings(wrapId, vals, canEdit, onChange) {
   const w = $(wrapId); w.textContent = '';
@@ -335,6 +338,7 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
     const n = document.createElement('b'); n.textContent = vals[key]; st.append(mk('−', -1), n, mk('+', 1)); r1.append(st);
   };
   const segRow = (label, key, opts) => { const r = row(label), sg = document.createElement('div'); sg.className = 'seg'; for (const [v, t] of opts) { const b = document.createElement('button'); b.textContent = t; b.disabled = !canEdit; b.classList.toggle('sel', vals[key] === v); b.addEventListener('click', () => onChange({ [key]: v })); sg.append(b); } r.append(sg); };
+  if (vals.laps !== undefined) stepper('Liczba okrążeń', 'laps', 1, 10);
   if (vals.raceBots !== undefined) stepper('Boty w wyścigu', 'raceBots', 0, 3);
   if (vals.public !== undefined) segRow('Pokój publiczny (lista pokoi)', 'public', [[true, 'Tak'], [false, 'Nie']]);
   if (vals.pickups !== undefined) segRow('Paczki (nitro, karabin, olej, miny)', 'pickups', [['off', 'Brak'], ['rare', 'Rzadko'], ['normal', 'Normalnie'], ['often', 'Często']]);
@@ -347,7 +351,8 @@ function buildSettings(wrapId, vals, canEdit, onChange) {
   if (vals.ghost !== undefined) segRow('Duch rekordu (trening solo)', 'ghost', [[false, 'Wył.'], [true, 'Wł.']]);
 }
 function renderMenuSettings() {
-  buildSettings('menu-settings', { raceBots: S.raceBots, pickups: S.pickups, loadout: S.loadout, dyn: S.dynEnv, weather: S.weather, time: S.time, ghost: S.ghost }, true, (c) => {
+  buildSettings('menu-settings', { laps: S.laps, raceBots: S.raceBots, pickups: S.pickups, loadout: S.loadout, dyn: S.dynEnv, weather: S.weather, time: S.time, ghost: S.ghost }, true, (c) => {
+    if (c.laps != null) { S.laps = c.laps; store.set('tc_laps', String(c.laps)); }
     if (c.raceBots != null) { S.raceBots = c.raceBots; store.set('tc_rbots', String(c.raceBots)); }
     if (c.pickups) { S.pickups = c.pickups; store.set('tc_pickups', c.pickups); }
     if (c.loadout) { S.loadout = c.loadout; store.set('tc_loadout', c.loadout); }
@@ -453,7 +458,7 @@ function renderLobbyInfo(r) {
   row('Gospodarz', r.players[0]?.nick || '—');
   if (d) { row('Tor', d.name); row('Kraj', THEMES3D[d.theme].name); row('O torze', trackFacts(r.track)); row('Opis', d.tag); }
   if (st.bots) row('Boty', String(st.bots));
-  row('Paczki', { off: 'brak', rare: 'rzadko', normal: 'normalnie', often: 'często' }[st.pickups] || st.pickups); row('Start', st.loadout === 'full' ? 'pełne wyposażenie' : 'standardowy');
+  row('Okrążenia', String(st.laps ?? 3)); row('Paczki', { off: 'brak', rare: 'rzadko', normal: 'normalnie', often: 'często' }[st.pickups] || st.pickups); row('Start', st.loadout === 'full' ? 'pełne wyposażenie' : 'standardowy');
   row('Dynamiczne otoczenie', st.dyn ? 'tak' : 'nie');
   row('Pogoda', WX_L[st.weather] || st.weather); row('Pora dnia', TM_L[st.time] || st.time);
 }
@@ -485,7 +490,7 @@ function renderLobby() {
   const mine = r.players.find((x) => x.id === S.you);
   const isHost = mine?.slot === 0;
   buildTrackList('lobby-tracks', r.track, (id) => socket?.emit('room:track', id), isHost);
-  { const st = r.settings; buildSettings('lobby-settings', { raceBots: st.bots, pickups: st.pickups, loadout: st.loadout, dyn: st.dyn, weather: st.weather, time: st.time, public: st.public }, isHost, (c) => { if (c.raceBots !== undefined) { c.bots = c.raceBots; delete c.raceBots; } socket?.emit('room:settings', c); }); }
+  { const st = r.settings; buildSettings('lobby-settings', { laps: st.laps, raceBots: st.bots, pickups: st.pickups, loadout: st.loadout, dyn: st.dyn, weather: st.weather, time: st.time, public: st.public }, isHost, (c) => { if (c.raceBots !== undefined) { c.bots = c.raceBots; delete c.raceBots; } socket?.emit('room:settings', c); }); }
   $('track-note').textContent = isHost ? '— możesz zmieniać w każdej chwili' : '— zmienia gospodarz';
   const wantTrack = r.track, trackChanged = wantTrack !== trackId;
   if (trackChanged) { useTrack(wantTrack); me.vis = null; }
@@ -542,7 +547,7 @@ const emitAck = (ev, data) => new Promise((res) => socket.timeout(5000).emit(ev,
 async function createRoom() {
   if (!connect()) return;
   rollRandoms();
-  const r = await emitAck('room:create', { nick: S.nick, track: S.trackId, settings: { bots: S.raceBots, pickups: S.pickups, loadout: S.loadout, dyn: S.dynEnv, weather: S.weather, time: S.time, public: true }, color: S.color, custom: S.custom, mode: 'race' });
+  const r = await emitAck('room:create', { nick: S.nick, track: S.trackId, settings: { laps: S.laps, bots: S.raceBots, pickups: S.pickups, loadout: S.loadout, dyn: S.dynEnv, weather: S.weather, time: S.time, public: true }, color: S.color, custom: S.custom, mode: 'race' });
   if (!r.ok) { $('menu-err').textContent = r.error; return; }
   S.room = r.room; S.you = r.you; S.solo = false;
   enterLobby();
@@ -732,6 +737,7 @@ function sampleOpp(opp, now) {
   const L = (i) => a[i] + (b[i] - a[i]) * f;
   st.vf = L(6); st.vl = L(7); st.steer = L(5); st.throttle = a[9]; st.brakeLit = !!a[10]; st.nitro = !!a[13]; st.hand = !!a[14]; st.slip = Math.abs(st.vl);
   opp.finished = !!a[12];
+  st.hp = a[15]; st.damage = 1 - a[15] / 100; if (a[16] && !st.dead) explodeAt(st); st.dead = a[16];
   if (a[21] || b[21]) st.remoteAir(track, L(0), L(17), L(1), L(3), L(22), L(4), L(8), 0.016);
   else {
     st.air = false; st.s = L(8); st.d = L(19); st.phi = a[20] + wrapA(b[20] - a[20]) * f; st.progress = st.s; st.idx = st.s; st._pose(track);
@@ -740,7 +746,7 @@ function sampleOpp(opp, now) {
 }
 const packState = (s, c) => {
   const r = (v) => Math.round(v * 100) / 100;
-  return [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.s), s.throttle || 0, s.brakeLit ? 1 : 0, 0, c.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, 100, 0, r(s.y), 0, r(s.d), Math.round(s.phi * 1000) / 1000, s.air ? 1 : 0, r(s.vy)];
+  return [r(s.x), r(s.z), r(s.yaw), r(s.vx), r(s.vz), r(s.steer), r(s.vf), r(s.vl), r(s.s), s.throttle || 0, s.brakeLit ? 1 : 0, 0, c.finished ? 1 : 0, s.nitro ? 1 : 0, s.hand ? 1 : 0, Math.round(s.hp ?? 100), s.dead ? 1 : 0, r(s.y), 0, r(s.d), Math.round(s.phi * 1000) / 1000, s.air ? 1 : 0, r(s.vy)];
 };
 function refreshOpp(o) { return o.bot ? true : sampleOpp(o, performance.now()); }
 
@@ -760,6 +766,16 @@ function carFx(c, key, dt) {
     _w.set(-M.L / 2 - 0.2, 0.55, 0).applyQuaternion(st.quat); const ex = st.x + _w.x, ey = st.y + _w.y, ez = st.z + _w.z;
     for (let i = 0; i < 3; i++) { tmpC.setRGB(0.3 + Math.random() * 0.4, 0.6 + Math.random() * 0.3, 1); particles.emit(ex, ey, ez, -st.fx * (10 + Math.random() * 8) + (Math.random() - 0.5) * 2, -st.fy * 10 + Math.random() * 1.5, -st.fz * (10 + Math.random() * 8) + (Math.random() - 0.5) * 2, 0.3, 1.1, 0.2, tmpC, 0.8, 1.5); }
     tmpC.setRGB(1, 0.55, 0.15); particles.emit(ex, ey, ez, -st.fx * 6, -st.fy * 6, -st.fz * 6, 0.18, 0.9, 0.1, tmpC, 0.9, 2);
+  }
+  const hp = st.hp ?? 100;
+  if (hp < 60 && !st.dead && S.mode !== 'finished') { // dymi i pali się uszkodzone auto
+    const k = clamp((60 - hp) / 60, 0, 1);
+    c.dmgAcc = (c.dmgAcc || 0) + dt * (14 + 46 * k);
+    while (c.dmgAcc >= 1) {
+      c.dmgAcc -= 1; const fx = st.x + st.fx * 1.5, fy = st.y + 0.7, fz = st.z + st.fz * 1.5;
+      tmpC.setRGB(0.1 + Math.random() * 0.1, 0.1 + Math.random() * 0.1, 0.12); particles.emit(fx, fy, fz, st.vx * 0.3 + (Math.random() - 0.5) * 1.5, 1.6 + Math.random() * 2, st.vz * 0.3 + (Math.random() - 0.5) * 1.5, 1.1, 0.9, 3, tmpC, 0.5, 1.2);
+      if (hp < 30 && Math.random() < 0.7) { tmpC.setRGB(1, 0.4 + Math.random() * 0.4, 0.05); particles.emit(fx, fy + 0.2, fz, (Math.random() - 0.5) * 1.5, 2 + Math.random() * 2, (Math.random() - 0.5) * 1.5, 0.35, 1.0, 0.3, tmpC, 0.85, 1.6); }
+    }
   }
   if (sliding) {
     c.smokeAcc = (c.smokeAcc || 0) + dt * 50 * clamp((st.slip - 4.5) / 8, st.hand ? 0.7 : 0.25, 1);
@@ -807,7 +823,7 @@ function refreshMute() { $('ico-on').classList.toggle('hidden', isMuted()); $('i
 // ======================= Duch (najlepszy przejazd w trybie solo) =======================
 const ghost = { vis: null, data: null, rec: [], recAcc: 0, playing: false };
 const recGhost = ghost.rec;
-const ghostKey = () => 'tc_ghost3_' + trackId;
+const ghostKey = () => 'tc_ghost4_' + trackId + '_' + S.raceLaps;
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.34, depthWrite: false });
 function ghostClear() { if (ghost.vis) scene.remove(ghost.vis.group); Object.assign(ghost, { vis: null, data: null, playing: false }); ghost.rec.length = 0; }
 function ghostBuild() {
@@ -1035,16 +1051,17 @@ function updateTags() {
 
 // ======================= Przedmioty i broń =======================
 const soloSpawn = { t: 5, id: 1 };
-const ITEM_POOL = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb'];
+const ITEM_POOL = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'repair', 'repair'];
 let idSeq = 0;
 const nextId = () => `${(S.you || 'me').slice(0, 5)}${++idSeq}`;
 function spawnCrate(id, type, u, l) {
-  const s = track.pickS(track.startS + clamp(u, 0, 1) * (track.finishS - track.startS));
+  const s = track.pickS(clamp(u, 0, 1) * track.length);
   items.spawn(id, type, s, clamp(l, -0.8, 0.8) * HW * 0.8);
 }
 function applyPickup(type) {
   sfx.pickup(type);
   if (type === 'nitro') { me.boost = 100; toast('Nitro — pełny zbiornik'); }
+  else if (type === 'repair') { setHp(me.hp + 40); toast('Naprawa +40'); }
   else {
     const k = type === 'ammo' ? 'ammo' : type === 'oil' ? 'oil' : 'mine';
     me.items[k] = Math.min(2, me.items[k] + 1);
@@ -1074,15 +1091,21 @@ function useMine() {
   if (me.items.mine <= 0) { sfx.empty(); return; }
   me.items.mine--; const id = nextId(), s = me.st.s - 3.2; items.dropMine(id, s, me.st.d, 'me'); emitEvent({ t: 'bomb', id, x: s, z: me.st.d }); sfx.oil(); updateSlots();
 }
-function hitMe() { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); }
+function hitMe() { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); damageMe(7); }
+function damageBot(o, dmg) {
+  if (o.deadT > 0) return;
+  o.hp = clamp((o.hp ?? 100) - dmg, 0, 100); o.st.hp = o.hp; o.st.damage = 1 - o.hp / 100;
+  if (o.hp <= 0) { o.deadT = 2.6; o.st.dead = 1; explodeAt(o.st); }
+}
 /** wybuch miny: efekt, podrzut aut w promieniu 9 m (u mnie i u botów; zdalni gracze liczą go u siebie) */
 function blast(s, d, id, fromNet = false) {
   items.removeMine(id);
   const p = track.pos(s, d, 1, {}); sfx.explode();
   for (let i = 0; i < 60; i++) { const a = Math.random() * 6.28, sp = 3 + Math.random() * 13; tmpC.setRGB(1, 0.35 + Math.random() * 0.45, 0.05); particles.emit(p.x, p.y, p.z, Math.cos(a) * sp, 2 + Math.random() * 9, Math.sin(a) * sp, 0.7 + Math.random() * 0.5, 1.5, 6, tmpC, 0.9, 1.4, 4); }
-  const near = (st) => Math.abs(st.s - s) < 9 && Math.abs(st.d - d) < 9;
-  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); }
-  for (const o of oppList()) if (o.bot && near(o.st)) o.st.knock(track);
+  const near = (st) => Math.abs(items.ds(st.s, s)) < 9 && Math.abs(st.d - d) < 9;
+  const pw = (st) => 1 - Math.hypot(items.ds(st.s, s), st.d - d) / 12;
+  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); damageMe(14 + 26 * clamp(pw(me.st), 0, 1)); }
+  for (const o of oppList()) if (o.bot && near(o.st)) { o.st.knock(track); damageBot(o, 14 + 26 * clamp(pw(o.st), 0, 1)); }
   if (!fromNet) emitEvent({ t: 'boom', id, x: s, z: d });
 }
 function onGameEvent(e) {
@@ -1103,9 +1126,9 @@ function updateItems(dt) {
   for (const sh of items.shots) { // moje pociski trafiają rywali (zdalni dostają zdarzenie „hit”)
     if (sh.life <= 0 || sh.owner !== 'me') continue;
     for (const o of oppList()) {
-      if (Math.abs(sh.s - o.st.s) < 3.2 && Math.abs(sh.d - o.st.d) < 1.9) {
+      if (Math.abs(items.ds(sh.s, o.st.s)) < 3.2 && Math.abs(sh.d - o.st.d) < 1.9) {
         items.killShot(sh); sparks(o.st.x, o.st.y, o.st.z, 10); sfx.hit();
-        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; } else emitEvent({ t: 'hit', to: o.id });
+        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; damageBot(o, 7); } else emitEvent({ t: 'hit', to: o.id });
         break;
       }
     }
@@ -1120,11 +1143,25 @@ function updateItems(dt) {
   }
 }
 // ======================= Rozgrywka =======================
-const cpFor = (s) => { let c = track.startS; for (const k of track.checkpoints) if (k < s - 5) c = k; return c; };
-function respawnMe(manual = false) {
+const cpFor = (s) => track.lastCp(s);
+const setHp = (v) => { me.hp = clamp(v, 0, 100); me.st.hp = me.hp; me.st.damage = 1 - me.hp / 100; setHpBar(me.hp); };
+function respawnMe(manual = false, afterDeath = false) {
   const st = me.st; if (!st) return;
-  st.respawnAt(track, me.cp, 24); me.nitroT = 0; me.boosting = false; me.driftT = 0; me.falls++;
-  cam.first = true; sfx.empty?.(); toast(manual ? 'Powrót na checkpoint' : 'Spadek z toru — powrót na checkpoint', 1600);
+  me.cp = track.lastCp(st.s);
+  st.respawnAt(track, me.cp, 24); me.nitroT = 0; me.boosting = false; me.driftT = 0; if (!afterDeath) me.falls++;
+  if (afterDeath) { me.dead = 0; st.dead = 0; setHp(100); if (me.vis) me.vis.group.visible = true; }
+  cam.first = true; sfx.empty?.(); toast(afterDeath ? 'Auto odbudowane — wracasz na tor' : manual ? 'Powrót na ostatni punkt' : 'Wypadek — powrót na tor', 1600);
+}
+function explodeAt(st) {
+  sfx.explode();
+  for (let i = 0; i < 70; i++) { const a = Math.random() * 6.28, sp = 3 + Math.random() * 14; tmpC.setRGB(1, 0.3 + Math.random() * 0.5, 0.05); particles.emit(st.x, st.y + 0.8, st.z, Math.cos(a) * sp, 3 + Math.random() * 10, Math.sin(a) * sp, 0.8 + Math.random() * 0.6, 1.5, 6, tmpC, 0.9, 1.4, 4); }
+  for (let i = 0; i < 24; i++) { const a = Math.random() * 6.28; tmpC.setRGB(0.12, 0.12, 0.14); particles.emit(st.x, st.y + 1, st.z, Math.cos(a) * 3, 2 + Math.random() * 4, Math.sin(a) * 3, 1.6, 1.3, 4, tmpC, 0.6, 1.2); }
+}
+/** obrażenia mojego auta; po wyzerowaniu hp auto wybucha i wraca na tor po chwili */
+function damageMe(dmg) {
+  if (!racingNow() || me.dead > 0 || S.spectator || dmg <= 0) return;
+  setHp(me.hp - dmg);
+  if (me.hp <= 0) { me.dead = 2.6; me.st.dead = 1; me.st.vf *= 0.3; me.st.vl = 0; explodeAt(me.st); if (me.vis) me.vis.group.visible = false; toast('Rozbity! Odbudowa za chwilę…', 2200); }
 }
 function stepMe(dt) {
   const st = me.st;
@@ -1134,14 +1171,15 @@ function stepMe(dt) {
   else { me.boosting = false; me.boostIdle -= dt; if (me.boostIdle <= 0) me.boost = Math.min(100, me.boost + 16 * dt); }
   if (me.nitroT > 0) me.nitroT -= dt;
   st.nitro = me.nitroT > 0 || me.boosting;
-  const inp = me.finished ? { throttle: 0, brake: 0.4, steer: 0, hand: false } : (me.auto ? botInput(st, track, me, dt) : input); // me.auto — tylko do testów
+  const inp = me.finished || me.dead > 0 ? { throttle: 0, brake: me.dead > 0 ? 0.8 : 0.4, steer: 0, hand: false } : (me.auto ? botInput(st, track, me, dt) : input); // me.auto — tylko do testów
   const wasAir = st.air;
   st.step(track, inp, dt);
+  if (me.dead > 0) { me.dead -= dt; if (me.dead <= 0) respawnMe(false, true); return; }
   if (st.fell) { respawnMe(false); return; }
   if (wasAir && !st.air) { sfx.land(0.4 + Math.min(0.6, st.landHit / 12)); sparks(st.x, st.y, st.z, 8 + st.landHit * 2); }
   me.hitCd = (me.hitCd || 0) - dt;
-  if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; }
-  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; } }
+  if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; damageMe((st.hit - 5) * 0.9); }
+  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7); } }
   if (!racingNow()) return;
   if (!S.spectator) {
     const c = items.crateNear(st.s, st.d);
@@ -1150,24 +1188,30 @@ function stepMe(dt) {
   if (me.fireT > 0) { me.fireT -= dt; me.fireAcc -= dt; if (me.fireAcc <= 0 && me.fireT > 0) { shootOne(); me.fireAcc = 0.12; } if (me.fireT <= 0) { me.fireT = 0; updateSlots(); } }
   // pady przyspieszające (jeden pas) i mini-turbo po dryfcie
   me.padCd -= dt;
-  for (const p of track.pads) if (st.s >= p.s0 && st.s < p.s0 + p.len && !st.air && Math.abs(st.d - p.lat) < 2.5 && me.padCd <= 0) { me.padCd = 1.2; me.nitroT = Math.max(me.nitroT, 1.7); sfx.nitro(); sparks(st.x, st.y, st.z, 18); toast('Nitro!', 700); }
+  for (const p of track.pads) if (track.inPad(p, st.s) && !st.air && Math.abs(st.d - p.lat) < 2.5 && me.padCd <= 0) { me.padCd = 1.2; me.nitroT = Math.max(me.nitroT, 1.7); sfx.nitro(); sparks(st.x, st.y, st.z, 18); toast('Nitro!', 700); }
   const drifting = st.hand && st.speed > 16 && Math.abs(st.vl) > 3.5 && !st.air;
   if (drifting) me.driftT += dt; else { if (me.driftT > 0.9) { me.nitroT = Math.max(me.nitroT, Math.min(1.9, 0.5 + me.driftT * 0.4)); sfx.nitro(); toast('Mini-turbo!', 800); } me.driftT = 0; }
-  // checkpointy i meta
-  while (me.cpIdx < track.checkpoints.length && st.s >= track.checkpoints[me.cpIdx]) { me.cp = track.checkpoints[me.cpIdx]; me.cpIdx++; setText('hud-cp', `${me.cpIdx}/${track.checkpoints.length}`); sfx.lap(); toast(`Checkpoint ${me.cpIdx}/${track.checkpoints.length} · ${fmt(elapsed())}`, 1600); }
-  if (!me.finished && st.s >= track.finishS) finishLocal();
+  // okrążenia i meta
+  const L = track.length, lap = Math.max(0, Math.floor(st.s / L));
+  if (lap > me.lapIdx && !me.finished) {
+    const t = elapsed(), lt = t - me.lapStart; me.lapStart = t; me.lapIdx = lap;
+    const best = lt < me.bestLap; me.bestLap = Math.min(me.bestLap, lt);
+    if (lap < S.raceLaps) { setText('hud-cp', `${lap + 1}/${S.raceLaps}`); sfx.lap(); toast(`Okrążenie ${lap}/${S.raceLaps} · ${fmt(lt)}${best && lap > 1 ? ' · najlepsze' : ''}${lap + 1 === S.raceLaps ? ' · ostatnie okrążenie!' : ''}`, 2000); }
+  }
+  if (!me.finished && st.s >= S.raceLaps * L) finishLocal();
 }
 function botStep(o, dt) {
   const st = o.st; if (!st) return;
   const finished = o.finishT != null;
+  if (o.deadT > 0) { o.deadT -= dt; st.step(track, { throttle: 0, brake: 1, steer: 0, hand: false }, dt); if (o.deadT <= 0) { st.respawnAt(track, cpFor(st.s), 24); o.hp = st.hp = 100; st.damage = 0; st.dead = 0; o.padT = 0; } return; }
   const inp = finished ? { throttle: 0, brake: 0.5, steer: 0, hand: false } : botInput(st, track, o, dt);
-  o.padT -= dt; for (const p of track.pads) if (st.s >= p.s0 && st.s < p.s0 + p.len && Math.abs(st.d - p.lat) < 2.5) o.padT = 1.5;
+  o.padT -= dt; for (const p of track.pads) if (track.inPad(p, st.s) && Math.abs(st.d - p.lat) < 2.5) o.padT = 1.5;
   st.nitro = o.padT > 0 && !finished;
   st.step(track, inp, dt);
   if (st.fell) { st.respawnAt(track, cpFor(st.s), 24); o.padT = 0; }
   if (me.st && !S.spectator) carVsCar(st, me.st, track);
   for (const q of oppList()) if (q !== o && q.st) carVsCar(st, q.st, track);
-  if (!finished && st.s >= track.finishS) { o.finishT = elapsed(); o.finished = true; if (!S.solo) socket?.emit('bot:finish', { id: o.id, time: o.finishT }); }
+  if (!finished && st.s >= S.raceLaps * track.length) { o.finishT = elapsed(); o.finished = true; if (!S.solo) socket?.emit('bot:finish', { id: o.id, time: o.finishT }); }
 }
 function spectateTarget() {
   const l = oppList().sort((a, b) => b.st.s - a.st.s);
@@ -1251,7 +1295,7 @@ function updateHud() {
   else if (me.finished) setText('hud-time', fmt(me.finishTime));
   $('boost-fill').style.width = `${me.boost}%`; $('boost-wrap').classList.toggle('on', me.boosting);
   if (opps.size) setText('hud-pos', `${1 + oppList().filter((o) => o.st.s > me.st.s).length}/${opps.size + 1}`);
-  $('hud-prog').style.width = `${clamp(me.st.s / track.finishS, 0, 1) * 100}%`;
+  $('hud-prog').style.width = `${clamp(me.st.s / ((S.raceLaps || 1) * track.length), 0, 1) * 100}%`;
 }
 function drawMinimap() {
   if (!me.st || $('hud').classList.contains('hidden')) return;
@@ -1302,8 +1346,9 @@ function frame(now) {
   }
 
   // wizualizacja
-  if (me.vis && me.st && !S.spectator) me.vis.sync(me.st, dt);
+  if (me.vis && me.st && !S.spectator) { me.vis.setDamage(me.st.damage || 0); me.vis.sync(me.st, dt); }
   for (const o of oppList()) {
+    o.vis.setDamage(o.st.damage || 0); o.vis.group.visible = !o.st.dead;
     o.st.accelNow += (((o.st.vf - o.prevVf) / Math.max(dt, 0.001)) - o.st.accelNow) * Math.min(1, dt * 6); o.prevVf = o.st.vf;
     o.vis.sync(o.st, dt);
   }
