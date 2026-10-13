@@ -22,13 +22,15 @@ Wymaga Node.js ≥ 22.13 (ranking używa wbudowanego `node:sqlite`). Zmienna `PO
 
 ## Tory (każdy w innym kraju)
 
-| Tor (okrążenie 2,5–3,1 km) | Kraj | Charakter |
+| Tor (okrążenie 2,5–3,1 km) | Kraj | Nawierzchnie i obiekty |
 |---|---|---|
-| Stadion Mistrzów | Polska | klasyczny owal z szykaną, trybuny |
-| Neo Tokio | Japonia | noc, neony, techniczne zakręty |
-| Przełęcz Alpejska | Szwajcaria | góry, wzniesienia, serpentyny |
-| Pustynia Faraonów | Egipt | szerokie łuki, długie proste, piramidy |
-| Wyspy Hawajskie | Hawaje | nad oceanem, zachód słońca |
+| Stadion Mistrzów | Polska | asfalt, odcinek z kostki brukowej, most nad doliną, trybuny |
+| Neo Tokio | Japonia | asfalt, tunel, długi wiadukt, kostka (stare miasto), neony |
+| Przełęcz Alpejska | Szwajcaria | dwa tunele, most nad doliną, kostka (wioska), śnieg |
+| Pustynia Faraonów | Egipt | dwa odcinki piaszczyste, most nad wąwozem, kostka (bazar) |
+| Wyspy Hawajskie | Hawaje | plaża (piasek), most nad morzem, kostka, groble w oceanie |
+
+Piasek i kostka mają mniejszą przyczepność (piasek dodatkowo hamuje). Teren wokół toru jest generowany: nasypy, doliny pod mostami i wzgórza nad tunelami — nic nie wchodzi na jezdnię.
 
 Tory są zamkniętymi krzywymi (`public/js/tracks3d.js`: punkty, skala, delikatne wzniesienia); `track3d.js` składa z nich pętlę 3D z bandami i przechyłami.
 

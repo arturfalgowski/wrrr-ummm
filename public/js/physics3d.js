@@ -98,8 +98,8 @@ export class CarState {
       if (vf > 0.4) { vf = Math.max(0, vf - def.brake * h); this.brakeLit = true; }
       else vf = Math.max(-def.maxSpeed * 0.3, vf - def.accel * 0.55 * h);
     }
-    // opory
-    vf -= vf * 0.025 * h;
+    // opory (piasek hamuje mocniej)
+    vf -= vf * (0.025 + (f.grip < 0.85 ? 0.07 : 0)) * h;
     if (Math.abs(vf) > 0.05) vf -= Math.sign(vf) * 0.5 * h; else vf = 0;
     if (vf > vmax) vf -= (vf - vmax) * Math.min(1, 3 * h);
     if (input.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), (8 + Math.abs(vl) * 0.12) * h);
@@ -110,7 +110,7 @@ export class CarState {
     vl -= G * GSLOPE * zy * h;
 
     // przyczepność boczna
-    let grip = def.grip * (track.gripMul ?? 1);
+    let grip = def.grip * (track.gripMul ?? 1) * (f.grip ?? 1);
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
     if (input.hand) grip = Math.min(grip, 2.4);
     if (this.inOil) grip = Math.min(grip, 0.22);

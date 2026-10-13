@@ -93,7 +93,7 @@ function envApply(dt, force = false) {
   scene.fog.color.copy(world.sky); scene.fog.near = 380 * (1 - wet * 0.55); scene.fog.far = 2600 * (1 - wet * 0.5);
   renderer.toneMappingExposure = world.exposure; scene.environmentIntensity = world.envI + wet * 0.3;
   rain.visible = wet > 0.06; rain.material.uniforms.uAmt.value = clamp(wet * 0.75, 0.05, 1); rain.material.uniforms.uWind.value = 0.9 + wet * 1.4;
-  if (world.asphaltMat) { world.asphaltMat.roughness = 0.88 - wet * 0.56; world.asphaltMat.metalness = wet * 0.25; world.asphaltMat.color.setScalar(1 - wet * 0.3); }
+  for (const m of world.roadMats || []) { m.roughness = 0.88 - wet * 0.56; m.metalness = wet * 0.25; m.color.setScalar(1 - wet * 0.3); }
   if (track) track.gripMul = 1 - wet * 0.14;
   const nk = world.nightK ?? 0; for (const v of visCache.values()) v.setNight(nk);
   setRainAudio();
@@ -1371,6 +1371,7 @@ function frame(now) {
   }
 
   updateCamera(dt);
+  if (window.__tc?.free) { camera.position.set(...window.__tc.free.p); camera.lookAt(...window.__tc.free.l); } // tylko do testów
   updateHud();
   updateBubbles();
   drawMinimap();
