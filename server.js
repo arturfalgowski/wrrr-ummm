@@ -9,8 +9,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const TRACKS = ['stadion', 'tokyo', 'alpy', 'egipt', 'tropiki'];
-const TRACK_PHASE = { stadion: 0.2, tokyo: 0.62, alpy: 0.15, egipt: 0.36, tropiki: 0.44 }; // domyślna pora dnia na starcie (faza 0–1)
+const TRACKS = ['stadion', 'jesien', 'alpy', 'egipt', 'tropiki'];
+const TRACK_PHASE = { stadion: 0.2, jesien: 0.08, alpy: 0.15, egipt: 0.36, tropiki: 0.44 }; // domyślna pora dnia na starcie (faza 0–1)
 // paleta kolorów aut — zgodna z CAR_COLORS w public/js/physics3d.js
 const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 const PATTERNS = ['none', 'stripes', 'flames', 'checker'];

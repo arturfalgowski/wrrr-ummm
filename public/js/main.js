@@ -101,13 +101,12 @@ function envApply(dt, force = false) {
 }
 function updateEnvFx(dt) {
   // reflektory aut w nocy i błyski burzy
-  const night = (world?.nightK ?? 0) > 0.45;
+  const night = (world?.nightK ?? 0) > 0.25; // reflektory tylko o zmierzchu i w nocy
   const cars = [me, ...oppList()].filter((c) => c.st && c.vis && c.vis.group.visible);
   const L = track.length;
   headlights.forEach((l, i) => {
     const c = cars[i >> 1], st = c?.st; if (!st) { l.intensity = 0; return; }
-    const tun = track.tunnelK[Math.max(0, Math.min(track.N - 1, Math.round(((st.s % L) + L) % L)))] > 0.5;
-    if (!(night || tun || wet > 0.7)) { l.intensity = 0; return; }
+    if (!night) { l.intensity = 0; return; }
     const side = (i & 1 ? 1 : -1) * 0.62; _hr.set(0, 0, 1).applyQuaternion(st.quat);
     const y = st.y + 0.55;
     l.position.set(st.x + st.fx * 2.3 + _hr.x * side, y + st.fy * 2.3 + _hr.y * side, st.z + st.fz * 2.3 + _hr.z * side);
@@ -375,7 +374,7 @@ function renderMenuSettings() {
     renderMenuSettings();
   });
 }
-const FLAGS = { Polska: 'PL', Japonia: 'JP', 'Alpy (Szwajcaria)': 'CH', Egipt: 'EG', Hawaje: 'HI' };
+const FLAGS = { Polska: 'PL', Kanada: 'CA', 'Alpy (Szwajcaria)': 'CH', Egipt: 'EG', Hawaje: 'HI' };
 function buildTrackList(wrapId, selected, onPick, canPick, withRandom = false) {
   const wrap = $(wrapId); wrap.textContent = '';
   if (withRandom) {

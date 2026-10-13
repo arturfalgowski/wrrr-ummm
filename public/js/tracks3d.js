@@ -28,9 +28,9 @@ export const TRACK_DEFS = {
     elev: [[0, 0], [0.15, 2], [0.3, 9], [0.45, 10], [0.6, 2], [0.75, -1], [0.9, 0]],
     zones: [{ a: 0.42, b: 0.50, type: 'cobble' }, { a: 0.60, b: 0.69, type: 'bridge' }],
   },
-  // średni, szybki: nocne miasto, długa prosta, esy-floresy, tunele i wiadukt (~3 km)
-  tokyo: {
-    name: 'Neo Tokio', tag: 'Szybki: tunele, wiadukt, długa prosta i esy', theme: 'tokyo', y0: 0, scale: 1.45, maxBank: 12, startAt: [-130, 0],
+  // średni, szybki: jesienny las w Kanadzie, długa prosta, esy-floresy, tunele i wiadukt (~3 km)
+  jesien: {
+    name: 'Złota Jesień', tag: 'Szybki: leśne tunele, drewniany wiadukt, długa prosta i esy', theme: 'jesien', y0: 0, scale: 1.45, maxBank: 12, startAt: [-130, 0],
     points: path([-290, 0], [-130, 0], [20, 0], [120, 0], arc(120, 70, 70, -90, 0), [190, 150], arc(250, 150, 60, 180, 90), [330, 210], [400, 210], arc(400, 255, 45, -90, 90), [330, 300], [250, 325], [170, 320], [90, 295], [20, 285], [-60, 300], [-140, 330],
       arc(-140, 240, 90, 90, 180), [-230, 150], arc(-290, 150, 60, 0, -90), arc(-290, 45, 45, 90, 270)),
     elev: [[0, 0], [0.2, 6], [0.35, 14], [0.5, 8], [0.65, 16], [0.8, 6], [0.95, 1]],
