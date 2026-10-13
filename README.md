@@ -1,6 +1,6 @@
 # Wrrr Ummm
 
-Wyścigi w stylu TrackMania dla 1–4 graczy w przeglądarce: tory 3D z pętlami, skokami, przechyłami i padami nitro, jeden bolid F1 (zmieniasz kolor i personalizację).
+Wyścigi w stylu TrackMania dla 1–4 graczy w przeglądarce: tory 3D z pętlami, skokami, przechyłami, padami nitro i bronią na torze (karabin, olej, miny), jeden bolid F1 (zmieniasz kolor i personalizację).
 Three.js (WebGL) + Node.js + Socket.IO + SQLite. Modele, tekstury, efekty i dźwięki są generowane w kodzie.
 
 ## Uruchomienie
@@ -17,11 +17,11 @@ Wymaga Node.js ≥ 22.13 (ranking używa wbudowanego `node:sqlite`). Zmienna `PO
 1. Wpisz nick, wybierz kolor bolidu i personalizację (numer, wzór lakieru, felgi, tablica).
 2. **Trening solo** (z botami 0–3 i duchem rekordu) albo **Stwórz pokój** → wyślij link znajomym (link od razu wprowadza do pokoju).
 3. W lobby wszyscy widzą tryb, tor, ustawienia i czat; każdy wybiera kolor i personalizację. Host może w każdej chwili zmienić tor i ustawienia i klika **Rozpocznij wyścig**.
-4. Trasa jest od A do B: wygrywa najszybszy czas do mety. Spadniesz z toru — wracasz na ostatni checkpoint (klawisz **R** robi to ręcznie).
+4. Trasa jest od A do B: wygrywa najszybszy czas do mety. Spadniesz z toru — wracasz na ostatni checkpoint (stoją na prostych, bezpiecznych odcinkach; klawisz **R** robi to ręcznie).
 
 ## Tory (każdy w innym kraju)
 
-| Tor | Kraj | Atrakcje |
+| Tor (ok. 4,7–5,7 km) | Kraj | Atrakcje |
 |---|---|---|
 | Stadion Mistrzów | Polska | pętla, dwa skoki, pochylone nawroty, trybuny |
 | Neo Tokio | Japonia | noc, neony, dwie pętle, skok |
@@ -35,6 +35,10 @@ Tory są budowane w `public/js/tracks3d.js` z elementów (proste, łuki z przech
 
 Pora dnia przesuwa się w trakcie wyścigu (pełna doba ≈ 5 min), pogoda może się zmienić (zaczyna padać). Chmury, balony i ptaki się poruszają. Można wyłączyć w ustawieniach. W pokoju parametry losuje serwer, więc wszyscy mają to samo.
 
+## Broń i paczki
+
+Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (F: seria 4 s, trafiony rywal zwalnia), **olej** (E: plama, auto traci kontrolę) i **mina** (Q: wybuch podrzuca auta w promieniu 9 m i może zrzucić je z toru). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
+
 ## Dynamika jazdy
 
 Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbiornik nitro ładujący się sam (Shift), linie prędkości i drżenie kamery przy dużej prędkości. Auto osiąga ok. 258 km/h (z nitro ok. 336 km/h).
@@ -47,6 +51,7 @@ Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbi
 | A, D / ← → | skręt |
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (zbiornik ładuje się sam) |
+| F / E / Q | karabin / olej / mina |
 | R | powrót na ostatni checkpoint |
 | C | kamera: zza auta / izometryczna |
 | Enter, 1–9 | czat, szybkie reakcje |

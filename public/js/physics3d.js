@@ -78,6 +78,11 @@ export class CarState {
     if (input.hand) yawRate *= 1.45;
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
     if (this.steer * vl < 0) { const t = clamp((Math.abs(slipAng) - 0.7) / 0.7, 0, 1); yawRate *= 1 - 0.8 * t * t * (3 - 2 * t); }
+    if (this.inOil) { // plama oleju: auto traci kontrolę i wpada w poślizg
+      if (!this._oilPrev) { this.spin = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 1.2); this.vl += Math.sign(this.spin) * 5 * lowSpeed; }
+      yawRate = yawRate * 0.25 + Math.sin(this.t * 7 + this.s * 0.3) * 2.6 * lowSpeed + this.spin;
+    }
+    this._oilPrev = this.inOil; this.spin *= Math.exp(-1.1 * h);
     this.phi += yawRate * h;
     c = Math.cos(this.phi); sn = Math.sin(this.phi);
 
@@ -108,6 +113,7 @@ export class CarState {
     let grip = def.grip * (track.gripMul ?? 1);
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
     if (input.hand) grip = Math.min(grip, 2.4);
+    if (this.inOil) grip = Math.min(grip, 0.22);
     const speedBefore = Math.hypot(vf, vl);
     vl -= vl * (1 - Math.exp(-grip * h));
     const keep = input.hand ? 0.7 : 0.9;
@@ -216,9 +222,19 @@ export class CarState {
     this.tiltX = 0; this.tiltZ = 0;
   }
 
+  /** wybuch miny: auto podskakuje i leci w bok (może wypaść z toru) */
+  knock(track, hop = 9, lateral = 7) {
+    this.slowT = 1.3;
+    if (this.air) { this._V.y += hop * 0.5; return; }
+    const f = track.at(this.s, this._f); this._detach(track, f);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this._V.set(this._V.x + f.rx * lateral * side, this._V.y + hop, this._V.z + f.rz * lateral * side);
+    this.vf *= 0.8;
+  }
   /** po upadku: wróć na checkpoint (s) z zerową prędkością */
-  respawnAt(track, s) {
-    this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = this.vl = 0; this.steer = 0; this.nitro = false;
+  respawnAt(track, s, speed = 0) {
+    const f = track.at(s, {}); if (!f.surf) { const c = track.safeS(s, 600); if (c != null) s = c; }
+    this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
     this.progress = s; this.idx = s; this._pose(track);
   }
 }

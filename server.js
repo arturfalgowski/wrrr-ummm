@@ -17,6 +17,9 @@ const PATTERNS = ['none', 'stripes', 'flames', 'checker'];
 const RIMS = ['star', 'mesh', 'solid', 'turbine'];
 const RIM_COLORS = ['#d9dde6', ...COLORS];
 const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
+const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb'];
+const pick = (a) => a[Math.random() * a.length | 0];
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
 const MAX_CARS = 4;
 
@@ -80,6 +83,8 @@ const cleanSettings = (s) => ({
   weather: ['auto', 'sun', 'rain', 'storm'].includes(s?.weather) ? s.weather : 'auto',
   time: ['auto', 'day', 'dusk', 'night'].includes(s?.time) ? s.time : 'auto',
   dyn: s?.dyn === undefined ? true : !!s.dyn,
+  pickups: s?.pickups in PICKUP_MODES ? s.pickups : 'normal',
+  loadout: s?.loadout === 'full' ? 'full' : 'normal',
 });
 const cleanCustom = (c, prev = {}) => ({
   num: Number.isInteger(c?.num) && c.num >= 1 && c.num <= 99 ? c.num : (prev.num ?? 1 + (Math.random() * 99 | 0)),
@@ -130,12 +135,29 @@ function startCountdown(r) {
   r.winner = null; r.times = {}; r.recorded = false; r.finalized = false; r.afterRace = false;
   for (const p of r.players) p.progress = 0;
   for (const b of activeBots(r)) { b.progress = 0; b.finishTime = null; }
-  r.env = resolveEnv(r);
+  r.env = resolveEnv(r); r.pickups = new Map();
   io.to(r.id).emit('race:prepare', publicRoom(r));
   later(r, 800, () => io.to(r.id).emit('race:count', 3));
   later(r, 1800, () => io.to(r.id).emit('race:count', 2));
   later(r, 2800, () => io.to(r.id).emit('race:count', 1));
-  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); });
+  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
+}
+
+/** paczki losowane na torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne); klient dopasowuje je do jezdni */
+function schedulePickups(r) {
+  const mul = PICKUP_MODES[r.settings.pickups];
+  if (!mul) return;
+  const tick = () => {
+    if (r.state !== 'racing') return;
+    if (r.pickups.size < 5) {
+      const id = ++r.pid, type = pick(ITEMS);
+      r.pickups.set(id, type);
+      io.to(r.id).emit('pickup:spawn', { id, type, u: 0.06 + Math.random() * 0.88, l: (Math.random() - 0.5) * 1.3 });
+      later(r, 32000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
+    }
+    later(r, (7000 + Math.random() * 5000) * mul, tick);
+  };
+  later(r, 5000, tick);
 }
 
 /** kolejność końcowa: ukończone wg czasu, reszta wg postępu */
@@ -221,7 +243,7 @@ io.on('connection', (socket) => {
     const tr = TRACKS.includes(track) ? track : TRACKS[0];
     const r = {
       id: genId(), state: 'lobby', track: tr, settings: cleanSettings(settings), players: [], spectators: new Set(), timers: [], times: {}, winner: null,
-      recorded: false, env: null, afterRace: false, finalized: false, botsCache: null,
+      recorded: false, env: null, afterRace: false, finalized: false, botsCache: null, pickups: new Map(), pid: 0,
     };
     r.players.push({ sid: socket.id, nick, color: freeColor(r, color), custom: cleanCustom(custom), ready: false, slot: 0, progress: 0 });
     rooms.set(r.id, r);
@@ -372,6 +394,22 @@ io.on('connection', (socket) => {
       broadcastResult(r);
       if (r.players.every((x) => r.times[x.sid] != null)) finalizeRace(r);
     }
+  });
+
+  socket.on('pickup:take', ({ id } = {}) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || r.state !== 'racing' || !r.pickups.has(id)) return;
+    const type = r.pickups.get(id);
+    r.pickups.delete(id);
+    io.to(r.id).emit('pickup:taken', { id, by: socket.id, type });
+  });
+
+  // zdarzenia gry (strzał, olej, mina, wybuch, trafienie) — współrzędne toru (x = s, z = d) przekazywane pozostałym
+  socket.on('game:event', (e) => {
+    const r = rooms.get(socket.data.roomId);
+    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom'].includes(e.t)) return;
+    const n = (v) => (Number.isFinite(v) ? v : 0);
+    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
   });
 
   socket.on('disconnect', () => leaveRoom(socket));

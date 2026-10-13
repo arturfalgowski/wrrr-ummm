@@ -97,13 +97,34 @@ export class Track3D {
     // znaczniki: start (s) i meta, checkpointy co ok. 220 m
     this.startS = def.startS ?? 36;
     this.finishS = this.length - (def.runout ?? 70);
-    this.checkpoints = []; for (let s = this.startS + 200; s < this.finishS - 60; s += 220) this.checkpoints.push(s);
+    this.checkpoints = [];
+    for (let s = this.startS + 200; s < this.finishS - 60; s += 220) { const c = this.safeS(s, 90); if (c != null && (!this.checkpoints.length || c > this.checkpoints[this.checkpoints.length - 1] + 110)) this.checkpoints.push(c); }
     // obwiednia (minimapa, kamera menu)
     const b = { minX: 1e9, maxX: -1e9, minZ: 1e9, maxZ: -1e9, minY: 1e9, maxY: -1e9 };
     for (let i = 0; i < N; i++) { b.minX = Math.min(b.minX, px[i]); b.maxX = Math.max(b.maxX, px[i]); b.minZ = Math.min(b.minZ, pz[i]); b.maxZ = Math.max(b.maxZ, pz[i]); b.minY = Math.min(b.minY, py[i]); b.maxY = Math.max(b.maxY, py[i]); }
     this.bounds = b;
   }
 
+  /** czy miejsce nadaje się na checkpoint/respawn: płasko, prosto, z jezdnią, bez przerwy tuż przed i pętli w pobliżu */
+  safeAt(i) {
+    const N = this.N;
+    for (let k = -20; k <= 20; k += 5) { const j = Math.min(N - 1, Math.max(0, i + k)); if (!this.surf[j] || Math.abs(this.ty[j]) > 0.13 || Math.abs(this.kg[j]) > 0.022 || this.uy[j] < 0.9) return false; }
+    for (let k = 20; k <= 90; k += 5) { const j = Math.min(N - 1, i + k); if (!this.surf[j]) return false; } // rozbieg przed skokiem
+    for (let k = -60; k <= 60; k += 6) { const j = Math.min(N - 1, Math.max(0, i + k)); if (this.uy[j] < 0.7) return false; } // nie przy pętli
+    return true;
+  }
+  /** najbliższe bezpieczne s (szuka w tył do `back` m, potem w przód) */
+  safeS(s, back = 400) {
+    const i0 = Math.round(s);
+    for (let d = 0; d <= back; d += 2) { const i = i0 - d; if (i >= this.startS - 20 && i > 40 && this.safeAt(i)) return i; if (d && i0 + d < this.N - 120 && this.safeAt(i0 + d)) return i0 + d; }
+    return null;
+  }
+  /** najbliższy punkt jezdni nadający się na paczkę (płasko, z nawierzchnią, nie w pętli) */
+  pickS(s) {
+    const i0 = Math.round(s), N = this.N;
+    for (let d = 0; d < 250; d += 2) for (const i of [i0 - d, i0 + d]) if (i > this.startS + 40 && i < this.finishS - 40 && i < N && this.surf[i] && this.uy[i] > 0.92 && Math.abs(this.ty[i]) < 0.25 && this.surf[Math.min(N - 1, i + 30)]) return i;
+    return Math.round(s);
+  }
   /** rama toru w punkcie s (interpolacja): wypełnia `o` pozycją, T, U, R, kg, ku, ściana, powierzchnia */
   at(s, o = {}) {
     const N = this.N;

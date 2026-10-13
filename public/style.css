@@ -575,3 +575,16 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 #boost-wrap { display: grid; }
 .car-detail .cd-spec { grid-template-columns: 1fr 1fr; }
 .track small.facts { color: var(--a1); font-weight: 700; }
+
+/* ---------- Przedmioty na HUD ---------- */
+.hud-items { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); display: flex; gap: 8px; }
+.slot { position: relative; display: grid; justify-items: center; gap: 2px; width: 66px; padding: 8px 4px 6px; border-radius: 14px; background: rgba(20,22,32,.72); border: 1px solid rgba(255,255,255,.12); color: rgba(255,255,255,.4); backdrop-filter: blur(8px); transition: background .2s, color .2s, box-shadow .2s; }
+.slot kbd { position: absolute; top: -9px; font: 700 10px var(--font); padding: 1px 6px; border-radius: 6px; background: rgba(255,255,255,.16); color: #fff; }
+.slot span { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.slot.has { color: #fff; }
+#slot-ammo.has { background: rgba(200,110,10,.78); box-shadow: 0 0 22px rgba(255,176,46,.55); }
+#slot-oil.has { background: rgba(100,50,200,.75); box-shadow: 0 0 22px rgba(164,107,255,.55); }
+#slot-mine.has { background: rgba(200,50,40,.78); box-shadow: 0 0 22px rgba(255,74,58,.55); }
+#slot-ammo.active { animation: pulse3 .25s ease-in-out infinite alternate; }
+@keyframes pulse3 { from { transform: scale(1); } to { transform: scale(1.06); } }
+body.spectating .hud-items { display: none !important; }
