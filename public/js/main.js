@@ -60,7 +60,7 @@ function useTrack(id) {
   world.root.visible = true;
   particles.ground = null; particles.yOff = 0;
   minimap.setTrack(track); items.setTrack(track);
-  particles.clear(); skids.clear(); clearDebris();
+  particles.clear(); skids.clear(); clearDebris(); $('elim').classList.add('hidden');
   envSetStatic(previewEnv(id));
 }
 
@@ -1009,7 +1009,7 @@ function updateChatUi() {
 }
 function chatAdd(m) {
   const log = $('chat-log'), d = document.createElement('div');
-  d.className = 'msg' + (m.sys ? ' sys' : '') + (m.react ? ' react' : '');
+  d.className = 'msg' + (m.sys ? ' sys' : '') + (m.react ? ' react' : '') + (m.kill ? ' kill' : '');
   if (!m.sys) { const b = document.createElement('b'); b.textContent = m.nick; b.style.color = m.color || '#fff'; d.append(b); }
   d.append(document.createTextNode(m.text));
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
@@ -1249,33 +1249,37 @@ function zonesCar(st, o) {
   return w;
 }
 function lostWheelMsg(lost) { if (lost.length) { toast(lost.length > 1 ? 'Odpadły koła!' : 'Odpadło koło!', 1600); sfx.tire(0.8); } }
-function hitMe() { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); damageMe(7, ZONES_SHOT); }
-function damageBot(o, dmg, zones) {
+function hitMe(from) { me.st.slowT = 1.3; me.st.vf *= 0.93; sparks(me.st.x, me.st.y, me.st.z, 14); sfx.hit(); damageMe(7, ZONES_SHOT, from); }
+function damageBot(o, dmg, zones, by = null) {
   if (o.deadT > 0 || o.inv > 0) return;
+  if (by) o.lastBy = { id: by, t: performance.now() };
   o.hp = clamp((o.hp ?? 100) - dmg, 0, 100); o.st.hp = o.hp; o.st.damage = 1 - o.hp / 100;
   if (zones) o.st.hurt(zones, dmg * PART_K);
-  if (o.hp <= 0) { o.deadT = DEAD_T; o.deathS = o.st.s; o.deathD = o.st.d; o.st.dead = 1; explodeAt(o.st); }
+  if (o.hp <= 0) { o.deadT = DEAD_T; o.deathS = o.st.s; o.deathD = o.st.d; o.st.dead = 1; explodeAt(o.st);
+    if (S.solo || S.room?.players[0]?.id === S.you) { const kid = o.lastBy && performance.now() - o.lastBy.t < 6000 ? o.lastBy.id : null; announceKill(o.nick, nameOfId(kid), false, kid === 'me'); if (!S.solo) emitEvent({ t: 'kill', id: o.id, to: kid === 'me' ? S.you : kid }); } }
 }
 /** wybuch miny: efekt, podrzut aut w promieniu 9 m (u mnie i u botów; zdalni gracze liczą go u siebie) */
 function blast(s, d, id, fromNet = false) {
+  const own = ownerId(items.mines.find((m) => m.id === id)?.owner);
   items.removeMine(id);
   const p = track.pos(s, d, 1, {}); sfx.explode();
   for (let i = 0; i < 60; i++) { const a = Math.random() * 6.28, sp = 3 + Math.random() * 13; tmpC.setRGB(1, 0.35 + Math.random() * 0.45, 0.05); particles.emit(p.x, p.y, p.z, Math.cos(a) * sp, 2 + Math.random() * 9, Math.sin(a) * sp, 0.7 + Math.random() * 0.5, 1.5, 6, tmpC, 0.9, 1.4, 4); }
   const near = (st) => Math.abs(items.ds(st.s, s)) < 9 && Math.abs(st.d - d) < 9;
   const pw = (st) => 1 - Math.hypot(items.ds(st.s, s), st.d - d) / 12;
-  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); damageMe(14 + 26 * clamp(pw(me.st), 0, 1), ZONES_MINE); }
-  for (const o of oppList()) if (o.bot && near(o.st)) { o.st.knock(track); damageBot(o, 14 + 26 * clamp(pw(o.st), 0, 1), ZONES_MINE); }
+  if (me.st && !S.spectator && near(me.st)) { me.st.knock(track); sparks(me.st.x, me.st.y, me.st.z, 18); damageMe(14 + 26 * clamp(pw(me.st), 0, 1), ZONES_MINE, own); }
+  for (const o of oppList()) if (o.bot && near(o.st)) { o.st.knock(track); damageBot(o, 14 + 26 * clamp(pw(o.st), 0, 1), ZONES_MINE, own); }
   if (!fromNet) emitEvent({ t: 'boom', id, x: s, z: d });
 }
 function onGameEvent(e) {
   if (e.t === 'shoot') items.shoot(e.x, e.z, e.vx, 'opp:' + e.from);
   else if (e.t === 'rocket') { items.rocket(e.x, e.z, e.vx, 'opp:' + e.from, e.to === S.you ? me.st : null); sfx.rocket(); }
+  else if (e.t === 'kill') { const v = nameOfId(e.id || e.from), k = nameOfId(e.to); if (v) announceKill(v, k, false, e.to === S.you); }
   else if (e.t === 'oil') items.dropOil(e.x, e.z, 'opp');
   else if (e.t === 'bomb') items.dropMine(e.id, e.x, e.z, 'opp:' + e.from);
   else if (e.t === 'boom') blast(e.x, e.z, e.id, true);
   else if (e.t === 'hit') {
-    if (e.k === 'rocket') { if (e.to === S.you && me.st) { rocketBoom(me.st); me.st.knock(track, 8, 4); damageMe(30, ZONES_ROCKET); } items.rockets.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killRocket(x)); return; }
-    if (e.to === S.you && me.st) hitMe(); items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
+    if (e.k === 'rocket') { if (e.to === S.you && me.st) { rocketBoom(me.st); me.st.knock(track, 8, 4); damageMe(30, ZONES_ROCKET, e.from); } items.rockets.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killRocket(x)); return; }
+    if (e.to === S.you && me.st) hitMe(e.from); items.shots.filter((x) => x.owner === 'opp:' + e.from).forEach((x) => items.killShot(x));
   }
 }
 /** olej, miny, trafienia pocisków, losowanie paczek w solo — co klatkę */
@@ -1291,7 +1295,7 @@ function updateItems(dt) {
     for (const o of oppList()) {
       if (Math.abs(items.ds(sh.s, o.st.s)) < 3.2 && Math.abs(sh.d - o.st.d) < 1.9) {
         items.killShot(sh); sparks(o.st.x, o.st.y, o.st.z, 10); sfx.hit();
-        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; damageBot(o, 7, ZONES_SHOT); } else emitEvent({ t: 'hit', to: o.id });
+        if (o.bot) { o.st.slowT = 0.9; o.st.vf *= 0.95; damageBot(o, 7, ZONES_SHOT, 'me'); } else emitEvent({ t: 'hit', to: o.id });
         break;
       }
     }
@@ -1301,7 +1305,7 @@ function updateItems(dt) {
     for (const o of oppList()) {
       if (o.st.dead || Math.abs(items.ds(r.s, o.st.s)) > 3.8 || Math.abs(r.d - o.st.d) > 2.7) continue;
       items.killRocket(r); rocketBoom(o.st);
-      if (o.bot) { o.st.knock(track, 8, 4); damageBot(o, 30, ZONES_ROCKET); } else emitEvent({ t: 'hit', to: o.id, k: 'rocket' });
+      if (o.bot) { o.st.knock(track, 8, 4); damageBot(o, 30, ZONES_ROCKET, 'me'); } else emitEvent({ t: 'hit', to: o.id, k: 'rocket' });
       break;
     }
   }
@@ -1334,12 +1338,24 @@ function explodeAt(st) {
   for (let i = 0; i < 70; i++) { const a = Math.random() * 6.28, sp = 3 + Math.random() * 14; tmpC.setRGB(1, 0.3 + Math.random() * 0.5, 0.05); particles.emit(st.x, st.y + 0.8, st.z, Math.cos(a) * sp, 3 + Math.random() * 10, Math.sin(a) * sp, 0.8 + Math.random() * 0.6, 1.5, 6, tmpC, 0.9, 1.4, 4); }
   for (let i = 0; i < 24; i++) { const a = Math.random() * 6.28; tmpC.setRGB(0.12, 0.12, 0.14); particles.emit(st.x, st.y + 1, st.z, Math.cos(a) * 3, 2 + Math.random() * 4, Math.sin(a) * 3, 1.6, 1.3, 4, tmpC, 0.6, 1.2); }
 }
+// ---- eliminacje: wpis w czacie dla wszystkich, duży komunikat dla wyeliminowanego ----
+const nameOfId = (id) => (!id ? null : id === 'me' || id === S.you ? S.nick : opps.get(id)?.nick ?? S.room?.players.find((p) => p.id === id)?.nick ?? null);
+const ownerId = (owner) => (owner === 'me' ? 'me' : typeof owner === 'string' && owner.startsWith('opp:') ? owner.slice(4) : null);
+const killerOf = (c) => (c.lastBy && performance.now() - c.lastBy.t < 6000 && c.lastBy.id !== 'me' && c.lastBy.id !== c.id ? c.lastBy.id : null);
+let elimTimer = 0;
+function announceKill(victim, killer, victimIsMe, killerIsMe) {
+  chatAdd({ sys: true, kill: true, text: killer ? `${killer} wyeliminował ${victim}` : `${victim} rozbił się` });
+  if (victimIsMe) { const e = $('elim'); e.querySelector('small').textContent = killer ? 'Wyeliminowany' : 'Rozbity'; e.querySelector('b').textContent = killer ? `${killer} cię wyeliminował` : 'Rozbiłeś się'; e.classList.remove('hidden'); e.style.animation = 'none'; void e.offsetWidth; e.style.animation = ''; clearTimeout(elimTimer); elimTimer = setTimeout(() => e.classList.add('hidden'), 2600); }
+  else if (killerIsMe) toast(`Wyeliminowałeś ${victim}`, 1800);
+}
 /** obrażenia mojego auta; po wyzerowaniu hp auto wybucha i wraca na tor po chwili */
-function damageMe(dmg, zones) {
+function damageMe(dmg, zones, by = null) {
   if (!racingNow() || me.dead > 0 || me.inv > 0 || S.spectator || dmg <= 0) return;
+  if (by && by !== 'me') me.lastBy = { id: by, t: performance.now() };
   setHp(me.hp - dmg);
   if (zones) lostWheelMsg(me.st.hurt(zones, dmg * PART_K));
-  if (me.hp <= 0) { me.dead = DEAD_T; me.deathS = me.st.s; me.deathD = me.st.d; me.st.dead = 1; me.st.vf *= 0.3; me.st.vl = 0; explodeAt(me.st); if (me.vis) me.vis.group.visible = false; toast('Rozbity!', 900); }
+  if (me.hp <= 0) { me.dead = DEAD_T; me.deathS = me.st.s; me.deathD = me.st.d; me.st.dead = 1; me.st.vf *= 0.3; me.st.vl = 0; explodeAt(me.st); if (me.vis) me.vis.group.visible = false;
+    const kid = killerOf(me); announceKill(S.nick, nameOfId(kid), true, false); emitEvent({ t: 'kill', to: kid }); me.lastBy = null; }
 }
 function stepMe(dt) {
   const st = me.st;
@@ -1358,7 +1374,7 @@ function stepMe(dt) {
   if (wasAir && !st.air) { sfx.land(0.4 + Math.min(0.6, st.landHit / 12)); sparks(st.x, st.y, st.z, 8 + st.landHit * 2); }
   me.hitCd = (me.hitCd || 0) - dt;
   if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; damageMe((st.hit - 5) * 0.9, zonesWall(st)); }
-  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7, zonesCar(st, o.st)); } }
+  for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7, zonesCar(st, o.st), o.id); } }
   if (!racingNow()) return;
   if (!S.spectator) {
     const c = items.crateNear(st.s, st.d);

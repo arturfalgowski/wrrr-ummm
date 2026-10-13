@@ -625,3 +625,11 @@ body.spectating .hud-items { display: none !important; }
 #pod-labels .pl span { font-size: clamp(13px, 1.8vw, 18px); color: #ffe08a; font-variant-numeric: tabular-nums; font-weight: 700; }
 #pod-labels .pl.p1 b { color: #ffe08a; font-size: clamp(18px, 2.8vw, 28px); }
 #pod-labels .pl.me b::after { content: ' (Ty)'; color: #ffd9a0; font-weight: 700; }
+
+/* eliminacja: duży komunikat na ekranie wyeliminowanego, wpis w czacie dla wszystkich */
+#elim { position: absolute; left: 0; right: 0; top: 24%; text-align: center; pointer-events: none; animation: elimIn .35s cubic-bezier(.2,.9,.3,1.2) both; }
+#elim.hidden { display: none; }
+#elim small { display: block; font-size: clamp(14px, 2vw, 20px); letter-spacing: .3em; text-transform: uppercase; color: #ffb3a8; font-weight: 800; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+#elim b { display: inline-block; margin-top: 4px; padding: 6px 28px; font-size: clamp(30px, 5.4vw, 64px); font-weight: 900; font-style: italic; color: #fff; background: linear-gradient(90deg, rgba(200,30,30,0), rgba(200,30,30,.82) 18%, rgba(200,30,30,.82) 82%, rgba(200,30,30,0)); text-shadow: 0 4px 20px rgba(0,0,0,.6); }
+@keyframes elimIn { from { opacity: 0; transform: scale(1.35); } to { opacity: 1; transform: none; } }
+.chat .msg.kill { background: rgba(200,40,40,.5); color: #fff; font-style: normal; font-weight: 700; }

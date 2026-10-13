@@ -407,7 +407,7 @@ io.on('connection', (socket) => {
   // zdarzenia gry (strzał, olej, mina, wybuch, trafienie) — współrzędne toru (x = s, z = d) przekazywane pozostałym
   socket.on('game:event', (e) => {
     const r = rooms.get(socket.data.roomId);
-    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom', 'rocket'].includes(e.t)) return;
+    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom', 'rocket', 'kill'].includes(e.t)) return;
     const n = (v) => (Number.isFinite(v) ? v : 0);
     socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, k: e.k === 'rocket' ? 'rocket' : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
   });
