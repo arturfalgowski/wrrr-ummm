@@ -134,17 +134,17 @@ export const THEMES3D = {
   },
   jesien: {
     name: 'Kanada', ground: ['#8a6a38', '#b0803c', '#6a5428'], asphalt: '#403d46', centerLine: 'rgba(255,214,120,0.9)', slab: 0x8b857a, kerb: [0xd2531e, 0xf4efe6], barrier: ['#b8431a', '#f2e8d5'], barrierCap: 0x6b4a33, cpColor: 0xffa23a,
-    startPhase: 0.08, balloons: 2, birds: 14, relief: 7, groundBelow: true, tunnel: 0x6f6a62, portal: 0x8a8478, bridge: 0x7a5a3a,
+    startPhase: 0.08, balloons: 2, birds: 14, relief: 7, groundBelow: true, bridge: 0x7a5a3a,
     decor(world, ctx) { autumnTrees(ctx, 90); pines(ctx, 110); rocks(ctx, 60, 0x8c8a86, { scale: [1, 5] }); cabins(ctx, 9); ringMountains(ctx, 22, 0x6b5a48, 0xe9e5dc, { r0: 900, r1: 2100, h: [120, 380] }); },
   },
   alpy: {
     name: 'Alpy (Szwajcaria)', ground: ['#e8eef6', '#ffffff', '#c4d0e0'], asphalt: '#3d4150', centerLine: 'rgba(245,243,250,0.85)', slab: 0x9aa2b0, kerb: [0x2a6bd6, 0xf5f2ee], barrier: ['#2f6bd6', '#f5f2ee'], barrierCap: 0xc4d0e0, cpColor: 0x7aa8ff,
-    startPhase: 0.15, balloons: 2, birds: 8, relief: 16, tunnel: 0x8a909c,
+    startPhase: 0.15, balloons: 2, birds: 8, relief: 16,
     decor(world, ctx) { pines(ctx, 300, { snow: true }); rocks(ctx, 90, 0x9aa2b2, { scale: [1, 6] }); ringMountains(ctx, 34, 0x6f7f95, 0xffffff, { r0: 500, r1: 1900, h: [180, 520] }); },
   },
   egipt: {
     name: 'Egipt', ground: ['#d9b878', '#ecd29a', '#b88e52'], asphalt: '#5a5460', centerLine: 'rgba(255,240,200,0.9)', slab: 0xc9a566, kerb: [0xd9a02e, 0xf2e6c4], barrier: ['#c8452e', '#f2ead8'], barrierCap: 0x8a6a44, cpColor: 0xffd25a,
-    startPhase: 0.36, balloons: 5, birds: 6, relief: 5, groundBelow: true, sandRoad: '#7a4a28', tunnel: 0xb99a66, portal: 0xd8c08a, bridge: 0xb8955a,
+    startPhase: 0.36, balloons: 5, birds: 6, relief: 5, groundBelow: true, sandRoad: '#7a4a28', bridge: 0xb8955a,
     decor(world, ctx) { palms(ctx, 150); rocks(ctx, 70, 0xc09270, { scale: [1, 5] }); pyramids(ctx, 10); dunes(ctx, 40); },
   },
   tropiki: {

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { HW, DS } from './track3d.js';
+import { DS } from './track3d.js';
 import { THEMES3D, skyAt } from './themes3d.js';
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -17,14 +17,15 @@ function canvasTex(w, h, draw, { repeat = null, aniso = 8 } = {}) {
 function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = null, from = 0, to = track.N - 1, info = null } = {}) {
   const pos = [], uv = [], col = [], idx = [], inf = []; let n = 0; const c = new THREE.Color();
   const hf = typeof h === 'function' ? h : () => h;
+  const A = (k) => (typeof offA === 'function' ? offA(k) : offA), B = (k) => (typeof offB === 'function' ? offB(k) : offB);
   for (let i = from; i < to; i++) {
     if (!pred(i) || !track.surf[i] || !track.surf[i + 1]) continue;
-    const quad = [[i, offA, 0], [i, offB, 1], [i + 1, offB, 1], [i + 1, offA, 0]];
+    const quad = [[i, A(i), 0], [i, B(i), 1], [i + 1, B(i + 1), 1], [i + 1, A(i + 1), 0]];
     for (const [k, off, u] of quad) {
       const hh = hf(k);
       pos.push(track.px[k] + track.rx[k] * off + track.ux[k] * hh, track.py[k] + track.ry[k] * off + track.uy[k] * hh, track.pz[k] + track.rz[k] * off + track.uz[k] * hh);
       uv.push(u, k * DS / vScale);
-      if (info) inf.push(info(k), off, k * DS); // pokrycie, odległość boczna [m], odległość wzdłuż toru [m]
+      if (info) inf.push(info(k), off, k * DS, track.hwArr[k]); // pokrycie, odległość boczna [m], odległość wzdłuż toru [m], połowa szerokości [m]
       if (color) { color(i, c); col.push(c.r, c.g, c.b); }
     }
     idx.push(n, n + 1, n + 2, n, n + 2, n + 3); n += 4;
@@ -32,16 +33,16 @@ function ribbon(track, offA, offB, h, { pred = () => true, vScale = 8, color = n
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   if (color) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  if (info) g.setAttribute('aInfo', new THREE.Float32BufferAttribute(inf, 3));
+  if (info) g.setAttribute('aInfo', new THREE.Float32BufferAttribute(inf, 4));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 /** Pionowa ściana wzdłuż toru (po normalnej U) na offsecie bocznym off od h0 do h1. */
 function wallStrip(track, off, h0, h1, { pred = () => true, uScale = 4 } = {}) {
-  const pos = [], uv = [], idx = []; let n = 0;
+  const pos = [], uv = [], idx = []; let n = 0; const O = (k) => (typeof off === 'function' ? off(k) : off);
   for (let i = 0; i < track.N - 1; i++) {
     if (!pred(i) || !track.surf[i] || !track.surf[i + 1]) continue;
     for (const [k, hh, v] of [[i, h0, 0], [i, h1, 1], [i + 1, h1, 1], [i + 1, h0, 0]]) {
-      pos.push(track.px[k] + track.rx[k] * off + track.ux[k] * hh, track.py[k] + track.ry[k] * off + track.uy[k] * hh, track.pz[k] + track.rz[k] * off + track.uz[k] * hh);
+      const of = O(k); pos.push(track.px[k] + track.rx[k] * of + track.ux[k] * hh, track.py[k] + track.ry[k] * of + track.uy[k] * hh, track.pz[k] + track.rz[k] * of + track.uz[k] * hh);
       uv.push(k * DS / uScale, v);
     }
     idx.push(n, n + 1, n + 2, n, n + 2, n + 3); n += 4;
@@ -142,15 +143,15 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), groundMat);
   ground.rotation.x = -Math.PI / 2; ground.position.set(cx, T.water ? groundY : groundY - 0.15, cz); ground.receiveShadow = true; root.add(ground);
 
-  // ---------- teren: pagórki wokół toru, nasypy, doliny pod mostami, wzgórza nad tunelami ----------
-  const CELL = 5, RAD = 150, MG = 300, BR_H = 17, TUN_H = 11.5;
+  // ---------- teren: pagórki wokół toru, nasypy, doliny pod mostami ----------
+  const CELL = 5, RAD = 150, MG = 300, BR_H = 17;
   const gb = { x0: track.bounds.minX - MG, x1: track.bounds.maxX + MG, z0: track.bounds.minZ - MG, z1: track.bounds.maxZ + MG };
   const gw = Math.ceil((gb.x1 - gb.x0) / CELL) + 1, gh = Math.ceil((gb.z1 - gb.z0) / CELL) + 1, nS = N - 1;
   const dist = new Float32Array(gw * gh).fill(1e3), near = new Int32Array(gw * gh).fill(-1);
-  // podłoże każdego odcinka toru (pod mostem dolina, nad tunelem wzgórze) i średnia ważona odległością z okolicznych odcinków:
+  // podłoże każdego odcinka toru (pod mostem dolina) i średnia ważona odległością z okolicznych odcinków:
   // dzięki niej między piętrami serpentyn (różne wysokości) teren przechodzi łagodnie, zamiast tworzyć klify
   const bedC = new Float32Array(nS), sumW = new Float32Array(gw * gh), sumB = new Float32Array(gw * gh);
-  for (let i = 0; i < nS; i++) { const b0 = track.py[i] - 0.8 - track.bridgeK[i] * BR_H; bedC[i] = b0 + track.tunnelT[i] * (track.py[i] + TUN_H - b0); }
+  for (let i = 0; i < nS; i++) bedC[i] = track.py[i] - 0.8 - track.bridgeK[i] * BR_H;
   { const rr = Math.ceil(RAD / CELL);
     for (let i = 0; i < nS; i++) {
       const ci = Math.round((track.px[i] - gb.x0) / CELL), cj = Math.round((track.pz[i] - gb.z0) / CELL);
@@ -170,20 +171,19 @@ export function buildWorld3D(scene, renderer, track, themeId) {
     const k = a * gw + b, x = gb.x0 + b * CELL, z = gb.z0 + a * CELL, i = near[k], bh = baseH(x, z);
     if (i < 0) { H[k] = bh; continue; }
     const d = dist[k], side = Math.sign((x - track.px[i]) * track.rx[i] + (z - track.pz[i]) * track.rz[i]) || 1;
-    const lat = Math.max(-HW - 1, Math.min(HW + 1, side * d));
-    const roadY = track.py[i] + track.ry[i] * lat, tk = 0; // wzgórze nad tunelem to osobny kopiec (nie siatka terenu) — teren nie zakrywa jezdni
+    const hwI = track.hwArr[i], lat = Math.max(-hwI - 1, Math.min(hwI + 1, side * d));
+    const roadY = track.py[i] + track.ry[i] * lat;
     let bed = roadY - 0.8 - track.bridgeK[i] * BR_H;
-    bed += tk * (track.py[i] + TUN_H - bed);
     const near0 = Math.min(i, nS - i), flat = near0 < 140 ? 38 : 0;
-    const avg = sumW[k] > 0 ? sumB[k] / sumW[k] : bed, mix = sstep(clamp01((d - (HW + 3) - flat - tk * 12) / 40));
-    const away = Math.max(0, d - (HW + 3) - flat - tk * 12); // ile metrów od pasa płaskiego przy jezdni
+    const avg = sumW[k] > 0 ? sumB[k] / sumW[k] : bed, mix = sstep(clamp01((d - (hwI + 3) - flat) / 40));
+    const away = Math.max(0, d - (hwI + 3) - flat); // ile metrów od pasa płaskiego przy jezdni
     bed = bed + Math.max(-away * 0.5, Math.min(away * 0.3, (avg - bed) * mix)); // tuż przy jezdni jej podłoże, dalej średnia z okolicy, ale zbocze nie rośnie stromiej niż ~17° (nie zasłania toru)
-    const t = clamp01((d - (HW + 3) - flat - tk * 12) / (34 + 1.5 * Math.abs(bed - bh)));
+    const t = clamp01((d - (hwI + 3) - flat) / (34 + 1.5 * Math.abs(bed - bh)));
     H[k] = bed + (bh - bed) * sstep(t);
   }
   for (let pass = 0; pass < 2; pass++) { // wygładzenie szwów między sąsiednimi odcinkami toru (nie rusza podłoża jezdni)
     const o = H.slice();
-    for (let a = 1; a < gh - 1; a++) for (let b = 1; b < gw - 1; b++) { const k = a * gw + b; if (dist[k] < HW + 7) continue; o[k] = (H[k] * 4 + H[k - 1] + H[k + 1] + H[k - gw] + H[k + gw]) / 8; }
+    for (let a = 1; a < gh - 1; a++) for (let b = 1; b < gw - 1; b++) { const k = a * gw + b; if (dist[k] < track.hwMax + 7) continue; o[k] = (H[k] * 4 + H[k - 1] + H[k + 1] + H[k - gw] + H[k + gw]) / 8; }
     H.set(o);
   }
   const hAt = (x, z) => {
@@ -199,7 +199,7 @@ export function buildWorld3D(scene, renderer, track, themeId) {
       const k = a * gw + b, x = gb.x0 + b * CELL, z = gb.z0 + a * CELL, h = H[k];
       pos.set([x, h, z], k * 3); uv.set([(x - gb.x0) / 34.6, (z - gb.z0) / 34.6], k * 2);
       if (T.water) { if (h < groundY - 0.2) c.copy(deep).lerp(sand, clamp01((h - groundY + 6) / 6)); else c.copy(sand).lerp(grass, clamp01((h - groundY - 1.2) / 3)); }
-      else { const v = dist[k] < HW + 8 ? 0.82 : 1; c.setScalar(v * (0.9 + 0.1 * Math.sin(x * 0.07) * Math.cos(z * 0.06))); }
+      else { const v = near[k] >= 0 && dist[k] < track.hwArr[near[k]] + 8 ? 0.82 : 1; c.setScalar(v * (0.9 + 0.1 * Math.sin(x * 0.07) * Math.cos(z * 0.06))); }
       col.set([c.r, c.g, c.b], k * 3);
       if (a < gh - 1 && b < gw - 1) idx.push(k, k + gw, k + 1, k + 1, k + gw, k + gw + 1);
     }
@@ -214,21 +214,23 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   // ---------- jezdnia ----------
   // asfalt na całej długości; piasek i kostka to nakładki z nieregularną krawędzią (szum w shaderze): piasek „wysypany” na asfalt
   world.roadMats = [];
-  const road = new THREE.Mesh(ribbon(track, -HW, HW, 0.02, { vScale: 32 }), new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt, T.centerLine), roughness: 0.86, side: THREE.DoubleSide }));
+  const hwf = (k) => track.hwArr[k], nhwf = (k) => -track.hwArr[k];
+  const road = new THREE.Mesh(ribbon(track, nhwf, hwf, 0.02, { vScale: 32 }), new THREE.MeshStandardMaterial({ map: asphaltTexture(T.asphalt, T.centerLine), roughness: 0.86, side: THREE.DoubleSide }));
   road.receiveShadow = true; root.add(road); world.roadMats.push(road.material); world.asphaltMat = road.material;
   const overlay = (cov, mk, rough, vs, mode) => {
     if (!cov.some((v) => v > 0.004)) return;
-    const mat = new THREE.MeshStandardMaterial({ map: mk(), roughness: rough, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const tex = mk(); tex.repeat.set(1.5, 1); // jezdnia jest szersza niż dawniej — kamienie i piasek bez rozciągania
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: rough, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     mat.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aInfo;\nvarying vec3 vInfo;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvInfo = aInfo;');
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aInfo;\nvarying vec4 vInfo;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvInfo = aInfo;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-        varying vec3 vInfo;
+        varying vec4 vInfo;
         float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vnz(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
         float fbmz(vec2 p) { return 0.5 * vnz(p) + 0.25 * vnz(p * 2.1) + 0.125 * vnz(p * 4.3) + 0.0625 * vnz(p * 8.9); }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
         { float cov = vInfo.x; vec2 q = vec2(vInfo.y, vInfo.z);
-          float edge = pow(abs(vInfo.y) / ${HW.toFixed(1)}, 2.0) * 0.22 * smoothstep(0.0, 0.18, cov);
+          float edge = pow(abs(vInfo.y) / vInfo.w, 2.0) * 0.22 * smoothstep(0.0, 0.18, cov);
           ${mode === 'sand'
             ? 'float n = fbmz(vec2(q.x * 0.22, q.y * 0.075) + 3.7) * 0.75 + vnz(q * 1.9) * 0.25; float v = cov * 1.12 + edge - n * 0.82;'
             : 'vec2 cell = floor(vec2(q.x * 0.9, q.y * 0.9)); float n = h21(cell) * 0.55 + fbmz(vec2(q.x * 0.3, q.y * 0.14) + 9.1) * 0.45; float v = cov * 1.2 + edge - n * 0.9;'}
@@ -236,20 +238,20 @@ export function buildWorld3D(scene, renderer, track, themeId) {
           diffuseColor.a *= a; }`);
     };
     mat.customProgramCacheKey = () => 'roadov-' + mode;
-    const m = new THREE.Mesh(ribbon(track, -HW, HW, 0.03, { vScale: vs, pred: (i) => cov[i] > 0.004 || cov[i + 1] > 0.004, info: (k) => cov[k] }), mat);
+    const m = new THREE.Mesh(ribbon(track, nhwf, hwf, 0.03, { vScale: vs, pred: (i) => cov[i] > 0.004 || cov[i + 1] > 0.004, info: (k) => cov[k] }), mat);
     m.receiveShadow = true; m.renderOrder = 1; root.add(m); world.roadMats.push(mat);
   };
   overlay(track.covCob, () => cobbleTexture(T), 0.8, 16, 'cobble');
   overlay(track.covSand, () => sandTexture(T), 0.95, 32, 'sand');
   // bryła pod jezdnią (grubość) i boki
   const concrete = new THREE.MeshStandardMaterial({ color: T.slab, roughness: 0.9, side: THREE.DoubleSide });
-  const under = new THREE.Mesh(ribbon(track, -HW - 0.5, HW + 0.5, -1.5), concrete);
-  const sideL = new THREE.Mesh(wallStrip(track, -HW - 0.5, -1.5, 0.02), concrete), sideR = new THREE.Mesh(wallStrip(track, HW + 0.5, -1.5, 0.02), concrete);
+  const under = new THREE.Mesh(ribbon(track, (k) => -hwf(k) - 0.5, (k) => hwf(k) + 0.5, -1.5), concrete);
+  const sideL = new THREE.Mesh(wallStrip(track, (k) => -hwf(k) - 0.5, -1.5, 0.02), concrete), sideR = new THREE.Mesh(wallStrip(track, (k) => hwf(k) + 0.5, -1.5, 0.02), concrete);
   for (const m of [under, sideL, sideR]) { m.castShadow = true; m.receiveShadow = true; root.add(m); }
   // krawężniki (czerwono-białe lub w kolorach motywu) i górne krawędzie
   const kerbCol = (i, c) => c.set(Math.floor(i / 4) % 2 ? T.kerb[0] : T.kerb[1]);
   for (const sd of [-1, 1]) {
-    const k = new THREE.Mesh(ribbon(track, sd > 0 ? HW - 0.05 : -HW - 0.55, sd > 0 ? HW + 0.55 : -HW + 0.05, 0.04, { color: kerbCol }), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, emissive: T.neon ? 0x222244 : 0x000000, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const k = new THREE.Mesh(ribbon(track, (k) => (sd > 0 ? hwf(k) - 0.05 : -hwf(k) - 0.55), (k) => (sd > 0 ? hwf(k) + 0.55 : -hwf(k) + 0.05), 0.04, { color: kerbCol }), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, emissive: T.neon ? 0x222244 : 0x000000, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     k.receiveShadow = true; root.add(k);
   }
   // bandy po bokach (tam, gdzie są)
@@ -257,8 +259,8 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   const bMat = new THREE.MeshStandardMaterial({ map: bTex, roughness: 0.7, side: THREE.DoubleSide, emissive: T.neon ? T.neonColor : 0x000000, emissiveIntensity: T.neon ? 0.35 : 0 });
   const capMat = new THREE.MeshStandardMaterial({ color: T.barrierCap, roughness: 0.5, side: THREE.DoubleSide, emissive: T.neon ? T.neonColor : 0x000000, emissiveIntensity: T.neon ? 1.6 : 0 });
   for (const sd of [-1, 1]) {
-    const wm = new THREE.Mesh(wallStrip(track, sd * (HW + 0.3), 0, 1.15, { pred: (i) => track.wall[i] === 1, uScale: 4 }), bMat); wm.castShadow = true; root.add(wm);
-    const cap = new THREE.Mesh(ribbon(track, sd > 0 ? HW + 0.3 : -HW - 0.7, sd > 0 ? HW + 0.7 : -HW - 0.3, 1.15, { pred: (i) => track.wall[i] === 1 }), capMat); root.add(cap);
+    const wm = new THREE.Mesh(wallStrip(track, (k) => sd * (hwf(k) + 0.3), 0, 1.15, { pred: (i) => track.wall[i] === 1, uScale: 4 }), bMat); wm.castShadow = true; root.add(wm);
+    const cap = new THREE.Mesh(ribbon(track, (k) => (sd > 0 ? hwf(k) + 0.3 : -hwf(k) - 0.7), (k) => (sd > 0 ? hwf(k) + 0.7 : -hwf(k) - 0.3), 1.15, { pred: (i) => track.wall[i] === 1 }), capMat); root.add(cap);
   }
 
   // ---------- podgląd toru z góry (menu): szeroka świecąca wstęga, widoczna z dużej odległości ----------
@@ -293,11 +295,11 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   const steel = new THREE.MeshStandardMaterial({ color: 0xdfe3ec, metalness: 0.5, roughness: 0.35 });
   const gate = (s, label, bg, fg) => {
     const g = new THREE.Group(); g.matrixAutoUpdate = false; g.matrix.copy(frame(s));
-    const w = HW + 2.2;
+    const w = hwf(0) + 2.2;
     for (const z of [-w, w]) { const p = new THREE.Mesh(new THREE.BoxGeometry(1, 9.4, 1), steel); p.position.set(0, 4.7, z); p.castShadow = true; g.add(p); }
     const beam = new THREE.Mesh(new THREE.BoxGeometry(2, 2.6, w * 2 + 1), [steel, steel, steel, steel, new THREE.MeshStandardMaterial({ map: textTex(label, bg, fg, 512, 128), roughness: 0.5, emissive: 0xffffff, emissiveMap: textTex(label, bg, fg, 512, 128), emissiveIntensity: 0.25 }), new THREE.MeshStandardMaterial({ map: textTex(label, bg, fg, 512, 128), roughness: 0.5 })]);
     beam.position.set(0, 9.8, 0); beam.castShadow = true; g.add(beam);
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(3, HW * 2), new THREE.MeshStandardMaterial({ map: checkerTex(2, 8), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }));
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(3, hwf(0) * 2), new THREE.MeshStandardMaterial({ map: checkerTex(2, 8), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }));
     line.rotation.x = -Math.PI / 2; line.position.set(0, 0.07, 0); g.add(line); // 3 m wzdłuż toru, szerokość jezdni w poprzek
     root.add(g);
   };
@@ -306,52 +308,14 @@ export function buildWorld3D(scene, renderer, track, themeId) {
   if (track.bridges.length) {
     const steel2 = new THREE.MeshStandardMaterial({ color: T.bridge ?? 0x7f8794, roughness: 0.6, metalness: 0.35, side: THREE.DoubleSide });
     const on = (i) => track.bridgeK[i] > 0.06;
-    for (const m of [new THREE.Mesh(ribbon(track, -HW - 0.5, HW + 0.5, -3.4, { pred: on }), steel2), new THREE.Mesh(wallStrip(track, -HW - 0.5, -3.4, -1.5, { pred: on }), steel2), new THREE.Mesh(wallStrip(track, HW + 0.5, -3.4, -1.5, { pred: on }), steel2)]) { m.castShadow = true; m.receiveShadow = true; root.add(m); }
+    for (const m of [new THREE.Mesh(ribbon(track, (k) => -hwf(k) - 0.5, (k) => hwf(k) + 0.5, -3.4, { pred: on }), steel2), new THREE.Mesh(wallStrip(track, (k) => -hwf(k) - 0.5, -3.4, -1.5, { pred: on }), steel2), new THREE.Mesh(wallStrip(track, (k) => hwf(k) + 0.5, -3.4, -1.5, { pred: on }), steel2)]) { m.castShadow = true; m.receiveShadow = true; root.add(m); }
     const list = [];
-    for (let i = 8; i < nS; i += 16) { if (track.bridgeK[i] < 0.3) continue; for (const lat of [-5, 5]) { const x = track.px[i] + track.rx[i] * lat, z = track.pz[i] + track.rz[i] * lat, top = track.py[i] + track.ry[i] * lat - 3.4, bot = hAt(x, z) - 1; if (top - bot > 2) list.push([x, z, top, top - bot]); } }
+    for (let i = 8; i < nS; i += 16) { if (track.bridgeK[i] < 0.3) continue; for (const lat of [-hwf(i) * 0.55, hwf(i) * 0.55]) { const x = track.px[i] + track.rx[i] * lat, z = track.pz[i] + track.rz[i] * lat, top = track.py[i] + track.ry[i] * lat - 3.4, bot = hAt(x, z) - 1; if (top - bot > 2) list.push([x, z, top, top - bot]); } }
     if (list.length) {
       const im = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.9, 1.15, 1, 10), steel2, list.length), m4b = new THREE.Matrix4(), qb = new THREE.Quaternion(), vb = new THREE.Vector3(), sb = new THREE.Vector3();
       list.forEach(([x, z, top, h], i) => im.setMatrixAt(i, m4b.compose(vb.set(x, top - h / 2, z), qb, sb.set(1, h, 1))));
       im.castShadow = true; im.receiveShadow = true; root.add(im);
     }
-  }
-  // ---------- tunele: łuk betonowy, światła i portale ----------
-  if (track.tunnels.length) {
-    const RT = 9.8, SEG = 14, shellMat = new THREE.MeshStandardMaterial({ color: T.tunnel ?? 0x7a7e8a, emissive: T.neon ? 0x2e2870 : 0x2c2f38, emissiveIntensity: 1, roughness: 0.85, side: THREE.DoubleSide });
-    const portalMat = new THREE.MeshStandardMaterial({ color: T.portal ?? 0xb9bcc6, roughness: 0.8, side: THREE.DoubleSide });
-    const archPt = (i, r, th, out) => { const c = Math.cos(th) * r, u = Math.sin(th) * r; out.push(track.px[i] + track.rx[i] * c + track.ux[i] * u, track.py[i] + track.ry[i] * c + track.uy[i] * u, track.pz[i] + track.rz[i] * c + track.uz[i] * u); };
-    const lightList = [];
-    for (const { i0, i1 } of track.tunnels) {
-      const a = Math.max(0, i0 - 7), bI = Math.min(nS, i1 + 7), pos = [], idx = []; let n0 = 0;
-      for (let i = a; i <= bI; i += 2) { for (let k = 0; k <= SEG; k++) archPt(i, RT, (k / SEG) * Math.PI, pos); n0++; }
-      for (let r = 0; r < n0 - 1; r++) for (let k = 0; k < SEG; k++) { const p = r * (SEG + 1) + k, q = p + SEG + 1; idx.push(p, q, p + 1, p + 1, q, q + 1); }
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); root.add(new THREE.Mesh(g, shellMat));
-      // kopiec ziemi nad rurą (siatka o gęstości niezależnej od terenu) i betonowe ściany czołowe z otworem na portal
-      {
-        const W = 22, PL = 9.5, TOPH = 11.8, LAT = []; for (let l = -W; l <= W + 0.01; l += 2.2) LAT.push(l);
-        const smf = (lat) => { const t = Math.min(1, Math.max(0, (Math.abs(lat) - PL) / (W - PL))); return 1 - t * t * (3 - 2 * t); };
-        const pt = (i, lat) => { const x = track.px[i] + track.rx[i] * lat, z = track.pz[i] + track.rz[i] * lat, base = hAt(x, z) - 0.3, top = Math.max(base, track.py[i] + TOPH); return [x, base + (top - base) * smf(lat), z]; };
-        const mp = [], mc = [], mu = [], mi = []; let rows = 0;
-        for (let i = a; i <= bI; i += 2) { for (const lat of LAT) { const p = pt(i, lat); mp.push(...p); mu.push(p[0] / 34.6, p[2] / 34.6); const sh = 0.86 + 0.14 * smf(lat); mc.push(sh, sh, sh); } rows++; }
-        for (let r = 0; r < rows - 1; r++) for (let k = 0; k < LAT.length - 1; k++) { const p = r * LAT.length + k, q = p + LAT.length; mi.push(p, p + 1, q, p + 1, q + 1, q); }
-        const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3)); mg.setAttribute('uv', new THREE.Float32BufferAttribute(mu, 2)); mg.setAttribute('color', new THREE.Float32BufferAttribute(mc, 3)); mg.setIndex(mi); mg.computeVertexNormals();
-        const mound = new THREE.Mesh(mg, world.terrain.material); mound.receiveShadow = true; root.add(mound);
-        for (const i of [a, bI]) {
-          const sh = new THREE.Shape(); sh.moveTo(-W, -3);
-          for (const lat of LAT) sh.lineTo(lat, pt(i, lat)[1] - track.py[i]);
-          sh.lineTo(W, -3); sh.closePath();
-          const hole = new THREE.Path(); hole.moveTo(RT, 0); for (let k = 1; k <= SEG * 2; k++) { const th = (k / (SEG * 2)) * Math.PI; hole.lineTo(Math.cos(th) * RT, Math.sin(th) * RT); } hole.closePath(); sh.holes.push(hole);
-          const wg = new THREE.ShapeGeometry(sh), pos = wg.attributes.position;
-          for (let k = 0; k < pos.count; k++) { const x = pos.getX(k), y = pos.getY(k); pos.setXYZ(k, track.px[i] + track.rx[i] * x + track.ux[i] * y, track.py[i] + track.ry[i] * x + track.uy[i] * y, track.pz[i] + track.rz[i] * x + track.uz[i] * y); }
-          wg.computeVertexNormals(); root.add(new THREE.Mesh(wg, portalMat));
-        }
-      }
-      for (let i = i0 - 2; i <= i1 + 2; i += 10) lightList.push(i);
-    }
-    const lm = new THREE.MeshStandardMaterial({ color: T.neon ? 0xbff9ff : 0xfff2cc, emissive: T.neon ? 0x25f4ff : 0xffe9b0, emissiveIntensity: 2.4 });
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.22, 3.2), lm, lightList.length * 2), m4l = new THREE.Matrix4(), bm = new THREE.Matrix4(); let li = 0;
-    for (const i of lightList) for (const th of [Math.PI * 0.32, Math.PI * 0.68]) { const o = []; archPt(i, RT - 0.25, th, o); bm.makeBasis(new THREE.Vector3(track.tx[i], track.ty[i], track.tz[i]), new THREE.Vector3(track.ux[i], track.uy[i], track.uz[i]), new THREE.Vector3(track.rx[i], track.ry[i], track.rz[i])); bm.setPosition(o[0], o[1], o[2]); im.setMatrixAt(li++, bm.multiply(m4l.makeRotationX(Math.atan2(-Math.cos(th), -Math.sin(th))))); }
-    root.add(im);
   }
   const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(1, 1, 1), eul = new THREE.Euler();
   const distAt = (x, z) => { const b = Math.round((x - gb.x0) / CELL), a = Math.round((z - gb.z0) / CELL); return b < 0 || a < 0 || b >= gw || a >= gh ? 1e3 : dist[a * gw + b]; };

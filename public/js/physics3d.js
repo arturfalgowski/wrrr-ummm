@@ -1,7 +1,6 @@
 // Fizyka auta na torze 3D (styl TrackMania): jazda po powierzchni w współrzędnych toru (s, d), lot balistyczny po skoku,
 // grawitacja na zboczach i pętlach, ściany po bokach, zderzenia aut.
 import * as THREE from 'three';
-import { HW } from './track3d.js';
 
 const G = 24, GSLOPE = 0.6;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -153,7 +152,7 @@ export class CarState {
     const f2 = track.at(this.s, this._f);
     this.wallContact = false;
     if (f2.wall) {
-      const lim = HW - 1.0;
+      const lim = f2.hw - 1.0;
       if (Math.abs(this.d) > lim) {
         const side = Math.sign(this.d); this.d = side * lim;
         vt = this.vf * Math.cos(this.phi) - this.vl * Math.sin(this.phi); vr = this.vf * Math.sin(this.phi) + this.vl * Math.cos(this.phi);
@@ -166,7 +165,7 @@ export class CarState {
         this.wallContact = true;
         this.phi += wrap(0 - this.phi) * Math.min(1, 5 * h); // kierowanie wzdłuż ściany
       }
-    } else if (Math.abs(this.d) > HW + 0.4) { this._detach(track, f2); return; }
+    } else if (Math.abs(this.d) > f2.hw + 0.4) { this._detach(track, f2); return; }
     // oderwanie od powierzchni (kulminacja wzgórza, rampa) — warunek siły nacisku
     const sp2 = Math.hypot(this.vf, this.vl);
     if (sp2 > 9 && sp2 * sp2 * f2.ku + G * f2.uy < -1.5) this._detach(track, f2);
@@ -190,14 +189,14 @@ export class CarState {
     const nr = track.nearest(P.x, P.y, P.z, this.s, 25, 160);
     const f = track.at(nr.s, this._f);
     // niewidzialna ściana nad bandą: auto nie wylatuje poza tor
-    if (Math.abs(nr.d) > HW - 0.9 && nr.h < 8 && nr.h > -3) {
-      const side = Math.sign(nr.d), over = nr.d - side * (HW - 0.9);
-      P.x -= f.rx * over; P.y -= f.ry * over; P.z -= f.rz * over; nr.d = side * (HW - 0.9);
+    if (Math.abs(nr.d) > f.hw - 0.9 && nr.h < 8 && nr.h > -3) {
+      const side = Math.sign(nr.d), over = nr.d - side * (f.hw - 0.9);
+      P.x -= f.rx * over; P.y -= f.ry * over; P.z -= f.rz * over; nr.d = side * (f.hw - 0.9);
       const vo = (V.x * f.rx + V.y * f.ry + V.z * f.rz) * side;
       if (vo > 0) { V.x -= f.rx * vo * side * 1.3; V.y -= f.ry * vo * side * 1.3; V.z -= f.rz * vo * side * 1.3; this.hit = Math.max(this.hit, vo * 0.6); }
     }
     const vn = V.x * f.ux + V.y * f.uy + V.z * f.uz;
-    if (this.airT > 0.12 && nr.surf && Math.abs(nr.d) < HW + 0.6 && nr.h <= 0.2 && nr.h > -3.5 && vn < -0.5) {
+    if (this.airT > 0.12 && nr.surf && Math.abs(nr.d) < f.hw + 0.6 && nr.h <= 0.2 && nr.h > -3.5 && vn < -0.5) {
       // dotyk: wyznacz kurs względem toru z orientacji auta
       _v1.set(1, 0, 0).applyQuaternion(this.quat);
       const fT = _v1.x * f.tx + _v1.y * f.ty + _v1.z * f.tz, fR = _v1.x * f.rx + _v1.y * f.ry + _v1.z * f.rz;
@@ -205,7 +204,7 @@ export class CarState {
       const c = Math.cos(this.phi), sn = Math.sin(this.phi);
       const vt = V.x * f.tx + V.y * f.ty + V.z * f.tz, vr = V.x * f.rx + V.y * f.ry + V.z * f.rz;
       this.vf = vt * c + vr * sn; this.vl = -vt * sn + vr * c;
-      this.s = nr.s; this.d = clamp(nr.d, -HW, HW); this.air = false;
+      this.s = nr.s; this.d = clamp(nr.d, -f.hw, f.hw); this.air = false;
       this.landHit = Math.max(0, -vn - 7) * 1.1;
       this.hit = Math.max(this.hit, Math.max(0, -vn - 5));
       return;
@@ -281,7 +280,7 @@ export function carVsCar(me, opp, track) {
       dx /= dist; dy /= dist; dz /= dist;
       const pen = 2 * COL_R - dist;
       const nt = dx * f.tx + dy * f.ty + dz * f.tz, nr = dx * f.rx + dy * f.ry + dz * f.rz;
-      me.s += pen * 0.55 * nt; me.d = clamp(me.d + pen * 0.55 * nr, -HW + 1, HW - 1);
+      me.s += pen * 0.55 * nt; me.d = clamp(me.d + pen * 0.55 * nr, -f.hw + 1, f.hw - 1);
       const rel = (me.vx - opp.vx) * dx + (me.vy - opp.vy) * dy + (me.vz - opp.vz) * dz;
       if (rel < 0) {
         const j = -(1 + 0.4) * rel * 0.5;

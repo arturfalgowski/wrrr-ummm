@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import { TRACK_DEFS, TRACK_IDS, buildTrack } from './tracks3d.js';
 import { CarState, CAR_DEFS, CAR_COLORS, stripeFor, carVsCar, botInput } from './physics3d.js';
-import { HW } from './track3d.js';
 import { buildCar } from './car.js';
 import { buildWorld3D } from './world3d.js';
 import { Items3D, ITEM_TYPES } from './items3d.js';
@@ -847,8 +846,8 @@ function spawnWheelDebris(c, i) {
 function updateDebris(dt) {
   for (let k = debris.length - 1; k >= 0; k--) {
     const d = debris[k], p = d.m.position; d.life -= dt; d.v.y -= 24 * dt; p.addScaledVector(d.v, dt);
-    const nr = track.nearest(p.x, p.y, p.z, d.s, 60, 80); d.s = nr.s; const f = track.at(nr.s, {}), sy = f.py + f.ry * clamp(nr.d, -HW, HW);
-    if (p.y < sy + 0.56 && Math.abs(nr.d) < HW + 1) { if (d.v.y < -2) sfx.bounce(Math.min(1, -d.v.y / 14)); p.y = sy + 0.56; d.v.y = Math.abs(d.v.y) > 2 ? -d.v.y * 0.42 : 0; d.v.x *= 0.985; d.v.z *= 0.985; }
+    const nr = track.nearest(p.x, p.y, p.z, d.s, 60, 80); d.s = nr.s; const f = track.at(nr.s, {}), sy = f.py + f.ry * clamp(nr.d, -f.hw, f.hw);
+    if (p.y < sy + 0.56 && Math.abs(nr.d) < f.hw + 1) { if (d.v.y < -2) sfx.bounce(Math.min(1, -d.v.y / 14)); p.y = sy + 0.56; d.v.y = Math.abs(d.v.y) > 2 ? -d.v.y * 0.42 : 0; d.v.x *= 0.985; d.v.z *= 0.985; }
     _dq.setFromAxisAngle(_dv.set(-d.v.z, 0, d.v.x).normalize(), Math.hypot(d.v.x, d.v.z) * dt / 0.56); d.m.quaternion.premultiply(_dq);
     if (d.life <= 0 || p.y < sy - 60) { scene.remove(d.m); debris.splice(k, 1); }
   }
@@ -1183,7 +1182,7 @@ let idSeq = 0;
 const nextId = () => `${(S.you || 'me').slice(0, 5)}${++idSeq}`;
 function spawnCrate(id, type, u, l) {
   const s = track.pickS(clamp(u, 0, 1) * track.length);
-  items.spawn(id, type, s, clamp(l, -0.8, 0.8) * HW * 0.8);
+  items.spawn(id, type, s, clamp(l, -0.8, 0.8) * track.hwAt(s) * 0.7);
 }
 function applyPickup(type) {
   sfx.pickup(type);

@@ -92,8 +92,9 @@ export class Items3D {
       const r = this.rockets[i]; r.age += dt;
       if (r.age > r.life) { this.root.remove(r.mesh); this.rockets.splice(i, 1); continue; }
       if (r.target) { const tds = this.ds(r.target.s, r.s); if (tds < -5) r.target = null; else { const dd = Math.max(-14 * dt, Math.min(14 * dt, r.target.d - r.d)); r.d += dd; } }
-      r.d = Math.max(-6.6, Math.min(6.6, r.d)); r.s += r.vs * dt;
-      const f = this.track.at(r.s, _p), lat = Math.atan2((r.d - r.lastD) / Math.max(dt, 1e-3), r.vs); r.lastD = r.d;
+      r.s += r.vs * dt;
+      const f = this.track.at(r.s, _p), lim = f.hw - 1.4; r.d = Math.max(-lim, Math.min(lim, r.d));
+      const lat = Math.atan2((r.d - r.lastD) / Math.max(dt, 1e-3), r.vs); r.lastD = r.d;
       r.mesh.position.set(f.px + f.rx * r.d + f.ux * 0.9, f.py + f.ry * r.d + f.uy * 0.9, f.pz + f.rz * r.d + f.uz * 0.9);
       _t.set(f.tx, f.ty, f.tz); _u.set(f.ux, f.uy, f.uz); _r.set(f.rx, f.ry, f.rz); _m.makeBasis(_t, _u, _r); r.mesh.quaternion.setFromRotationMatrix(_m); r.mesh.rotateY(-lat);
       r.flame.scale.set(0.8 + Math.random() * 0.6, 1, 1);

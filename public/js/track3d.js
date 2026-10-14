@@ -2,7 +2,7 @@
 // Fizyka jazdy liczy się w współrzędnych toru (s — postęp wzdłuż trasy, d — odległość od osi, dodatnia po prawej).
 import * as THREE from 'three';
 
-export const HW = 8;        // połowa szerokości jezdni
+export const HW = 8;        // najwęższa połowa szerokości jezdni (16 m); domyślnie tor jest szerszy (`def.hw`, 12 = 24 m), zwężenia i poszerzenia w `def.width`
 export const DS = 1;        // odstęp próbek [m]
 const wrapAng = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 const smoothArr = (a, w) => { const n = a.length, o = new Float32Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let j = -w; j <= w; j++) s += a[(i + j + n) % n]; o[i] = s / (2 * w + 1); } return o; };
@@ -76,18 +76,28 @@ export class Track3D {
     this.kg = smoothArr(kg.subarray(0, n), 4).slice(); this.kg = Float32Array.from([...this.kg, this.kg[0]]);
     this.ku = ku;
     this.startS = 0; this.finishS = this.length;
+    // połowa szerokości jezdni wzdłuż okrążenia: domyślnie def.hw (12), segmenty def.width = [[a, b, hw], …] (ułamki okrążenia) z płynnym przejściem na RAMP m
+    const RAMP = 80, hwArr = new Float32Array(N).fill(def.hw ?? 12);
+    for (const [a, b, w] of def.width || []) {
+      const i0 = Math.round(a * n), i1 = Math.round(b * n);
+      for (let i = 0; i < n; i++) {
+        let d = 0; if (i < i0) d = Math.min(i0 - i, i + n - i1); else if (i > i1) d = Math.min(i - i1, i0 + n - i);
+        const k = Math.max(0, 1 - d / RAMP), e = k * k * (3 - 2 * k); hwArr[i] += (w - hwArr[i]) * e;
+      }
+    }
+    hwArr[n] = hwArr[0]; this.hwArr = hwArr; this.hwMax = Math.max(...hwArr); this.hwMin = Math.min(...hwArr);
     // pady nitro na prostych (pasy na przemian) i punkty powrotu (respawn)
     const straightAt = (i, half = 30, tol = 0.006) => { for (let k = -half; k <= half; k += 6) if (Math.abs(this.kg[((i + k) % n + n) % n]) > tol || Math.abs(this.ty[((i + k) % n + n) % n]) > 0.1) return false; return true; };
     this.pads = []; let lane = 1;
-    for (let i = 90; i < n - 60; i += 12) { const last = this.pads[this.pads.length - 1]; if ((!last || i - last.s0 > 280) && straightAt(i + 12, 24)) { this.pads.push({ s0: i, len: 16, lane, lat: lane * 3.9 }); lane = -lane; } }
+    for (let i = 90; i < n - 60; i += 12) { const last = this.pads[this.pads.length - 1]; if ((!last || i - last.s0 > 280) && straightAt(i + 12, 24)) { this.pads.push({ s0: i, len: 16, lane, lat: lane * Math.min(5.2, 0.48 * Math.min(hwArr[i], hwArr[i + 16])) }); lane = -lane; } }
     this.checkpoints = [];
     for (let i = 60; i < n - 30; i += 8) { const last = this.checkpoints[this.checkpoints.length - 1]; if ((last == null || i - last > 220) && straightAt(i, 36, 0.008)) this.checkpoints.push(i); }
     const b = { minX: 1e9, maxX: -1e9, minZ: 1e9, maxZ: -1e9, minY: 1e9, maxY: -1e9 };
     for (let i = 0; i < n; i++) { b.minX = Math.min(b.minX, px[i]); b.maxX = Math.max(b.maxX, px[i]); b.minZ = Math.min(b.minZ, pz[i]); b.maxZ = Math.max(b.maxZ, pz[i]); b.minY = Math.min(b.minY, py[i]); b.maxY = Math.max(b.maxY, py[i]); }
     this.bounds = b;
-    // strefy nawierzchni i obiektów: kostka, piasek, most, tunel (ułamki długości okrążenia)
-    const tunT = new Float32Array(N), zone = new Uint8Array(N), bridge = new Float32Array(N), tunnel = new Float32Array(N), grip = new Float32Array(N).fill(1);
-    this.bridges = []; this.tunnels = [];
+    // strefy nawierzchni i obiektów: kostka, piasek, most (ułamki długości okrążenia)
+    const zone = new Uint8Array(N), bridge = new Float32Array(N), grip = new Float32Array(N).fill(1);
+    this.bridges = [];
     const GRIP = { cobble: 0.9, sand: 0.8 };
     // pokrycie nawierzchni 0..1 wzdłuż toru: pełne w strefie, wygasa na TR m po obu stronach (nieregularne przejście rysuje shader)
     const TR = 120, covSand = new Float32Array(N), covCob = new Float32Array(N);
@@ -101,13 +111,12 @@ export class Track3D {
       const i0 = Math.round(z.a * n), i1 = Math.round(z.b * n);
       if (z.type === 'cobble' || z.type === 'sand') { addCov(z.type === 'sand' ? covSand : covCob, i0, i1); for (let i = i0; i <= i1; i++) zone[i] = z.type === 'cobble' ? 1 : 2; }
       else if (z.type === 'bridge') { this.bridges.push({ i0, i1 }); for (let i = i0; i <= i1; i++) bridge[i] = 1; }
-      else if (z.type === 'tunnel') { this.tunnels.push({ i0, i1 }); for (let i = i0 - 17; i <= i1 + 17; i++) { const a = i0 - 7, b = i1 + 7, v = i < a ? (i - (a - 10)) / 10 : i > b ? ((b + 10) - i) / 10 : 1; tunT[i] = Math.max(tunT[i], Math.max(0, Math.min(1, v))); } for (let i = i0 - 7; i <= i1 + 7; i++) tunnel[i] = Math.min(1, (i - (i0 - 7)) / 14, ((i1 + 7) - i) / 14); }
     }
     const blur = (a, w, passes) => { for (let p = 0; p < passes; p++) { const o = new Float32Array(N); for (let i = 0; i < N; i++) { let t = 0; for (let j = -w; j <= w; j++) t += a[(i + j + n) % n]; o[i] = t / (2 * w + 1); } o[n] = o[0]; a.set(o); } };
     blur(bridge, 36, 2);
     covSand[n] = covSand[0]; covCob[n] = covCob[0];
     for (let i = 0; i < N; i++) grip[i] = 1 - (1 - GRIP.sand) * covSand[i] - (1 - GRIP.cobble) * covCob[i]; // przyczepność zmienia się płynnie razem z nawierzchnią
-    Object.assign(this, { zone, tunnelT: tunT, bridgeK: bridge, tunnelK: tunnel, gripArr: grip, covSand, covCob });
+    Object.assign(this, { zone, bridgeK: bridge, gripArr: grip, covSand, covCob });
   }
 
   /** czy pad p obejmuje punkt s (okrąża modulo długość okrążenia) */
@@ -138,12 +147,14 @@ export class Track3D {
     let k = Math.hypot(o.tx, o.ty, o.tz) || 1; o.tx /= k; o.ty /= k; o.tz /= k;
     k = Math.hypot(o.ux, o.uy, o.uz) || 1; o.ux /= k; o.uy /= k; o.uz /= k;
     k = Math.hypot(o.rx, o.ry, o.rz) || 1; o.rx /= k; o.ry /= k; o.rz /= k;
-    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]); o.wall = 1; o.surf = 1; o.grip = l(this.gripArr[i], this.gripArr[j]); o.sand = l(this.covSand[i], this.covSand[j]);
+    o.kg = l(this.kg[i], this.kg[j]); o.ku = l(this.ku[i], this.ku[j]); o.wall = 1; o.surf = 1; o.grip = l(this.gripArr[i], this.gripArr[j]); o.hw = l(this.hwArr[i], this.hwArr[j]); o.sand = l(this.covSand[i], this.covSand[j]);
     return o;
   }
+  /** połowa szerokości jezdni w punkcie s */
+  hwAt(s) { const L = this.length, f = (((s % L) + L) % L) / DS, i = Math.min(this.N - 2, Math.floor(f)), t = f - i; return this.hwArr[i] + (this.hwArr[i + 1] - this.hwArr[i]) * t; }
   /** nawierzchnia pod autem w (s, d): { sand, cob } 0..1 — piasek jest wywiany bardziej ku krawędziom jezdni */
   surfAt(s, d, o = {}) {
-    const L = this.length, i = Math.floor((((s % L) + L) % L) / DS), t = Math.abs(d) / HW, e = 0.22 * t * t;
+    const L = this.length, i = Math.floor((((s % L) + L) % L) / DS), t = Math.abs(d) / this.hwArr[i], e = 0.22 * t * t;
     const sa = this.covSand[i], co = this.covCob[i];
     o.sand = sa > 0.01 ? Math.min(1, sa + e * Math.min(1, sa * 4)) : 0; o.cob = co > 0.01 ? Math.min(1, co + e * 0.5) : 0; return o;
   }

@@ -25,12 +25,12 @@ Wymaga Node.js ≥ 22.13 (ranking używa wbudowanego `node:sqlite`). Zmienna `PO
 | Tor | Kraj | Długość | Charakter |
 |---|---|---|---|
 | Stadion Mistrzów | Polska | 2,2 km | krótki i techniczny: cztery agrafki, szykana, kostka, most |
-| Złota Jesień | Kanada | 2,9 km | szybki: długa prosta, esy, leśny tunel i drewniany wiadukt wśród jesiennych drzew |
-| Przełęcz Alpejska | Szwajcaria | 5,3 km | długi i trudny: dwa piętra serpentyn (8 agrafek), 120 m różnicy wysokości, tunele pod przełęczą |
+| Złota Jesień | Kanada | 2,9 km | szybki: długa prosta, esy, leśne przesmyki i drewniany wiadukt wśród jesiennych drzew |
+| Przełęcz Alpejska | Szwajcaria | 5,3 km | długi i trudny: dwa piętra serpentyn (8 agrafek), 120 m różnicy wysokości, wąska grań na przełęczy |
 | Pustynia Faraonów | Egipt | 4,1 km | ogromne proste (ponad 800 m) i szerokie łuki, piasek, bazar z agrafką |
 | Wyspy Hawajskie | Hawaje | 3,2 km | płynny: schodkowa zatoka, plaża, esy nad oceanem, most |
 
-Piasek i kostka mają mniejszą przyczepność (piasek dodatkowo hamuje). Teren wokół toru jest generowany: nasypy, doliny pod mostami i wzgórza nad tunelami — nic nie wchodzi na jezdnię.
+Piasek i kostka mają mniejszą przyczepność (piasek dodatkowo hamuje). Teren wokół toru jest generowany: nasypy, doliny pod mostami — nic nie wchodzi na jezdnię.
 
 Tory są zamkniętymi krzywymi (`public/js/tracks3d.js`: punkty, skala, delikatne wzniesienia); `track3d.js` składa z nich pętlę 3D z bandami i przechyłami.
 
