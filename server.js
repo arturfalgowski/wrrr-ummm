@@ -45,6 +45,8 @@ const qRec = db.prepare(`
     wins = wins + excluded.wins, races = races + 1, last_played = excluded.last_played,
     best_time = CASE WHEN excluded.best_time IS NULL THEN best_time
       WHEN best_time IS NULL OR excluded.best_time < best_time THEN excluded.best_time ELSE best_time END`);
+/** zapis rankingu nigdy nie może wywrócić serwera (np. brak uprawnień do pliku bazy) — błąd tylko do logu */
+const dbSafe = (fn) => { try { return fn(); } catch (e) { console.error('[ranking] błąd zapisu:', e.message); return null; } };
 const qSecond = db.prepare('UPDATE stats SET second = second + 1 WHERE nick = ? AND mode = ?');
 const qTop = db.prepare('SELECT nick, wins, second, races, best_time AS best FROM stats WHERE mode = ? ORDER BY wins DESC, second DESC, races ASC, nick LIMIT 10');
 const qProfile = db.prepare('SELECT mode, wins, second, races, best_time AS best, last_played AS last FROM stats WHERE nick = ?');
@@ -173,7 +175,7 @@ function endRace(r, winner, reason) {
   clearTimers(r);
   r.winner = winner.sid;
   const t = r.times[winner.sid] ?? null, now = Date.now();
-  for (const p of r.players) { p.ready = false; qRec.run(p.nick, 'race', p.sid === winner.sid ? 1 : 0, p.sid === winner.sid ? t : null, now); }
+  for (const p of r.players) { p.ready = false; dbSafe(() => qRec.run(p.nick, 'race', p.sid === winner.sid ? 1 : 0, p.sid === winner.sid ? t : null, now)); }
   io.to(r.id).emit('room:update', publicRoom(r));
   broadcastResult(r, reason);
   io.emit('ranking', ranking());
@@ -186,7 +188,7 @@ function finalizeRace(r) {
   if (r.finalized) return;
   r.finalized = true;
   const order = finalOrder(r), humans = order.filter((o) => !o.bot);
-  if (humans[1] && order.length >= 3) qSecond.run(r.players.find((p) => p.sid === humans[1].id)?.nick ?? '', 'race');
+  if (humans[1] && order.length >= 3) dbSafe(() => qSecond.run(r.players.find((p) => p.sid === humans[1].id)?.nick ?? '', 'race'));
   io.to(r.id).emit('race:final', { order: order.map((o) => ({ id: o.id, nick: o.nick, time: o.t, bot: o.bot })) });
   io.emit('ranking', ranking());
 }
