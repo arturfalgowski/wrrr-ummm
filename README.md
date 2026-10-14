@@ -20,17 +20,17 @@ Wymaga Node.js ≥ 22.13 (ranking używa wbudowanego `node:sqlite`). Zmienna `PO
 4. Tor to zamknięta pętla: liczba okrążeń (1–10, domyślnie 3) to ustawienie wyścigu. Wygrywa, kto pierwszy przejedzie ostatnie okrążenie. Bandy otaczają cały tor; klawisz **R** wraca na ostatni bezpieczny punkt.
 5. **Uszkodzenia:** uderzenia w bandę, w auta, trafienia i miny zmniejszają „Stan auta”. Poniżej 60% auto dymi, poniżej 30% płonie i jest wolniejsze; przy 0% wybucha i po chwili wraca na tor. Paczka **Naprawa** dodaje 40%.
 
-## Tory (każdy w innym kraju)
+## Tory (każdy w innym kraju i o innym charakterze)
 
-| Tor (okrążenie 2,5–3,1 km) | Kraj | Nawierzchnie i obiekty |
-|---|---|---|
-| Stadion Mistrzów | Polska | asfalt, odcinek z kostki brukowej, most nad doliną, trybuny |
-| Neo Tokio | Japonia | asfalt, tunel, długi wiadukt, kostka (stare miasto), neony |
-| Przełęcz Alpejska | Szwajcaria | dwa tunele, most nad doliną, kostka (wioska), śnieg |
-| Pustynia Faraonów | Egipt | dwa odcinki piaszczyste, most nad wąwozem, kostka (bazar) |
-| Wyspy Hawajskie | Hawaje | plaża (piasek), most nad morzem, kostka, groble w oceanie |
+| Tor | Kraj | Długość | Charakter |
+|---|---|---|---|
+| Stadion Mistrzów | Polska | 2,2 km | krótki i techniczny: cztery agrafki, szykana, kostka, most |
+| Złota Jesień | Kanada | 2,9 km | szybki: długa prosta, esy, leśne przesmyki i drewniany wiadukt wśród jesiennych drzew |
+| Przełęcz Alpejska | Szwajcaria | 5,3 km | długi i trudny: dwa piętra serpentyn (8 agrafek), 120 m różnicy wysokości, wąska grań na przełęczy |
+| Pustynia Faraonów | Egipt | 4,1 km | ogromne proste (ponad 800 m) i szerokie łuki, piasek, bazar z agrafką |
+| Wyspy Hawajskie | Hawaje | 3,2 km | płynny: schodkowa zatoka, plaża, esy nad oceanem, most |
 
-Piasek i kostka mają mniejszą przyczepność (piasek dodatkowo hamuje). Teren wokół toru jest generowany: nasypy, doliny pod mostami i wzgórza nad tunelami — nic nie wchodzi na jezdnię.
+Piasek i kostka mają mniejszą przyczepność (piasek dodatkowo hamuje). Teren wokół toru jest generowany: nasypy, doliny pod mostami — nic nie wchodzi na jezdnię.
 
 Tory są zamkniętymi krzywymi (`public/js/tracks3d.js`: punkty, skala, delikatne wzniesienia); `track3d.js` składa z nich pętlę 3D z bandami i przechyłami.
 
@@ -40,7 +40,7 @@ Pora dnia przesuwa się w trakcie wyścigu (pełna doba ≈ 5 min), pogoda może
 
 ## Broń i paczki
 
-Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (F: seria 4 s, trafiony rywal zwalnia i traci stan auta), **olej** (E: plama, auto traci kontrolę), **mina** (Q: wybuch podrzuca auta w promieniu 9 m i je uszkadza) i **naprawa** (+40% stanu auta). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
+Na torze spadają paczki: **nitro** (napełnia zbiornik), **karabin** (A: seria 4 s, trafiony rywal zwalnia i traci stan auta), **olej** (S: plama, auto traci kontrolę), **mina** (D: wybuch podrzuca auta w promieniu 9 m i je uszkadza) **rakieta** (F: naprowadzana na najbliższego rywala z przodu, duży wybuch) **pancerz** (H: 10 s pełnej nietykalności, bańka wokół auta) i **naprawa** (+40% stanu auta). Zapasy łączą się do ×2. Ustawienia: częstość paczek (brak/rzadko/normalnie/często) i start z pełnym wyposażeniem.
 
 ## Dynamika jazdy
 
@@ -50,11 +50,11 @@ Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbi
 
 | Klawisz | Akcja |
 |---|---|
-| W / ↑, S / ↓ | gaz, hamulec / wsteczny |
-| A, D / ← → | skręt |
+| ↑ / ↓ | gaz, hamulec / wsteczny |
+| ← / → | skręt |
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (zbiornik ładuje się sam) |
-| F / E / Q | karabin / olej / mina |
+| A / S / D / F / G / H | karabin / olej / mina / rakieta / naprawa / pancerz |
 | R | powrót na ostatni bezpieczny punkt |
 | C | kamera: zza auta / izometryczna |
 | Enter, 1–9 | czat, szybkie reakcje |

@@ -87,31 +87,20 @@ function floodlights(ctx, count) {
     const h = new THREE.Mesh(new THREE.BoxGeometry(7, 2, 3), new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: 0xffe0a0, emissiveIntensity: 2.2 })); h.position.set(x, ctx.hAt(x, z) + 35, z); h.lookAt(ctx.cx, ctx.groundY + 10, ctx.cz); root.add(h);
   }
 }
-/** wieżowce z podświetlonymi oknami (Tokio) */
-function skyline(ctx, count, { hmin = 40, hmax = 150, palette, lit = 0.6, wall = ['#2b2740', '#241f38', '#322b4d', '#1e1a30'], minD = 30 }) {
-  const { root, rnd, canvasTex, rng, world, groundY } = ctx;
-  const mk = (emissive) => canvasTex(256, 256, (x, w, h) => { const rr = rng(91); x.fillStyle = emissive ? '#000' : '#fff'; x.fillRect(0, 0, w, h); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const on = rr() < lit, col = palette[(rr() * palette.length) | 0], px = i * 64 + 12, py = j * 64 + 12; if (emissive) { if (on) { x.fillStyle = col; x.fillRect(px, py, 40, 38); } } else { x.fillStyle = on ? col : '#1a2234'; x.fillRect(px, py, 40, 38); } } });
-  const mat = new THREE.MeshStandardMaterial({ map: mk(false), emissiveMap: mk(true), emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.55, metalness: 0.2 });
-  world.windowMat = mat;
-  const variants = [];
-  for (let v = 0; v < 12; v++) {
-    const bw = 12 + rnd() * 12, bd = 12 + rnd() * 12, bh = hmin + rnd() * (hmax - hmin), g = new THREE.BoxGeometry(bw, bh, bd), uv = g.attributes.uv;
-    for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; if (f === 2 || f === 3) { uv.setXY(i, 0.02, 0.02); continue; } uv.setXY(i, uv.getX(i) * ((f < 2 ? bd : bw) / 16), uv.getY(i) * (bh / 16)); }
-    g.translate(0, bh / 2, 0); variants.push({ g, list: [] });
-  }
-  const tint = new THREE.Color(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v3 = new THREE.Vector3(), eul = new THREE.Euler(), s1 = new THREE.Vector3(1, 1, 1);
-  for (const [x, z] of ctx.scatter(count, minD, 110, 30, 14000)) variants[(rnd() * variants.length) | 0].list.push([x, z]);
-  for (const v of variants) {
-    if (!v.list.length) continue; const im = new THREE.InstancedMesh(v.g, mat, v.list.length);
-    v.list.forEach(([x, z], i) => { q.setFromEuler(eul.set(0, Math.floor(rnd() * 4) * Math.PI / 2, 0)); im.setMatrixAt(i, m4.compose(v3.set(x, ctx.hAt(x, z) - 3, z), q, s1)); im.setColorAt(i, tint.set(wall[(rnd() * wall.length) | 0]).multiplyScalar(1.35)); });
-    im.castShadow = true; im.receiveShadow = true; root.add(im);
-  }
+/** drzewa liściaste w jesiennych barwach (pomarańcz, czerwień, żółć, brąz): 4 warianty koron */
+function autumnTrees(ctx, count) {
+  const cols = [['#e0701e', '#f08a2e', '#c85a14'], ['#c4301e', '#dc4a2a', '#a82418'], ['#e8b420', '#f4cc3c', '#d09a14'], ['#a8561e', '#c06c2c', '#8a4216']];
+  cols.forEach((c, vi) => {
+    const parts = [colored(new THREE.CylinderGeometry(0.34, 0.52, 3.4, 6), '#5a3d2a', 1.7)];
+    [[0, 5.4, 0, 2.7], [1.5, 4.7, 0.7, 1.9], [-1.4, 4.5, -0.6, 1.8], [0.3, 6.9, 0.2, 1.6]].forEach(([x, y, z, r], k) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.88, 1); g.translate(x, y, z); parts.push(colored(g, c[k % 3], 0)); });
+    instanced(ctx, ctx.mergeGeometries(parts), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), ctx.scatter(Math.round(count * (vi === 3 ? 0.7 : 1)), 24, 110, 7, 9000), (x, z, i, rnd) => ({ sx: 1.0 + rnd() * 0.9, sy: 1.1 + rnd() * 0.9 }));
+  });
 }
-function neonPillars(ctx, count, colors) {
-  const { root, rnd, m4, q4, v3, s3 } = ctx, spots = ctx.scatter(count, 40, 110, 40);
-  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1.2, 1, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }), spots.length), c = new THREE.Color();
-  spots.forEach(([x, z], i) => { const h = 90 + rnd() * 120; im.setMatrixAt(i, m4.compose(v3.set(x, ctx.hAt(x, z) + h / 2 - 2, z), q4.identity(), s3.set(1, h, 1))); im.setColorAt(i, c.set(colors[(rnd() * colors.length) | 0])); });
-  s3.set(1, 1, 1); root.add(im);
+/** drewniane domki z dachem dwuspadowym, daleko od toru */
+function cabins(ctx, count) {
+  const wall = colored(new THREE.BoxGeometry(6, 3, 5), '#8a5a34', 1.5), roof = new THREE.ConeGeometry(4.6, 2.2, 4); roof.rotateY(Math.PI / 4); roof.scale(1.15, 1, 1); roof.translate(0, 4.1, 0);
+  const geo = ctx.mergeGeometries([wall, colored(roof, '#5a2a1c', 0), colored(new THREE.BoxGeometry(0.9, 2.6, 0.9), '#6a5a52', 4.2)]);
+  instanced(ctx, geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }), ctx.scatter(count, 70, 150, 90, 6000), (x, z, i, rnd) => ({ sx: 1.2 + rnd() * 0.4 }));
 }
 function pyramids(ctx, count) {
   const { root, rnd, cx, cz, groundY, farDist } = ctx;
@@ -143,19 +132,19 @@ export const THEMES3D = {
     startPhase: 0.2, balloons: 3, birds: 14, roof: 0x2a2f55, relief: 4, groundBelow: true,
     decor(world, ctx) { pines(ctx, 260); rocks(ctx, 50, 0xa7a5b4); grandstand(ctx, world.track.startS + 30, -1); grandstand(ctx, world.track.finishS - 40, 1); floodlights(ctx, 8); ringMountains(ctx, 18, 0x6f8a9a, 0xe8eef6, { r0: 1100, r1: 2200, h: [90, 260] }); },
   },
-  tokyo: {
-    name: 'Japonia', ground: ['#0d0b1c', '#1c1838', '#08060f'], asphalt: '#1c1830', centerLine: 'rgba(37,244,255,0.85)', slab: 0x2b2650, kerb: [0x25f4ff, 0xff2bd6], barrier: ['#1b1740', '#2b2260'], barrierCap: 0xff2bd6, cpColor: 0xff2bd6, neon: true, neonColor: 0x25f4ff,
-    startPhase: 0.62, birds: 0, skyBias: 'night', relief: 0, groundBelow: true, tunnel: 0x34304f, portal: 0x5a4f8a, bridge: 0x3a3560,
-    decor(world, ctx) { skyline(ctx, 520, { hmin: 40, hmax: 160, palette: ['#ff2bd6', '#25f4ff', '#ffd84d', '#7c5cff', '#7cff6b'], lit: 0.62, minD: 34 }); neonPillars(ctx, 40, ['#ff2bd6', '#25f4ff', '#7c5cff']); },
+  jesien: {
+    name: 'Kanada', ground: ['#8a6a38', '#b0803c', '#6a5428'], asphalt: '#403d46', centerLine: 'rgba(255,214,120,0.9)', slab: 0x8b857a, kerb: [0xd2531e, 0xf4efe6], barrier: ['#b8431a', '#f2e8d5'], barrierCap: 0x6b4a33, cpColor: 0xffa23a,
+    startPhase: 0.08, balloons: 2, birds: 14, relief: 7, groundBelow: true, bridge: 0x7a5a3a,
+    decor(world, ctx) { autumnTrees(ctx, 90); pines(ctx, 110); rocks(ctx, 60, 0x8c8a86, { scale: [1, 5] }); cabins(ctx, 9); ringMountains(ctx, 22, 0x6b5a48, 0xe9e5dc, { r0: 900, r1: 2100, h: [120, 380] }); },
   },
   alpy: {
     name: 'Alpy (Szwajcaria)', ground: ['#e8eef6', '#ffffff', '#c4d0e0'], asphalt: '#3d4150', centerLine: 'rgba(245,243,250,0.85)', slab: 0x9aa2b0, kerb: [0x2a6bd6, 0xf5f2ee], barrier: ['#2f6bd6', '#f5f2ee'], barrierCap: 0xc4d0e0, cpColor: 0x7aa8ff,
-    startPhase: 0.15, balloons: 2, birds: 8, relief: 16, tunnel: 0x8a909c,
+    startPhase: 0.15, balloons: 2, birds: 8, relief: 16,
     decor(world, ctx) { pines(ctx, 300, { snow: true }); rocks(ctx, 90, 0x9aa2b2, { scale: [1, 6] }); ringMountains(ctx, 34, 0x6f7f95, 0xffffff, { r0: 500, r1: 1900, h: [180, 520] }); },
   },
   egipt: {
     name: 'Egipt', ground: ['#d9b878', '#ecd29a', '#b88e52'], asphalt: '#5a5460', centerLine: 'rgba(255,240,200,0.9)', slab: 0xc9a566, kerb: [0xd9a02e, 0xf2e6c4], barrier: ['#c8452e', '#f2ead8'], barrierCap: 0x8a6a44, cpColor: 0xffd25a,
-    startPhase: 0.36, balloons: 5, birds: 6, relief: 5, groundBelow: true, sandRoad: '#7a4a28', tunnel: 0xb99a66, portal: 0xd8c08a, bridge: 0xb8955a,
+    startPhase: 0.36, balloons: 5, birds: 6, relief: 5, groundBelow: true, sandRoad: '#7a4a28', bridge: 0xb8955a,
     decor(world, ctx) { palms(ctx, 150); rocks(ctx, 70, 0xc09270, { scale: [1, 5] }); pyramids(ctx, 10); dunes(ctx, 40); },
   },
   tropiki: {

@@ -1,7 +1,6 @@
 // Fizyka auta na torze 3D (styl TrackMania): jazda po powierzchni w współrzędnych toru (s, d), lot balistyczny po skoku,
 // grawitacja na zboczach i pętlach, ściany po bokach, zderzenia aut.
 import * as THREE from 'three';
-import { HW } from './track3d.js';
 
 const G = 24, GSLOPE = 0.6;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -10,7 +9,7 @@ const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI)
 /** jedno auto: bolid Formuły 1 (zmienia się tylko kolor i personalizacja) */
 export const CAR_DEFS = {
   formula: { name: 'Bolid F1', tag: 'Lekki bolid: ogromna prędkość, szybkie skręty', color: '#e0457b', stripe: '#fff4e6',
-    maxSpeed: 68, accel: 40, brake: 66, grip: 10.5, turn: 3.3, stats: [1.0, 0.85, 0.85] },
+    maxSpeed: 82, accel: 58, brake: 98, grip: 11.5, turn: 3.4, stats: [1.0, 0.9, 0.9] },
 };
 export const CAR_COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 export function stripeFor(hex) {
@@ -35,8 +34,30 @@ export class CarState {
     this.air = false; this.landHit = 0; this.fell = false; this.airT = 0;
     this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0; this.surf = null;
     this.tiltX = 0; this.tiltZ = 0; this.spin = 0;
+    // strefy uszkodzeń 0..1: 0 koło p.-prawe, 1 p.-lewe, 2 t.-prawe, 3 t.-lewe, 4 dziób, 5 tył, 6 bok prawy, 7 bok lewy (prawa = +d)
+    this.shield = 0; this.parts = new Float32Array(8); this.pvmax = 1; this.pacc = 1; this.pgrip = 1; this.pbias = 0;
     this._f = {}; this._P = new THREE.Vector3(); this._V = new THREE.Vector3();
   }
+  /** przelicza wpływ uszkodzeń stref na jazdę (utrata koła: wolniej, gorsza przyczepność, ściąganie na stronę uszkodzenia) */
+  refreshParts() {
+    const p = this.parts; let lost = 0, worn = 0;
+    for (let i = 0; i < 4; i++) { if (p[i] >= 1) lost++; else worn += p[i]; }
+    this.pvmax = 1 - 0.16 * lost - 0.03 * worn - 0.05 * (p[4] + p[5]);
+    this.pacc = 1 - 0.12 * lost - 0.03 * worn;
+    this.pgrip = 1 - 0.14 * lost - 0.04 * worn;
+    this.pbias = ((p[0] - p[1]) * 0.3 + (p[2] - p[3]) * 0.12) * 1.0;
+  }
+  /** uderzenie w strefy: w = { indeks: waga }, amt = siła; zwraca indeksy kół, które właśnie odpadły */
+  hurt(w, amt) {
+    const lost = [];
+    for (const k in w) { const i = +k, before = this.parts[i]; this.parts[i] = Math.min(1, before + amt * w[k]); if (i < 4 && before < 1 && this.parts[i] >= 1) lost.push(i); }
+    this.refreshParts(); return lost;
+  }
+  /** naprawa stref o `a` (0..1); odpadnięte koło wraca, jeśli naprawa je „podniesie” poniżej 1 */
+  repairParts(a) { for (let i = 0; i < 8; i++) this.parts[i] = Math.max(0, this.parts[i] - a); this.refreshParts(); }
+  /** pakiet sieciowy stref: koła i karoseria po 4 poziomy (0..15) w jednej liczbie */
+  packParts() { let a = 0, b = 0; for (let i = 0; i < 4; i++) { a |= Math.round(this.parts[i] * 15) << (4 * i); b |= Math.round(this.parts[4 + i] * 15) << (4 * i); } return [a, b]; }
+  unpackParts(a, b) { for (let i = 0; i < 4; i++) { this.parts[i] = ((a >> (4 * i)) & 15) / 15; this.parts[4 + i] = ((b >> (4 * i)) & 15) / 15; } this.refreshParts(); }
   get speed() { return this.air ? this._V.length() : Math.hypot(this.vf, this.vl); }
 
   /** ustaw auto na torze: s, d (poprzeczne), kurs wzdłuż toru */
@@ -61,7 +82,7 @@ export class CarState {
     if (!f.surf) { this._detach(track, f); return; }
     this.t += h;
     if (this.slowT > 0) this.slowT -= h;
-    const vmax = def.maxSpeed * (this.nitro ? 1.3 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage);
+    const vmax = def.maxSpeed * (this.nitro ? 1.3 : 1) * (this.slowT > 0 ? 0.62 : 1) * (1 - 0.3 * this.damage) * this.pvmax;
 
     // kierownica
     const target = input.steer;
@@ -74,8 +95,8 @@ export class CarState {
     const highDamp = 1 / (1 + (sp / (def.maxSpeed * 1.25)) ** 2 * 1.8);
     let yawRate = this.steer * def.turn * lowSpeed * highDamp * (vf >= 0 ? 1 : -1);
     this.hand = !!input.hand && Math.abs(vf) > 3;
-    yawRate += this.pull * this.damage * 0.3 * lowSpeed;
-    if (input.hand) yawRate *= 1.45;
+    yawRate += (this.pull * this.damage * 0.3 + this.pbias) * lowSpeed;
+    if (input.hand) yawRate *= 1.7;
     const slipAng = Math.atan2(vl, Math.max(2, Math.abs(vf)));
     if (this.steer * vl < 0) { const t = clamp((Math.abs(slipAng) - 0.7) / 0.7, 0, 1); yawRate *= 1 - 0.8 * t * t * (3 - 2 * t); }
     if (this.inOil) { // plama oleju: auto traci kontrolę i wpada w poślizg
@@ -91,7 +112,7 @@ export class CarState {
     this.throttle = thr; this.brakeLit = false;
     if (thr > 0) {
       if (vf < -0.5) { vf += def.brake * h; this.brakeLit = true; }
-      else vf += def.accel * (1 - 0.35 * this.damage) * (this.nitro ? 2.8 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h;
+      else vf += def.accel * (1 - 0.35 * this.damage) * this.pacc * (this.nitro ? 2.8 : 1) * thr * Math.max(0, 1 - (Math.max(0, vf) / vmax) ** 2) * h;
     }
     if (input.hand && vf > 3) this.brakeLit = true;
     if (input.brake > 0) {
@@ -99,7 +120,7 @@ export class CarState {
       else vf = Math.max(-def.maxSpeed * 0.3, vf - def.accel * 0.55 * h);
     }
     // opory (piasek hamuje mocniej)
-    vf -= vf * (0.025 + (f.grip < 0.85 ? 0.07 : 0)) * h;
+    vf -= vf * (0.025 + 0.07 * (f.sand ?? 0)) * h;
     if (Math.abs(vf) > 0.05) vf -= Math.sign(vf) * 0.5 * h; else vf = 0;
     if (vf > vmax) vf -= (vf - vmax) * Math.min(1, 3 * h);
     if (input.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), (8 + Math.abs(vl) * 0.12) * h);
@@ -110,13 +131,13 @@ export class CarState {
     vl -= G * GSLOPE * zy * h;
 
     // przyczepność boczna
-    let grip = def.grip * (track.gripMul ?? 1) * (f.grip ?? 1);
+    let grip = def.grip * (track.gripMul ?? 1) * (f.grip ?? 1) * this.pgrip;
     grip *= 1 - 0.4 * clamp((Math.abs(vl) - 6) / 10, 0, 1);
-    if (input.hand) grip = Math.min(grip, 2.4);
+    if (input.hand) grip = Math.min(grip, 3.0);
     if (this.inOil) grip = Math.min(grip, 0.22);
     const speedBefore = Math.hypot(vf, vl);
     vl -= vl * (1 - Math.exp(-grip * h));
-    const keep = input.hand ? 0.7 : 0.9;
+    const keep = input.hand ? 0.8 : 0.9;
     const vfTarget = Math.sign(vf || 1) * Math.sqrt(Math.max(0, speedBefore * speedBefore - vl * vl));
     vf += (vfTarget - vf) * keep;
     this.vf = vf; this.vl = vl;
@@ -131,7 +152,7 @@ export class CarState {
     const f2 = track.at(this.s, this._f);
     this.wallContact = false;
     if (f2.wall) {
-      const lim = HW - 1.0;
+      const lim = f2.hw - 1.0;
       if (Math.abs(this.d) > lim) {
         const side = Math.sign(this.d); this.d = side * lim;
         vt = this.vf * Math.cos(this.phi) - this.vl * Math.sin(this.phi); vr = this.vf * Math.sin(this.phi) + this.vl * Math.cos(this.phi);
@@ -144,7 +165,7 @@ export class CarState {
         this.wallContact = true;
         this.phi += wrap(0 - this.phi) * Math.min(1, 5 * h); // kierowanie wzdłuż ściany
       }
-    } else if (Math.abs(this.d) > HW + 0.4) { this._detach(track, f2); return; }
+    } else if (Math.abs(this.d) > f2.hw + 0.4) { this._detach(track, f2); return; }
     // oderwanie od powierzchni (kulminacja wzgórza, rampa) — warunek siły nacisku
     const sp2 = Math.hypot(this.vf, this.vl);
     if (sp2 > 9 && sp2 * sp2 * f2.ku + G * f2.uy < -1.5) this._detach(track, f2);
@@ -168,14 +189,14 @@ export class CarState {
     const nr = track.nearest(P.x, P.y, P.z, this.s, 25, 160);
     const f = track.at(nr.s, this._f);
     // niewidzialna ściana nad bandą: auto nie wylatuje poza tor
-    if (Math.abs(nr.d) > HW - 0.9 && nr.h < 8 && nr.h > -3) {
-      const side = Math.sign(nr.d), over = nr.d - side * (HW - 0.9);
-      P.x -= f.rx * over; P.y -= f.ry * over; P.z -= f.rz * over; nr.d = side * (HW - 0.9);
+    if (Math.abs(nr.d) > f.hw - 0.9 && nr.h < 8 && nr.h > -3) {
+      const side = Math.sign(nr.d), over = nr.d - side * (f.hw - 0.9);
+      P.x -= f.rx * over; P.y -= f.ry * over; P.z -= f.rz * over; nr.d = side * (f.hw - 0.9);
       const vo = (V.x * f.rx + V.y * f.ry + V.z * f.rz) * side;
       if (vo > 0) { V.x -= f.rx * vo * side * 1.3; V.y -= f.ry * vo * side * 1.3; V.z -= f.rz * vo * side * 1.3; this.hit = Math.max(this.hit, vo * 0.6); }
     }
     const vn = V.x * f.ux + V.y * f.uy + V.z * f.uz;
-    if (this.airT > 0.12 && nr.surf && Math.abs(nr.d) < HW + 0.6 && nr.h <= 0.2 && nr.h > -3.5 && vn < -0.5) {
+    if (this.airT > 0.12 && nr.surf && Math.abs(nr.d) < f.hw + 0.6 && nr.h <= 0.2 && nr.h > -3.5 && vn < -0.5) {
       // dotyk: wyznacz kurs względem toru z orientacji auta
       _v1.set(1, 0, 0).applyQuaternion(this.quat);
       const fT = _v1.x * f.tx + _v1.y * f.ty + _v1.z * f.tz, fR = _v1.x * f.rx + _v1.y * f.ry + _v1.z * f.rz;
@@ -183,7 +204,7 @@ export class CarState {
       const c = Math.cos(this.phi), sn = Math.sin(this.phi);
       const vt = V.x * f.tx + V.y * f.ty + V.z * f.tz, vr = V.x * f.rx + V.y * f.ry + V.z * f.rz;
       this.vf = vt * c + vr * sn; this.vl = -vt * sn + vr * c;
-      this.s = nr.s; this.d = clamp(nr.d, -HW, HW); this.air = false;
+      this.s = nr.s; this.d = clamp(nr.d, -f.hw, f.hw); this.air = false;
       this.landHit = Math.max(0, -vn - 7) * 1.1;
       this.hit = Math.max(this.hit, Math.max(0, -vn - 5));
       return;
@@ -236,36 +257,37 @@ export class CarState {
     this.vf *= 0.8;
   }
   /** po upadku: wróć na checkpoint (s) z zerową prędkością */
-  respawnAt(track, s, speed = 0) {
-        this.air = false; this.fell = false; this.s = s; this.d = 0; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
+  respawnAt(track, s, speed = 0, d = 0) {
+        this.air = false; this.fell = false; this.s = s; this.d = d; this.phi = 0; this.vf = speed; this.vl = 0; this.steer = 0; this.nitro = false;
     this.progress = s; this.idx = s; this._pose(track);
   }
 }
 
-/** kolizja dwóch aut (dwa okręgi po 1,35 m w 3D); zmienia tylko `me` w torze (s, d, prędkości) */
+/** kolizja dwóch aut: obrys z 3 okręgów (R = 1,6 m) wzdłuż auta, zmienia tylko `me` w torze (s, d, prędkości, lekki obrót od uderzenia) */
+const COL_R = 1.62, COL_OFF = [-1.75, 0, 1.75];
 export function carVsCar(me, opp, track) {
-  if (me.air || opp.air) return 0;
-  const R = 1.35, off = 1.45;
+  if (me.air || opp.air || me.dead || opp.dead) return 0;
   const dx0 = opp.x - me.x, dy0 = opp.y - me.y, dz0 = opp.z - me.z;
-  if (dx0 * dx0 + dy0 * dy0 + dz0 * dz0 > 42) return 0;
+  if (dx0 * dx0 + dy0 * dy0 + dz0 * dz0 > 90) return 0;
   const f = track.at(me.s, me._f);
   let hit = 0;
-  for (const sa of [off, -off]) for (const sb of [off, -off]) {
+  for (const sa of COL_OFF) for (const sb of COL_OFF) {
     const ax = me.x + me.fx * sa, ay = me.y + me.fy * sa, az = me.z + me.fz * sa;
     const bx = opp.x + opp.fx * sb, by = opp.y + opp.fy * sb, bz = opp.z + opp.fz * sb;
     let dx = ax - bx, dy = ay - by, dz = az - bz;
     const dist = Math.hypot(dx, dy, dz);
-    if (dist < 2 * R && dist > 1e-4) {
+    if (dist < 2 * COL_R && dist > 1e-4) {
       dx /= dist; dy /= dist; dz /= dist;
-      const pen = 2 * R - dist;
-      const pt = pen * 0.6 * (dx * f.tx + dy * f.ty + dz * f.tz), pr = pen * 0.6 * (dx * f.rx + dy * f.ry + dz * f.rz);
-      me.s += pt; me.d = clamp(me.d + pr, -HW + 1, HW - 1);
+      const pen = 2 * COL_R - dist;
+      const nt = dx * f.tx + dy * f.ty + dz * f.tz, nr = dx * f.rx + dy * f.ry + dz * f.rz;
+      me.s += pen * 0.55 * nt; me.d = clamp(me.d + pen * 0.55 * nr, -f.hw + 1, f.hw - 1);
       const rel = (me.vx - opp.vx) * dx + (me.vy - opp.vy) * dy + (me.vz - opp.vz) * dz;
       if (rel < 0) {
-        const j = -(1 + 0.35) * rel * 0.5;
-        const dvt = j * (dx * f.tx + dy * f.ty + dz * f.tz), dvr = j * (dx * f.rx + dy * f.ry + dz * f.rz);
+        const j = -(1 + 0.4) * rel * 0.5;
+        const dvt = j * nt, dvr = j * nr;
         const c = Math.cos(me.phi), sn = Math.sin(me.phi);
         me.vf += dvt * c + dvr * sn; me.vl += -dvt * sn + dvr * c;
+        me.phi += clamp(-sa * nr * j * 0.012, -0.12, 0.12); // uderzenie z boku obraca auto wokół punktu styku
         hit = Math.max(hit, -rel);
       }
     }

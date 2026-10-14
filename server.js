@@ -9,8 +9,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const TRACKS = ['stadion', 'tokyo', 'alpy', 'egipt', 'tropiki'];
-const TRACK_PHASE = { stadion: 0.2, tokyo: 0.62, alpy: 0.15, egipt: 0.36, tropiki: 0.44 }; // domyślna pora dnia na starcie (faza 0–1)
+const TRACKS = ['stadion', 'jesien', 'alpy', 'egipt', 'tropiki'];
+const TRACK_PHASE = { stadion: 0.2, jesien: 0.08, alpy: 0.15, egipt: 0.36, tropiki: 0.44 }; // domyślna pora dnia na starcie (faza 0–1)
 // paleta kolorów aut — zgodna z CAR_COLORS w public/js/physics3d.js
 const COLORS = ['#e53935', '#ff7a1a', '#ffc21a', '#2fbf71', '#19b6c9', '#3b6cff', '#8a5cf0', '#e0457b', '#f2f2f5', '#2b2b33'];
 const PATTERNS = ['none', 'stripes', 'flames', 'checker'];
@@ -18,7 +18,7 @@ const RIMS = ['star', 'mesh', 'solid', 'turbine'];
 const RIM_COLORS = ['#d9dde6', ...COLORS];
 const REACTIONS = ['GG!', 'Dobra jazda!', 'Uważaj!', 'Haha', 'Nie ze mną!', 'Pomocy!', 'Rewanż?', 'Ale numer!', 'Do mety!'];
 const PICKUP_MODES = { off: 0, rare: 1.8, normal: 1, often: 0.5 };
-const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'repair', 'repair'];
+const ITEMS = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'rocket', 'rocket', 'repair', 'repair'];
 const pick = (a) => a[Math.random() * a.length | 0];
 const BOT_NAMES = ['Rzeźnik', 'Wściekły Mirek', 'Młot', 'Piła'];
 const MAX_CARS = 4;
@@ -45,6 +45,8 @@ const qRec = db.prepare(`
     wins = wins + excluded.wins, races = races + 1, last_played = excluded.last_played,
     best_time = CASE WHEN excluded.best_time IS NULL THEN best_time
       WHEN best_time IS NULL OR excluded.best_time < best_time THEN excluded.best_time ELSE best_time END`);
+/** zapis rankingu nigdy nie może wywrócić serwera (np. brak uprawnień do pliku bazy) — błąd tylko do logu */
+const dbSafe = (fn) => { try { return fn(); } catch (e) { console.error('[ranking] błąd zapisu:', e.message); return null; } };
 const qSecond = db.prepare('UPDATE stats SET second = second + 1 WHERE nick = ? AND mode = ?');
 const qTop = db.prepare('SELECT nick, wins, second, races, best_time AS best FROM stats WHERE mode = ? ORDER BY wins DESC, second DESC, races ASC, nick LIMIT 10');
 const qProfile = db.prepare('SELECT mode, wins, second, races, best_time AS best, last_played AS last FROM stats WHERE nick = ?');
@@ -138,27 +140,32 @@ function startCountdown(r) {
   for (const b of activeBots(r)) { b.progress = 0; b.finishTime = null; }
   r.env = resolveEnv(r); r.pickups = new Map();
   io.to(r.id).emit('race:prepare', publicRoom(r));
-  later(r, 800, () => io.to(r.id).emit('race:count', 3));
-  later(r, 1800, () => io.to(r.id).emit('race:count', 2));
-  later(r, 2800, () => io.to(r.id).emit('race:count', 1));
-  later(r, 3800, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
+  // światła startowe jak w F1: 5 lamp zapala się co 0,8 s (3 czerwone, 2 pomarańczowe), po losowej chwili zielone = start
+  for (let n = 1; n <= 5; n++) later(r, 800 * n, () => io.to(r.id).emit('race:count', n));
+  later(r, 4000 + 600 + Math.random() * 900, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
 }
 
-/** paczki losowane na torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne); klient dopasowuje je do jezdni */
+/** paczki rozrzucone LOSOWO po torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne), typy z losowanej „torby” (wszystkie 7 typów co 7 paczek);
+ *  zebrana paczka wraca po 14 s w INNYM, losowym miejscu */
+const PICK_TYPES = ['ammo', 'oil', 'bomb', 'rocket', 'repair', 'nitro', 'shield'], PICK_COUNT = { rare: 8, normal: 16, often: 26 };
+function nextPickType(r) {
+  if (!r.pbag?.length) r.pbag = [...PICK_TYPES].sort(() => Math.random() - 0.5);
+  return r.pbag.pop();
+}
+function randomU(r, minGap = 0.03) {
+  for (let k = 0; k < 14; k++) { const u = 0.04 + Math.random() * 0.94; if (!r.pslots.some((x) => x.id != null && Math.abs(x.u - u) < minGap)) return u; }
+  return 0.04 + Math.random() * 0.94;
+}
+function spawnPickup(r, slot) {
+  const id = ++r.pid, type = nextPickType(r);
+  slot.id = id; slot.u = randomU(r); slot.l = (Math.random() - 0.5) * 1.6; r.pickups.set(id, type);
+  io.to(r.id).emit('pickup:spawn', { id, type, u: slot.u, l: slot.l });
+}
 function schedulePickups(r) {
-  const mul = PICKUP_MODES[r.settings.pickups];
-  if (!mul) return;
-  const tick = () => {
-    if (r.state !== 'racing') return;
-    if (r.pickups.size < 5) {
-      const id = ++r.pid, type = pick(ITEMS);
-      r.pickups.set(id, type);
-      io.to(r.id).emit('pickup:spawn', { id, type, u: 0.06 + Math.random() * 0.88, l: (Math.random() - 0.5) * 1.3 });
-      later(r, 32000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
-    }
-    later(r, (7000 + Math.random() * 5000) * mul, tick);
-  };
-  later(r, 5000, tick);
+  if (!PICKUP_MODES[r.settings.pickups]) return;
+  r.pslots = []; r.pbag = [];
+  const n = PICK_COUNT[r.settings.pickups] ?? 16;
+  for (let k = 0; k < n; k++) { const slot = { u: 0, l: 0, id: null }; r.pslots.push(slot); spawnPickup(r, slot); }
 }
 
 /** kolejność końcowa: ukończone wg czasu, reszta wg postępu */
@@ -176,7 +183,7 @@ function endRace(r, winner, reason) {
   clearTimers(r);
   r.winner = winner.sid;
   const t = r.times[winner.sid] ?? null, now = Date.now();
-  for (const p of r.players) { p.ready = false; qRec.run(p.nick, 'race', p.sid === winner.sid ? 1 : 0, p.sid === winner.sid ? t : null, now); }
+  for (const p of r.players) { p.ready = false; dbSafe(() => qRec.run(p.nick, 'race', p.sid === winner.sid ? 1 : 0, p.sid === winner.sid ? t : null, now)); }
   io.to(r.id).emit('room:update', publicRoom(r));
   broadcastResult(r, reason);
   io.emit('ranking', ranking());
@@ -189,7 +196,7 @@ function finalizeRace(r) {
   if (r.finalized) return;
   r.finalized = true;
   const order = finalOrder(r), humans = order.filter((o) => !o.bot);
-  if (humans[1] && order.length >= 3) qSecond.run(r.players.find((p) => p.sid === humans[1].id)?.nick ?? '', 'race');
+  if (humans[1] && order.length >= 3) dbSafe(() => qSecond.run(r.players.find((p) => p.sid === humans[1].id)?.nick ?? '', 'race'));
   io.to(r.id).emit('race:final', { order: order.map((o) => ({ id: o.id, nick: o.nick, time: o.t, bot: o.bot })) });
   io.emit('ranking', ranking());
 }
@@ -403,14 +410,15 @@ io.on('connection', (socket) => {
     const type = r.pickups.get(id);
     r.pickups.delete(id);
     io.to(r.id).emit('pickup:taken', { id, by: socket.id, type });
+    const slot = r.pslots?.find((x) => x.id === id); if (slot) { slot.id = null; later(r, 14000, () => { if (r.state === 'racing') spawnPickup(r, slot); }); }
   });
 
   // zdarzenia gry (strzał, olej, mina, wybuch, trafienie) — współrzędne toru (x = s, z = d) przekazywane pozostałym
   socket.on('game:event', (e) => {
     const r = rooms.get(socket.data.roomId);
-    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom'].includes(e.t)) return;
+    if (!r || (r.state !== 'racing' && r.state !== 'finished') || !e || !['shoot', 'oil', 'hit', 'bomb', 'boom', 'rocket', 'kill'].includes(e.t)) return;
     const n = (v) => (Number.isFinite(v) ? v : 0);
-    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
+    socket.to(r.id).emit('game:event', { t: e.t, from: socket.id, to: typeof e.to === 'string' ? e.to : null, id: typeof e.id === 'string' ? e.id.slice(0, 24) : null, k: e.k === 'rocket' ? 'rocket' : null, x: n(e.x), z: n(e.z), vx: n(e.vx) });
   });
 
   socket.on('disconnect', () => leaveRoom(socket));
