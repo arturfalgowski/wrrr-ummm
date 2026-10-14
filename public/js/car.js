@@ -229,6 +229,13 @@ export function buildCar(id, number, color = null, custom = null) {
     tl.position.set(-M.L / 2 + 0.04, M.tailY ?? 0.82, sz * (M.extras === 'formula' ? 0.35 : 0.95));
     body.add(hl, tl);
   }
+  // pancerz: półprzezroczysta bańka z efektem Fresnela i siatką (widoczna tylko przy aktywnym pancerzu)
+  const shieldMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide, uniforms: { uK: { value: 0 }, uT: { value: 0 } },
+    vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform float uK; uniform float uT; varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.4); float g = max(smoothstep(0.88, 1.0, sin(vP.y * 5.5 + uT * 1.6)), smoothstep(0.9, 1.0, sin(atan(vP.z, vP.x) * 9.0 - uT * 0.8))); float a = (0.07 + f * 0.85 + g * 0.22 * (0.4 + f)) * uK; gl_FragColor = vec4(vec3(0.15, 0.8, 1.0) * (0.8 + f), a); }',
+  });
+  const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(3.3, 32, 20), shieldMat); shieldMesh.scale.set(1.12, 0.6, 0.8); shieldMesh.position.y = 0.75; shieldMesh.visible = false; shieldMesh.renderOrder = 6; group.add(shieldMesh);
   // koła
   const wheels = { fl: null, fr: null, rl: null, rr: null };
   const ww = M.wheelW ?? 0.58;
@@ -319,6 +326,8 @@ export function buildCar(id, number, color = null, custom = null) {
         pos.needsUpdate = true; t.geo.computeVertexNormals();
       }
     },
+    /** pancerz: 0 = ukryty, 0..1 = intensywność bańki */
+    setShield(k) { shieldMesh.visible = k > 0.01; shieldMat.uniforms.uK.value = k; },
     /** zabrudzenie opon (0..1) kolorem nawierzchni: piasek robi z opon jasnobrązowe, kostka szare */
     setDirt(k, col) {
       if (Math.abs(k - this.dirt) < 0.03 && (k > 0.02 || this.dirt < 0.02)) return;
@@ -367,6 +376,7 @@ export function buildCar(id, number, color = null, custom = null) {
       for (const k of ['fl', 'fr']) wheels[k].pivot.rotation.y = steerAng;
       for (const k of ['fl', 'fr', 'rl', 'rr']) wheels[k].roll.rotation.z = this.spin;
       tailMat.emissiveIntensity = st.brakeLit ? 3.2 : 0.9;
+      if (shieldMesh.visible) shieldMat.uniforms.uT.value = performance.now() / 1000;
       // uszkodzone koła chwieją się (im mocniej uszkodzone i szybsze auto, tym bardziej)
       if (this.partsKey !== '' && Math.abs(st.vf) > 3) { this.wob += dt * 38 * Math.min(1, Math.abs(st.vf) / 40); for (let i = 0; i < 4; i++) { const d = st.parts[i]; if (d > 0.25 && d < 1) { const w = wheels[WK[i]]; w.roll.rotation.x = Math.sin(this.wob + i * 1.7) * d * 0.09; } } }
     },

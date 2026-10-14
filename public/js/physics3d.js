@@ -35,7 +35,7 @@ export class CarState {
     this.damage = 0; this.pull = 1; this.hp = 100; this.hand = false; this.nitro = false; this.slowT = 0; this.inOil = false; this.t = 0; this.surf = null;
     this.tiltX = 0; this.tiltZ = 0; this.spin = 0;
     // strefy uszkodzeń 0..1: 0 koło p.-prawe, 1 p.-lewe, 2 t.-prawe, 3 t.-lewe, 4 dziób, 5 tył, 6 bok prawy, 7 bok lewy (prawa = +d)
-    this.parts = new Float32Array(8); this.pvmax = 1; this.pacc = 1; this.pgrip = 1; this.pbias = 0;
+    this.shield = 0; this.parts = new Float32Array(8); this.pvmax = 1; this.pacc = 1; this.pgrip = 1; this.pbias = 0;
     this._f = {}; this._P = new THREE.Vector3(); this._V = new THREE.Vector3();
   }
   /** przelicza wpływ uszkodzeń stref na jazdę (utrata koła: wolniej, gorsza przyczepność, ściąganie na stronę uszkodzenia) */

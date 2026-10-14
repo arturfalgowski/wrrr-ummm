@@ -605,7 +605,7 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 .slot.has kbd { color: #fff; }
 .slot.has span { color: #fff; }
 .slot.has svg { filter: drop-shadow(0 0 5px var(--c)); }
-#slot-ammo { --c: #ffb02e; } #slot-oil { --c: #a46bff; } #slot-mine { --c: #ff4a3a; } #slot-rocket { --c: #ff7a3d; } #slot-repair { --c: #3ee08a; }
+#slot-shield { --c: #35d0ff; } #slot-ammo { --c: #ffb02e; } #slot-oil { --c: #a46bff; } #slot-mine { --c: #ff4a3a; } #slot-rocket { --c: #ff7a3d; } #slot-repair { --c: #3ee08a; }
 .slot.pulse { animation: slotPulse .38s ease-in-out 3; }
 .slot.pulse .cnt { animation: cntPulse .38s ease-in-out 3; }
 @keyframes slotPulse { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 9px var(--c)); } 50% { transform: scale(1.22); filter: drop-shadow(0 0 26px var(--c)) brightness(1.5); } }
@@ -661,3 +661,5 @@ body.spectating .hud-items { display: none !important; }
 /* nagłówki i liczby: czcionka wyświetlacza (kanciasta, techniczna) */
 .logo, .res-title, .res-winner, .chip b, .chip .lbl, .speed b, #hud-time, #elim b, #elim small, .btn, h1, h2, h3, h4, .pl b, #toast, .bar-label { font-family: var(--display); }
 .chip b, .speed b, #hud-time, .res-title, .logo { font-style: normal; letter-spacing: .02em; }
+
+#slot-shield.active { animation: pulse3 .5s ease-in-out infinite alternate; } #slot-shield.active span { color: #fff; font-size: 11px; }

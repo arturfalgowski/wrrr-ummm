@@ -145,19 +145,27 @@ function startCountdown(r) {
   later(r, 4000 + 600 + Math.random() * 900, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
 }
 
-/** paczki na stałych miejscach: rzędy po 3 paczki w poprzek toru (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne),
- *  typy po kolei (karabin, olej, mina, rakieta, naprawa, nitro), więc regularnie trafiają się wszystkie; zebrana paczka wraca po 14 s */
-const PICK_TYPES = ['ammo', 'oil', 'bomb', 'rocket', 'repair', 'nitro'], PICK_ROWS = { rare: 4, normal: 8, often: 14 };
+/** paczki rozrzucone LOSOWO po torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne), typy z losowanej „torby” (wszystkie 7 typów co 7 paczek);
+ *  zebrana paczka wraca po 14 s w INNYM, losowym miejscu */
+const PICK_TYPES = ['ammo', 'oil', 'bomb', 'rocket', 'repair', 'nitro', 'shield'], PICK_COUNT = { rare: 8, normal: 16, often: 26 };
+function nextPickType(r) {
+  if (!r.pbag?.length) r.pbag = [...PICK_TYPES].sort(() => Math.random() - 0.5);
+  return r.pbag.pop();
+}
+function randomU(r, minGap = 0.03) {
+  for (let k = 0; k < 14; k++) { const u = 0.04 + Math.random() * 0.94; if (!r.pslots.some((x) => x.id != null && Math.abs(x.u - u) < minGap)) return u; }
+  return 0.04 + Math.random() * 0.94;
+}
 function spawnPickup(r, slot) {
-  const id = ++r.pid, type = PICK_TYPES[r.pcycle++ % PICK_TYPES.length];
-  slot.id = id; r.pickups.set(id, type);
+  const id = ++r.pid, type = nextPickType(r);
+  slot.id = id; slot.u = randomU(r); slot.l = (Math.random() - 0.5) * 1.6; r.pickups.set(id, type);
   io.to(r.id).emit('pickup:spawn', { id, type, u: slot.u, l: slot.l });
 }
 function schedulePickups(r) {
   if (!PICKUP_MODES[r.settings.pickups]) return;
-  const rows = PICK_ROWS[r.settings.pickups] ?? 8;
-  r.pslots = []; r.pcycle = Math.random() * PICK_TYPES.length | 0;
-  for (let k = 0; k < rows; k++) for (const l of [-0.55, 0, 0.55]) { const slot = { u: 0.04 + 0.92 * (k + 0.5) / rows, l, id: null }; r.pslots.push(slot); spawnPickup(r, slot); }
+  r.pslots = []; r.pbag = [];
+  const n = PICK_COUNT[r.settings.pickups] ?? 16;
+  for (let k = 0; k < n; k++) { const slot = { u: 0, l: 0, id: null }; r.pslots.push(slot); spawnPickup(r, slot); }
 }
 
 /** kolejność końcowa: ukończone wg czasu, reszta wg postępu */
