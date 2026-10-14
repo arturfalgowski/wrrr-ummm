@@ -1,35 +1,87 @@
-// Dźwięk w 100% proceduralny (Web Audio API): silnik zależny od obrotów, poślizg, kolizje, sygnały i interfejs.
-let ctx = null, master = null, noiseBuf = null, muted = false, sfxVol = 1;
+// Dźwięk gry (Web Audio API). Silnik, opony i wiatr budowane są z WARSTW PĘTLI: domyślnie generowanych w kodzie (synteza offline do AudioBuffer,
+// pętle idealnie okresowe + crossfade na szwie, więc bez kliknięć); jeśli istnieje `sfx/manifest.json`, warstwy ładowane są z plików.
+//
+// FORMAT sfx/manifest.json (każdy plik MUSI mieć źródło i licencję; pliki CC-BY-SA i bez licencji są odrzucane):
+//   { "engine": [ { "file": "engine_3600_on.ogg", "rpm": 3600, "load": "on", "source": "https://…", "license": "CC0" }, … ("load": "on" | "off"),
+//     "roll": { "asphalt": {…}, "cobble": {…}, "sand": {…} }, "slide": {…}, "wind": {…} }
+// Źródła i licencje użytych próbek wpisz w manifest (pole "source"/"license") i skopiuj do komentarza tu.
+// Obecnie: ŻADNYCH plików zewnętrznych — wszystko generowane proceduralnie (brak kwestii licencyjnych).
+let ctx = null, master = null, rvSend = null, noiseBuf = null, muted = false, sfxVol = 1;
 try { const v = parseFloat(localStorage.getItem('tc_sfx')); if (Number.isFinite(v)) sfxVol = Math.min(1, Math.max(0, v)); } catch { /* brak storage */ }
 try { muted = localStorage.getItem('tc_muted') === '1'; } catch { /* brak storage */ }
+
+/** WSZYSTKIE strojenia na słuch w jednym miejscu (zmieniaj w konsoli: AUDIO_CONFIG.engine.rpmDownK = 4 itd. — nowe auta biorą wartości przy tworzeniu, część na bieżąco) */
+export const AUDIO_CONFIG = {
+  master: { gain: 0.7, volCurve: 2, compThreshold: -16, compRatio: 3.5, limiterThreshold: -3 }, // volCurve: wykładnik krzywej głośności (2 ≈ logarytmiczna dla ucha)
+  engine: {
+    cyl: 8, idleRpm: 3600, maxRpm: 12600,
+    layersRpm: [3600, 5400, 7600, 9900, 12400],            // obroty bazowe pętli (4–6 warstw)
+    loopSec: 1.0, xfadeSec: 0.04,                           // długość pętli i crossfade na szwie (dla szumów i próbek)
+    gearTops: [0.16, 0.30, 0.45, 0.60, 0.75, 0.90, 1.05, 1.38],
+    rpmUpK: 14, rpmDownK: 5,                                // inercja: stała wygładzania [1/s] — szybciej w górę niż w dół
+    jitter: 0.005, idleJitter: 0.02,                        // mikro-drgania obrotów (ułamek)
+    limiterFrac: 0.955, limiterHz: 15, limiterCut: 0.32, limiterDip: 0.012, // limiter: odcinanie zapłonu
+    loadAttackSec: 0.06, loadReleaseSec: 0.22,              // wygładzanie obciążenia (przejście on/off-load)
+    shiftCutSec: 0.11, shiftDropRpm: 2200, clunk: 0.22,     // zmiana biegu: przerwa w napędzie, spadek obrotów, szarpnięcie
+    popChance: 0.7, popMinRpm: 6000,                        // strzały i blow-off przy zrzucaniu gazu
+    level: 0.5,
+  },
+  tire: { rollLevel: 0.34, slideLevel: 0.36, squealLevel: 0.2, sandHiss: 0.34, cobbleRumble: 0.75 },
+  wind: { level: 0.22, lpMin: 450, lpMax: 4800, bumpLevel: 0.25 },
+  view: { interiorLp: 2400, interiorBoostDb: 7, interiorBoostHz: 85, interiorGain: 0.85, switchSec: 0.15 }, // miks wnętrze/zewnątrz
+  doppler: { c: 343, scale: 1, min: 0.85, max: 1.2, smoothK: 12 },
+  reverb: { sec: 0.55, decay: 3.2, wetBase: 0.05, wetMax: 0.24 }, // krótki pogłos zależny od otoczenia (setAmbience)
+  ai: { layers: 2, wind: false },                                  // auta AI: tylko 2 warstwy silnika, bez wiatru
+  samples: { enabled: true, manifest: 'sfx/manifest.json' },
+};
+const C = AUDIO_CONFIG;
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const volCurve = (v) => v ** C.master.volCurve;
+const masterLevel = () => (muted ? 0 : C.master.gain * volCurve(sfxVol));
+
+/** krótki pogłos: wygenerowana odpowiedź impulsowa (szum z wykładniczym zanikiem) */
+function makeIR(sec, decay) {
+  const n = Math.round(ctx.sampleRate * sec), b = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-decay * i / n * 3) * (1 - i / n); }
+  return b;
+}
 
 export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   ctx = new AC();
-  master = ctx.createGain();
-  master.gain.value = muted ? 0 : 0.7 * sfxVol;
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -14; comp.ratio.value = 4;
-  master.connect(comp).connect(ctx.destination);
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {}); // autoplay: start po geście użytkownika (initAudio woła się z handlerów klawisza/kliknięcia)
+  master = ctx.createGain(); master.gain.value = masterLevel();
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = C.master.compThreshold; comp.ratio.value = C.master.compRatio; comp.attack.value = 0.005; comp.release.value = 0.2;
+  const lim = ctx.createDynamicsCompressor(); lim.threshold.value = C.master.limiterThreshold; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.06; // limiter na końcu toru
+  master.connect(comp).connect(lim).connect(ctx.destination);
+  // wspólny pogłos (wysyłka z aut i efektów), poziom zależny od otoczenia
+  const conv = ctx.createConvolver(); conv.buffer = makeIR(C.reverb.sec, C.reverb.decay);
+  rvSend = ctx.createGain(); rvSend.gain.value = C.reverb.wetBase; rvSend.connect(conv); conv.connect(master);
   const len = ctx.sampleRate * 2;
   noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  bank = null; loadSamples();
 }
 export function isMuted() { return muted; }
 export const getSfxVolume = () => sfxVol;
 export function setSfxVolume(v) {
   sfxVol = Math.min(1, Math.max(0, v));
   try { localStorage.setItem('tc_sfx', String(sfxVol)); } catch { /* ignore */ }
-  if (master && !muted) master.gain.setTargetAtTime(0.7 * sfxVol, ctx.currentTime, 0.03);
+  if (master) master.gain.setTargetAtTime(masterLevel(), ctx.currentTime, 0.03);
 }
 export function setMuted(m) {
   muted = m;
   try { localStorage.setItem('tc_muted', m ? '1' : '0'); } catch { /* ignore */ }
-  if (master) master.gain.setTargetAtTime(m ? 0 : 0.7 * sfxVol, ctx.currentTime, 0.05);
+  if (master) master.gain.setTargetAtTime(masterLevel(), ctx.currentTime, 0.05);
 }
+let viewMix = 0; // 0 = zewnątrz (pełne pasmo), 1 = wnętrze (lowpass + dudnienie); dotyczy aut gracza
+/** miks kamery: 'exterior' | 'interior' (wnętrze: lowpass ~2,4 kHz i podbicie dudnienia) */
+export function setAudioView(mode) { viewMix = mode === 'interior' ? 1 : 0; }
+/** otoczenie 0..1 (0 = otwarta przestrzeń, 1 = ciasno/odbicia: wąski tor, most) → ilość krótkiego pogłosu */
+export function setAmbience(k) { if (rvSend) rvSend.gain.setTargetAtTime(C.reverb.wetBase + (C.reverb.wetMax - C.reverb.wetBase) * clamp01(k), ctx.currentTime, 0.4); }
 
 const noiseSrc = () => { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; return s; };
 
@@ -47,177 +99,239 @@ function tone({ type = 'sine', f = 440, f2 = null, dur = 0.15, gain = 0.2, attac
 }
 
 /** widmo spalin: harmoniczne z wyraźnymi parzystymi (jak sportowy silnik wolnossący), cache wspólny dla aut */
-let engineWave = null;
-function getEngineWave() {
-  if (engineWave) return engineWave;
-  const N = 28, re = new Float32Array(N + 1), im = new Float32Array(N + 1);
-  for (let n = 1; n <= N; n++) im[n] = (1 / n ** 0.85) * (n % 2 === 0 ? 1.3 : 1) * (n === 3 ? 0.8 : 1) * (n > 14 ? 0.5 : 1);
-  engineWave = ctx.createPeriodicWave(re, im); return engineWave;
-}
-/** przełożenia skrzyni (górna prędkość biegu w ułamku prędkości maks.) i obroty */
-const GEAR_TOP = [0.16, 0.30, 0.45, 0.60, 0.75, 0.90, 1.05, 1.38];
-const RPM_IDLE = 3600, RPM_MAX = 12600;
+// ======================= Banki warstw: synteza offline albo próbki =======================
+let bank = null;
+const EQ_C = 2 * Math.PI;
 
-/** Silnik (skrzynia 8-biegowa, obroty zależne od prędkości, zmiany biegów, strzały, turbo), opony (pisk, hamowanie), wiatr i trawa dla jednego auta. */
+/** szew pętli bez kliknięć: z surowego sygnału `a` (długość N+X) robi pętlę długości N — koniec miksowany equal-power z początkiem */
+function loopFromRaw(a, N, X) {
+  const out = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    if (i < N - X) out[i] = a[i + X];
+    else { const t = (i - (N - X)) / X; out[i] = a[i + X] * Math.cos(t * Math.PI / 2) + a[i - (N - X)] * Math.sin(t * Math.PI / 2); }
+  }
+  return out;
+}
+/** zdekodowany plik → pętla z crossfade na szwie */
+function loopableBuffer(buf, xfadeSec) {
+  const X = Math.min(Math.round(xfadeSec * buf.sampleRate), buf.length >> 2), N = buf.length - X, out = ctx.createBuffer(buf.numberOfChannels, N, buf.sampleRate);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) out.getChannelData(ch).set(loopFromRaw(buf.getChannelData(ch), N, X));
+  return out;
+}
+function noiseRaw(n) { const a = new Float32Array(n); for (let i = 0; i < n; i++) a[i] = Math.random() * 2 - 1; return a; }
+/** filtr jednobiegunowy lowpass/highpass in-place (do kształtowania szumów w buforach) */
+function onePole(a, hz, hp = false) { const k = 1 - Math.exp(-EQ_C * hz / ctx.sampleRate); let y = 0; for (let i = 0; i < a.length; i++) { y += (a[i] - y) * k; a[i] = hp ? a[i] - y : y; } return a; }
+function bufferFrom(arr, norm = 0.9) { let m = 1e-6; for (let i = 0; i < arr.length; i++) m = Math.max(m, Math.abs(arr[i])); const b = ctx.createBuffer(1, arr.length, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < arr.length; i++) d[i] = arr[i] / m * norm; return b; }
+
+/** jedna warstwa silnika dla obrotów `rpm` i obciążenia on/off: harmoniczne zapłonów (okresowe → pętla idealna) + szum wydechu/ssania */
+function synthEngineLayer(rpm, on) {
+  const E = C.engine, sr = ctx.sampleRate;
+  const fire0 = rpm / 60 * E.cyl / 2;
+  const cycles = Math.max(4, Math.round(fire0 * E.loopSec / 4) * 4), N = Math.round(cycles / fire0 * sr), fire = cycles / (N / sr); // całkowita liczba cykli i wielokrotność 4 (wzór nierównych zapłonów)
+  const out = new Float32Array(N), H = 26, pw = on ? 0.82 : 1.2;
+  for (let h = 1; h <= H; h++) {
+    const hz = fire * h; if (hz > sr * 0.45) break;
+    // formanty rury wydechowej (rosną z obrotami) + nieparzyste/parzyste
+    const f1 = 420 + rpm * 0.12, f2 = 1500 + rpm * 0.25;
+    let amp = h ** -pw * (h % 2 === 0 ? 1.28 : 1) * (1 + 1.6 * Math.exp(-(((hz - f1) / 260) ** 2)) + 1.0 * Math.exp(-(((hz - f2) / 700) ** 2)));
+    if (on) amp *= 1 + 0.5 * Math.min(1, h / 12); else amp *= 0.7 * Math.exp(-h / 9);
+    const ph = Math.random() * EQ_C, dw = EQ_C * hz / sr;
+    for (let i = 0; i < N; i++) out[i] += amp * Math.sin(ph + dw * i);
+  }
+  // podharmoniczna 0,5 (leniwy warkot V8, mocniejsza pod obciążeniem) i modulacja co 4 zapłony (nierówna praca cylindrów)
+  const sub = on ? 0.55 : 0.35, dws = EQ_C * fire * 0.5 / sr, dwm = EQ_C * fire * 0.25 / sr;
+  for (let i = 0; i < N; i++) out[i] = (out[i] + sub * 2 * Math.sin(dws * i + 0.7)) * (1 + 0.08 * Math.sin(dwm * i + 1.3) + 0.04 * Math.sin(2 * dwm * i));
+  // szum: ssanie/turbulencja (pętla z crossfade'm), modulowany częstością zapłonów
+  const X = Math.round(E.xfadeSec * sr), raw = noiseRaw(N + X); onePole(raw, 900 + rpm * 0.4); onePole(raw, 200, true);
+  const nz = loopFromRaw(raw, N, X), nAmp = on ? 0.5 : 0.18, dwf = EQ_C * fire / sr;
+  for (let i = 0; i < N; i++) out[i] += nz[i] * nAmp * (1.4 + Math.sin(dwf * i)) ;
+  return { buf: bufferFrom(out), hz: fire };
+}
+function synthLoop(shape, sec = 2) { // wspólny generator szumowych pętli
+  const sr = ctx.sampleRate, N = Math.round(sec * sr), X = Math.round(C.engine.xfadeSec * sr), raw = noiseRaw(N + X);
+  return bufferFrom(loopFromRaw(shape(raw, sr), N, X), 0.9);
+}
+function buildSynthBank() {
+  const E = C.engine, b = { engine: { on: [], off: [] }, src: 'synth' };
+  for (const rpm of E.layersRpm) { b.engine.on.push(synthEngineLayer(rpm, true)); b.engine.off.push(synthEngineLayer(rpm, false)); }
+  // opony: toczenie na każdej nawierzchni (prędkość odtwarzania ~ prędkość auta), ślizg
+  b.rollAsphalt = synthLoop((a) => { onePole(a, 3200); onePole(a, 350, true); return a; });
+  b.rollCobble = synthLoop((a, sr) => { onePole(a, 420); const per = Math.round(sr / 7); for (let i = 0; i < a.length; i++) { const ph = (i % per) / per; a[i] *= 0.25 + 1.6 * Math.exp(-ph * 9); } return a; }); // rytm kamieni, ~7 stuków/s przy rate=1
+  b.rollSand = synthLoop((a) => { const g = a.slice(); onePole(a, 3800); onePole(a, 700, true); onePole(g, 260); for (let i = 0; i < a.length; i++) a[i] = a[i] * 0.9 + g[i] * 1.1 + (Math.random() < 0.002 ? (Math.random() - 0.5) * 3 : 0); return a; });
+  b.slide = synthLoop((a, sr) => { onePole(a, 4300); onePole(a, 1100, true); for (let i = 0; i < a.length; i++) a[i] *= 0.7 + 0.3 * Math.sin(EQ_C * 31 * i / sr); return a; });
+  b.wind = synthLoop((a) => { onePole(a, 2500); onePole(a, 120, true); return a; }, 3);
+  b.thump = (() => { const n = Math.round(ctx.sampleRate * 0.16), a = noiseRaw(n); onePole(a, 260); for (let i = 0; i < n; i++) a[i] *= Math.exp(-i / n * 7); return bufferFrom(a); })();
+  return b;
+}
+/** próbki z sfx/manifest.json: odrzuca pliki bez źródła/licencji i CC-BY-SA; błąd/brak pliku = zostaje synteza */
+async function loadSamples() {
+  if (!C.samples.enabled || !ctx) { bank = bank || buildSynthBank(); return; }
+  bank = buildSynthBank(); // synteza od razu (gra nie czeka na pliki)
+  try {
+    const res = await fetch(C.samples.manifest, { cache: 'no-cache' }); if (!res.ok) return;
+    const man = await res.json(), base = C.samples.manifest.replace(/[^/]*$/, '');
+    const ok = (e) => e && e.file && e.source && e.license && !/-SA\b|ShareAlike/i.test(e.license);
+    const load = async (e) => { if (!ok(e)) { console.warn('[audio] odrzucono próbkę (brak źródła/licencji lub CC-BY-SA):', e?.file); return null; } const buf = await ctx.decodeAudioData(await (await fetch(base + e.file)).arrayBuffer()); return loopableBuffer(buf, C.engine.xfadeSec); };
+    const nb = { ...bank, src: 'samples', engine: { on: [], off: [] } };
+    const lay = (man.engine || []).filter((e) => e.rpm).sort((a, b) => a.rpm - b.rpm);
+    for (const kind of ['on', 'off']) for (const e of lay.filter((x) => x.load === kind)) { const buf = await load(e); if (buf) nb.engine[kind].push({ buf, hz: e.rpm / 60 * C.engine.cyl / 2, rpm: e.rpm }); }
+    if (nb.engine.on.length >= 2 && nb.engine.off.length === nb.engine.on.length) { nb.layersRpm = nb.engine.on.map((l) => l.rpm); } else nb.engine = bank.engine;
+    for (const [k, e] of [['rollAsphalt', man.roll?.asphalt], ['rollCobble', man.roll?.cobble], ['rollSand', man.roll?.sand], ['slide', man.slide], ['wind', man.wind]]) { const buf = e && await load(e); if (buf) nb[k] = buf; }
+    bank = nb; // auta tworzone od teraz używają próbek (istniejące zostają przy syntezie do następnego wyścigu)
+  } catch (e) { console.warn('[audio] próbki niedostępne, synteza:', e?.message); }
+}
+
+// ======================= Auto: silnik + opony + wiatr =======================
+const wEq = new Float32Array(8); // wagi warstw (prealokowane)
+/** equal-power: wagi sąsiednich warstw dla wartości x między progami */
+function layerWeights(rpm, R, out) {
+  out.fill(0); const n = R.length;
+  if (rpm <= R[0]) { out[0] = 1; return; } if (rpm >= R[n - 1]) { out[n - 1] = 1; return; }
+  let i = 0; while (i < n - 2 && rpm > R[i + 1]) i++;
+  const t = (rpm - R[i]) / (R[i + 1] - R[i]); out[i] = Math.cos(t * Math.PI / 2); out[i + 1] = Math.sin(t * Math.PI / 2);
+}
+
+/**
+ * Silnik (4–6 warstw RPM × on/off-load, equal-power, playbackRate z obrotów; inercja, mikrodrgania, limiter, biegi, strzały),
+ * opony (toczenie/ślizg/pisk po nawierzchni), wiatr (∝ prędkość²), miks wnętrze/zewnątrz, Doppler.
+ * opts.lite = auto AI: tylko 2 warstwy silnika (on), bez wiatru.
+ */
 export class CarAudio {
-  constructor(volume = 1, pan = 0) {
+  constructor(volume = 1, pan = 0, opts = {}) {
     this.on = !!ctx;
     if (!ctx) return;
-    this.out = ctx.createGain(); this.out.gain.value = 0;
-    const panner = ctx.createStereoPanner(); panner.pan.value = pan; this.panner = panner;
-    this.out.connect(panner).connect(master);
-    this.volume = volume;
-    // silnik: dwa generatory ze wspólnym widmem (lekko rozstrojone = „grubość”), podstawa o połowę niżej i warkot szumowy ssania
-    const w = getEngineWave();
-    const mk = (type) => { const o = ctx.createOscillator(); if (type) o.type = type; else o.setPeriodicWave(w); return o; };
-    this.o1 = mk(); this.o2 = mk(); this.o3 = mk('square'); this.o4 = mk('triangle');
-    this.g1 = ctx.createGain(); this.g2 = ctx.createGain(); this.g3 = ctx.createGain(); this.g4 = ctx.createGain();
-    this.g1.gain.value = 0.55; this.g2.gain.value = 0.4; this.g3.gain.value = 0.07; this.g4.gain.value = 0.3;
-    this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.Q.value = 1.4;
-    this.pk = ctx.createBiquadFilter(); this.pk.type = 'peaking'; this.pk.Q.value = 2.2; this.pk.gain.value = 7; // formant rezonansu rury wydechowej
-    const shaper = ctx.createWaveShaper(), curve = new Float32Array(512);
-    for (let i = 0; i < 512; i++) { const x = (i / 256) - 1; curve[i] = Math.tanh(x * 1.9) * 0.92 + 0.08 * x; }
-    shaper.curve = curve;
-    this.tg = ctx.createGain(); this.tg.gain.value = 1; // tremolo „burble” na wolnym gazie
-    this.eg = ctx.createGain(); this.eg.gain.value = 0;
-    this.o1.connect(this.g1).connect(this.lp); this.o2.connect(this.g2).connect(this.lp); this.o3.connect(this.g3).connect(this.lp); this.o4.connect(this.g4).connect(this.lp);
-    this.lp.connect(this.pk).connect(shaper).connect(this.tg).connect(this.eg).connect(this.out);
-    this.lfo = ctx.createOscillator(); this.lfo.frequency.value = 23; this.lfoG = ctx.createGain(); this.lfoG.gain.value = 0; this.lfo.connect(this.lfoG).connect(this.tg.gain);
-    [this.o1, this.o2, this.o3, this.o4, this.lfo].forEach((o) => o.start());
-    // ssanie / turbulencja wydechu
-    this.in = noiseSrc(); this.ibp = ctx.createBiquadFilter(); this.ibp.type = 'bandpass'; this.ibp.Q.value = 0.9; this.ig = ctx.createGain(); this.ig.gain.value = 0;
-    this.in.connect(this.ibp).connect(this.ig).connect(this.out); this.in.start();
-    // świst turbosprężarki
-    this.to = ctx.createOscillator(); this.to.type = 'sine'; this.tog = ctx.createGain(); this.tog.gain.value = 0;
-    this.to.connect(this.tog).connect(this.out); this.to.start();
+    if (!bank) bank = buildSynthBank();
+    this.lite = !!opts.lite; this.player = !this.lite;
+    const B = bank, E = C.engine;
+    this.volume = volume; this.out = ctx.createGain(); this.out.gain.value = 0;
+    // ścieżki: zewnątrz (pełne pasmo) i wnętrze (lowpass + dudnienie) — miks przełączany setAudioView
+    this.bus = ctx.createGain();
+    this.ext = ctx.createGain(); this.bus.connect(this.ext).connect(this.out);
+    if (this.player) {
+      this.intLp = ctx.createBiquadFilter(); this.intLp.type = 'lowpass'; this.intLp.frequency.value = C.view.interiorLp; this.intLp.Q.value = 0.7;
+      this.intSh = ctx.createBiquadFilter(); this.intSh.type = 'peaking'; this.intSh.frequency.value = C.view.interiorBoostHz; this.intSh.Q.value = 0.9; this.intSh.gain.value = C.view.interiorBoostDb;
+      this.int = ctx.createGain(); this.int.gain.value = 0; this.bus.connect(this.intLp).connect(this.intSh).connect(this.int).connect(this.out);
+    }
+    this.panner = ctx.createStereoPanner(); this.panner.pan.value = pan;
+    this.out.connect(this.panner).connect(master); const rs = ctx.createGain(); rs.gain.value = 0.9; this.panner.connect(rs).connect(rvSend);
+    // silnik: źródła pętli
+    this.R = bank.layersRpm || E.layersRpm; this.nL = this.R.length;
+    const layIdx = this.lite ? [1, this.nL - 2] : this.R.map((_, i) => i);
+    this.eng = []; // { src, g, kind, i }
+    for (const kind of this.lite ? ['on'] : ['on', 'off']) for (const i of layIdx) {
+      const l = B.engine[kind][i]; if (!l) continue;
+      const src = ctx.createBufferSource(); src.buffer = l.buf; src.loop = true; const g = ctx.createGain(); g.gain.value = 0;
+      src.connect(g).connect(this.bus); src.start(0, Math.random() * 0.5);
+      this.eng.push({ src, g, kind, i, hz: l.hz });
+    }
+    this.layIdx = layIdx;
+    // opony
+    const loopSrc = (buf) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g).connect(this.bus); s.start(0, Math.random()); return { s, g }; };
+    this.rollA = loopSrc(B.rollAsphalt); this.rollC = loopSrc(B.rollCobble); this.rollS = loopSrc(B.rollSand); this.slide = loopSrc(B.slide);
+    this.sq1 = ctx.createOscillator(); this.sq1.type = 'sawtooth'; this.sq2 = ctx.createOscillator(); this.sq2.type = 'square'; this.sq3 = ctx.createOscillator(); this.sq3.type = 'triangle';
+    this.sqf = ctx.createBiquadFilter(); this.sqf.type = 'bandpass'; this.sqf.Q.value = 7; this.sqg = ctx.createGain(); this.sqg.gain.value = 0; this.sqm = ctx.createGain(); this.sqm.gain.value = 1;
+    this.sql = ctx.createOscillator(); this.sql.frequency.value = 38; this.sqlg = ctx.createGain(); this.sqlg.gain.value = 0.3; this.sql.connect(this.sqlg).connect(this.sqm.gain);
+    this.sq1.connect(this.sqf); this.sq2.connect(this.sqf); this.sq3.connect(this.sqf); this.sqf.connect(this.sqm).connect(this.sqg).connect(this.bus);
+    [this.sq1, this.sq2, this.sq3, this.sql].forEach((o) => o.start());
     // wiatr
-    this.wn = noiseSrc(); this.wbp = ctx.createBiquadFilter(); this.wbp.type = 'bandpass'; this.wbp.Q.value = 0.5; this.wg = ctx.createGain(); this.wg.gain.value = 0;
-    this.wn.connect(this.wbp).connect(this.wg).connect(this.out); this.wn.start();
-    // opony: szum poślizgu (szeroki) + wąski, wysoki „pisk” z drżeniem (stick-slip) + osobny pisk blokującego się hamowania
-    this.sn = noiseSrc();
-    this.sbp = ctx.createBiquadFilter(); this.sbp.type = 'bandpass'; this.sbp.frequency.value = 1900; this.sbp.Q.value = 3.5;
-    this.sg = ctx.createGain(); this.sg.gain.value = 0;
-    this.sn.connect(this.sbp).connect(this.sg).connect(this.out); this.sn.start();
-    this.so1 = ctx.createOscillator(); this.so1.type = 'sawtooth'; this.so1.frequency.value = 1180;
-    this.so2 = ctx.createOscillator(); this.so2.type = 'square'; this.so2.frequency.value = 1730;
-    this.so3 = ctx.createOscillator(); this.so3.type = 'triangle'; this.so3.frequency.value = 2620;
-    this.sob = ctx.createBiquadFilter(); this.sob.type = 'bandpass'; this.sob.frequency.value = 1500; this.sob.Q.value = 7;
-    this.sog = ctx.createGain(); this.sog.gain.value = 0;
-    this.sam = ctx.createGain(); this.sam.gain.value = 1; // modulacja amplitudy pisku
-    this.slfo = ctx.createOscillator(); this.slfo.frequency.value = 38; this.slfoG = ctx.createGain(); this.slfoG.gain.value = 0.35; this.slfo.connect(this.slfoG).connect(this.sam.gain);
-    this.slfo2 = ctx.createOscillator(); this.slfo2.frequency.value = 7; this.slfoV = ctx.createGain(); this.slfoV.gain.value = 40; // drżenie wysokości
-    this.slfo2.connect(this.slfoV); this.slfoV.connect(this.so1.frequency); this.slfoV.connect(this.so2.frequency); this.slfoV.connect(this.so3.frequency);
-    this.so1.connect(this.sob); this.so2.connect(this.sob); this.so3.connect(this.sob); this.sob.connect(this.sam).connect(this.sog).connect(this.out);
-    [this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => o.start());
-    // trawa / krawężnik: niski szum
-    this.rn = noiseSrc();
-    this.rlp = ctx.createBiquadFilter(); this.rlp.type = 'lowpass'; this.rlp.frequency.value = 500;
-    this.rg = ctx.createGain(); this.rg.gain.value = 0;
-    this.rn.connect(this.rlp).connect(this.rg).connect(this.out); this.rn.start();
-    // kostka: rytmiczny dudniący stukot (częstość z prędkością); piasek: szum sypiącego się piasku
-    this.cn = noiseSrc(); this.clp = ctx.createBiquadFilter(); this.clp.type = 'lowpass'; this.clp.frequency.value = 320; this.clp.Q.value = 0.9;
-    this.cam = ctx.createGain(); this.cam.gain.value = 0.5; this.cg = ctx.createGain(); this.cg.gain.value = 0;
-    this.clfo = ctx.createOscillator(); this.clfo.type = 'square'; this.clfo.frequency.value = 12; this.clfoG = ctx.createGain(); this.clfoG.gain.value = 0.5; this.clfo.connect(this.clfoG).connect(this.cam.gain);
-    this.cn.connect(this.clp).connect(this.cam).connect(this.cg).connect(this.out);
-    this.cbp = ctx.createBiquadFilter(); this.cbp.type = 'bandpass'; this.cbp.frequency.value = 1100; this.cbp.Q.value = 1.4; this.cg2 = ctx.createGain(); this.cg2.gain.value = 0; // „kliknięcia” kamieni
-    this.cn.connect(this.cbp).connect(this.cam); this.cam.connect(this.cg2).connect(this.out);
-    this.hn = noiseSrc(); this.hbp = ctx.createBiquadFilter(); this.hbp.type = 'bandpass'; this.hbp.frequency.value = 1500; this.hbp.Q.value = 0.5; this.hg = ctx.createGain(); this.hg.gain.value = 0;
-    this.hlp = ctx.createBiquadFilter(); this.hlp.type = 'lowpass'; this.hlp.frequency.value = 380; this.hg2 = ctx.createGain(); this.hg2.gain.value = 0;
-    this.hn.connect(this.hbp).connect(this.hg).connect(this.out); this.hn.connect(this.hlp).connect(this.hg2).connect(this.out);
-    this.cn.start(); this.clfo.start(); this.hn.start(); this.surfK = 0;
-    this.rpm = RPM_IDLE; this.gear = 0; this.cut = 0; this.lastThr = 0; this.popCd = 0; this.shiftCd = 0; this.limT = 0;
+    if (!this.lite || C.ai.wind) { this.wind = loopSrc(B.wind); this.windLp = ctx.createBiquadFilter(); this.windLp.type = 'lowpass'; this.windLp.frequency.value = C.wind.lpMin; this.wind.g.disconnect(); this.wind.g.connect(this.windLp).connect(this.bus); }
+    // stan
+    this.rpm = E.idleRpm; this.gear = 0; this.load = 0; this.cut = 0; this.lastThr = 0; this.popCd = 0; this.shiftCd = 0; this.limT = 0; this.limPhase = 0; this.jit = 0; this.dop = 1; this.viewK = 0; this.bumpT = 0; this.surfPrevS = 0; this.surfPrevC = 0;
   }
 
-  /** krótki wybuch szumu (strzał z wydechu, stuk skrzyni) */
-  _burst(freq, gain, dur, q = 1, type = 'bandpass') {
-    const t = ctx.currentTime, src = noiseSrc(), f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  _burst(freq, gain, dur, q = 1, type = 'bandpass') { // krótkie zdarzenia (rzadko, nie w pętli klatek): strzały, szarpnięcia
+    const t = ctx.currentTime, src = ctx.createBufferSource(); src.buffer = noiseBuf; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-    src.connect(f).connect(g).connect(this.out); src.start(t, Math.random()); src.stop(t + dur + 0.02);
+    src.connect(f).connect(g).connect(this.bus); src.start(t, Math.random()); src.stop(t + dur + 0.02);
+  }
+  /** tąpnięcie na nierówności / lądowaniu / krawężniku */
+  thump(power = 0.5) {
+    if (!this.on) return; const t = ctx.currentTime, s = ctx.createBufferSource(); s.buffer = bank.thump; const g = ctx.createGain(); g.gain.value = Math.min(1, power) * C.wind.bumpLevel * 2; s.playbackRate.value = 0.8 + Math.random() * 0.5;
+    s.connect(g).connect(this.bus); s.start(t);
   }
 
-  /** speed: prędkość względem maksymalnej (może przekraczać 1 z nitro), throttle 0..1, slip 0..1, rough 0..1, brake 0..1 */
-  update({ speed, throttle, slip, rough, brake = 0, active = true, nitro = false, sandK = 0, cobK = 0 }, dt) {
+  /**
+   * speed: prędkość względem maksymalnej (z nitro >1), throttle 0..1, slip 0..1, brake 0..1, rough 0..1,
+   * sandK/cobK 0..1 (nawierzchnia), doppler = współczynnik wysokości (1 = brak) liczony w main z prędkości względnej
+   */
+  update({ speed, throttle, slip, rough, brake = 0, active = true, nitro = false, sandK = 0, cobK = 0, doppler = 1 }, dt) {
     if (!this.on) return;
-    const t = ctx.currentTime;
-    const sp = Math.abs(speed);
+    const t = ctx.currentTime, E = C.engine, sp = Math.abs(speed), tires = C.tire;
     // --- skrzynia: zmiana biegu przy dobiciu do obrotów / zbyt niskich obrotach ---
     this.shiftCd -= dt; this.popCd -= dt;
-    const topOf = (g) => GEAR_TOP[g];
-    if (this.shiftCd <= 0 && this.gear < GEAR_TOP.length - 1 && sp > topOf(this.gear) * 0.985) { this.gear++; this.cut = 0.11; this.shiftCd = 0.35; if (throttle > 0.3) this._burst(260, 0.1, 0.07); }
-    else if (this.shiftCd <= 0 && this.gear > 0 && sp < topOf(this.gear - 1) * 0.8) { this.gear--; this.shiftCd = 0.3; this.rpm += 1800; if (sp > 0.25 && throttle < 0.4) this._burst(500, 0.12, 0.09); }
+    const tops = E.gearTops;
+    if (this.shiftCd <= 0 && this.gear < tops.length - 1 && sp > tops[this.gear] * 0.985) { this.gear++; this.cut = E.shiftCutSec; this.shiftCd = 0.35; this.rpm = Math.max(E.idleRpm, this.rpm - E.shiftDropRpm); if (throttle > 0.3) { this._burst(240, E.clunk, 0.08, 1.2, 'lowpass'); this.thump(0.3); } }
+    else if (this.shiftCd <= 0 && this.gear > 0 && sp < tops[this.gear - 1] * 0.8) { this.gear--; this.shiftCd = 0.3; this.rpm += 1800; if (sp > 0.25 && throttle < 0.4) this._burst(500, 0.12, 0.09); }
     this.cut = Math.max(0, this.cut - dt);
     const g = this.gear;
-    let want = Math.max(RPM_IDLE, RPM_MAX * sp / topOf(g));
-    if (sp < 0.04) want = RPM_IDLE + throttle * 5200; // start: obroty rosną przy wciśniętym gazie
-    else if (g === 0) want = Math.max(want, RPM_IDLE + throttle * 3600);
-    want = Math.min(RPM_MAX, want);
-    if (this.cut > 0) want = Math.max(RPM_IDLE, want - 2200); // przerwa w napędzie przy zmianie biegu
-    this.rpm += (want - this.rpm) * Math.min(1, dt * (this.cut > 0 ? 25 : throttle > 0.1 ? 14 : 7));
-    // ogranicznik obrotów: drżenie przy czerwonym polu
-    const red = Math.max(0, (this.rpm - RPM_MAX * 0.955) / (RPM_MAX * 0.045));
-    this.limT += dt;
-    const lim = red > 0.5 && throttle > 0.5 ? (Math.sin(this.limT * 78) > 0.1 ? 1 : 0.62) : 1;
-    const wob = 1 + (throttle > 0.2 ? Math.sin(this.limT * 9.3) * 0.004 + Math.sin(this.limT * 3.1) * 0.003 : 0);
-    const rpm = this.rpm * wob;
-    const f = rpm / 60 * 4; // częstotliwość zapłonów (silnik 8-cylindrowy, 4 zapłony na obrót)
-    this.o1.frequency.setTargetAtTime(f, t, 0.02);
-    this.o2.frequency.setTargetAtTime(f * 1.007 + 0.4, t, 0.02);
-    this.o3.frequency.setTargetAtTime(f * 0.5, t, 0.02);
-    this.o4.frequency.setTargetAtTime(f * 0.25, t, 0.03);
-    const open = 0.25 + throttle * 0.75;
-    this.lp.frequency.setTargetAtTime((650 + rpm * 0.55) * (0.55 + open * 0.8) * (this.cut > 0 ? 0.6 : 1), t, 0.04);
-    this.pk.frequency.setTargetAtTime(500 + rpm * 0.28, t, 0.05);
-    const load = throttle * 0.55 + 0.32;
-    this.eg.gain.setTargetAtTime(active ? (0.1 + load * 0.5) * lim * (this.cut > 0 ? 0.45 : 1) * (0.7 + 0.3 * Math.min(1, rpm / 9000)) : 0, t, 0.03);
-    // burble na zdjęciu gazu przy obrotach
-    this.lfoG.gain.setTargetAtTime(throttle < 0.12 && rpm > 5000 ? 0.28 : 0, t, 0.08);
-    this.lfo.frequency.setTargetAtTime(19 + rpm / 900, t, 0.1);
-    this.out.gain.setTargetAtTime(this.volume, t, 0.1);
-    // ssanie i szum wydechu
-    this.ibp.frequency.setTargetAtTime(500 + rpm * 0.2, t, 0.05);
-    this.ig.gain.setTargetAtTime(active ? (0.04 + throttle * 0.2) * Math.min(1, rpm / 7000) : 0, t, 0.05);
-    // turbo: świst rośnie z obrotami i gazem, blow-off po puszczeniu pedału
-    this.to.frequency.setTargetAtTime(1500 + rpm * 0.35, t, 0.05);
-    this.tog.gain.setTargetAtTime(active ? throttle * Math.min(1, Math.max(0, (rpm - 5500) / 5000)) * 0.028 + (nitro ? 0.02 : 0) : 0, t, 0.06);
-    if (this.lastThr > 0.7 && throttle < 0.15 && rpm > 6500 && this.popCd <= 0) {
+    let want = Math.max(E.idleRpm, E.maxRpm * sp / tops[g]);
+    if (sp < 0.04) want = E.idleRpm + throttle * 5200; else if (g === 0) want = Math.max(want, E.idleRpm + throttle * 3600);
+    want = Math.min(E.maxRpm, want);
+    // inercja: szybciej w górę niż w dół; przerwa w napędzie przy biegu obniża obroty
+    if (this.cut > 0) want = Math.max(E.idleRpm, want - E.shiftDropRpm);
+    this.rpm += (want - this.rpm) * (1 - Math.exp(-dt * (want > this.rpm ? E.rpmUpK : E.rpmDownK) * (throttle > 0.1 || want > this.rpm ? 1 : 0.7)));
+    // limiter: odcinanie zapłonu (na przemian obcięcie obciążenia) + lekki spadek obrotów
+    const red = clamp01((this.rpm - E.maxRpm * E.limiterFrac) / (E.maxRpm * (1 - E.limiterFrac)));
+    this.limPhase += dt * E.limiterHz; const cutting = red > 0.4 && throttle > 0.5 && (this.limPhase % 1) < 0.42;
+    // mikro-drgania obrotów (ruchome, wygładzone losowe)
+    this.jit += ((Math.random() - 0.5) * 2 - this.jit) * Math.min(1, dt * 22);
+    const rpm = this.rpm * (1 + this.jit * (throttle < 0.12 && sp < 0.1 ? E.idleJitter : E.jitter)) * (cutting ? 1 - E.limiterDip : 1);
+    // obciążenie (on/off-load): wygładzone, przy zmianie biegu i odcięciu zapłonu spada
+    const loadT = (this.cut > 0 || cutting) ? (cutting ? E.limiterCut : 0) : throttle;
+    this.load += (loadT - this.load) * (1 - Math.exp(-dt / (loadT > this.load ? E.loadAttackSec : E.loadReleaseSec)));
+    const onW = Math.sin(this.load * Math.PI / 2), offW = Math.cos(this.load * Math.PI / 2);
+    layerWeights(rpm, this.R, wEq);
+    this.dop += (doppler - this.dop) * Math.min(1, dt * C.doppler.smoothK);
+    const dopK = Math.min(C.doppler.max, Math.max(C.doppler.min, 1 + (this.dop - 1) * C.doppler.scale));
+    const fire = rpm / 60 * E.cyl / 2 * dopK;
+    const act = active ? 1 : 0;
+    // poziom silnika rośnie z obrotami i obciążeniem
+    const level = E.level * (0.55 + 0.45 * clamp01(rpm / 9000)) * (0.35 + 0.65 * (0.4 + this.load * 0.6)) * act;
+    for (const L of this.eng) {
+      const w = this.lite ? (L.i === this.layIdx[0] ? Math.cos(clamp01((rpm - this.R[this.layIdx[0]]) / (this.R[this.layIdx[1]] - this.R[this.layIdx[0]])) * Math.PI / 2) : Math.sin(clamp01((rpm - this.R[this.layIdx[0]]) / (this.R[this.layIdx[1]] - this.R[this.layIdx[0]])) * Math.PI / 2)) : wEq[L.i];
+      L.g.gain.setTargetAtTime(w * (L.kind === 'on' ? (this.lite ? 1 : onW) : offW) * level, t, 0.03);
+      L.src.playbackRate.setTargetAtTime(fire / L.hz, t, 0.02);
+    }
+    // blow-off / strzały przy zrzucaniu gazu z wysokich obrotów
+    if (this.lastThr > 0.7 && throttle < 0.15 && rpm > E.popMinRpm && this.popCd <= 0 && !this.lite) {
       this.popCd = 0.8; this._burst(4200, 0.07, 0.4, 0.8, 'highpass');
-      for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) setTimeout(() => { if (this.on && ctx) this._burst(240 + Math.random() * 500, 0.16, 0.06, 1.2); }, 70 + i * (60 + Math.random() * 90));
+      if (Math.random() < E.popChance) for (let i = 0, n = 2 + (Math.random() * 3 | 0); i < n; i++) setTimeout(() => { if (this.on && ctx) this._burst(240 + Math.random() * 500, 0.16, 0.06, 1.2); }, 70 + i * (60 + Math.random() * 90));
     }
     this.lastThr = throttle;
-    // wiatr rośnie z kwadratem prędkości
-    this.wbp.frequency.setTargetAtTime(500 + sp * 1600, t, 0.1);
-    this.wg.gain.setTargetAtTime(active ? Math.min(1, sp * sp) * 0.2 : 0, t, 0.1);
-    // opony: szum + pisk (zakręt w poślizgu, drift) oraz pisk hamowania na dużej prędkości
-    const brk = brake > 0.5 && sp > 0.28 ? Math.min(1, (brake - 0.4) * 1.6) * Math.min(1, sp * 1.5) * 0.85 : 0;
-    const surfMul = (1 - sandK * 0.85) * (1 - cobK * 0.55); // na piasku/kostce pisk jest cichszy, ale pojawia się inny dźwięk
-    const sq = Math.min(1, Math.max(slip, brk)) * surfMul;
-    this.sg.gain.setTargetAtTime((Math.min(1, slip) * 0.34 + brk * 0.18) * (1 - sandK * 0.5), t, 0.04);
-    this.sog.gain.setTargetAtTime(sq ** 1.15 * 0.2, t, 0.05);
-    this.slfoG.gain.setTargetAtTime(0.18 + sq * 0.35, t, 0.1);
-    this.slfo.frequency.setTargetAtTime(30 + sq * 40, t, 0.1);
-    const base = 980 + slip * 380 + sp * 260 + brk * 140;
-    this.so1.frequency.setTargetAtTime(base, t, 0.05);
-    this.so2.frequency.setTargetAtTime(base * 1.49, t, 0.05);
-    this.so3.frequency.setTargetAtTime(base * 2.2, t, 0.05);
-    this.sob.frequency.setTargetAtTime(1250 + slip * 700 + sp * 500, t, 0.05);
-    this.sbp.frequency.setTargetAtTime(1500 + slip * 1000, t, 0.05);
-    this.rg.gain.setTargetAtTime(Math.min(1, rough) * Math.min(1, sp * 2) * 0.5, t, 0.08);
-    // kostka: stukot w rytmie kamieni (ok. 3 m między szwami), z prędkością rośnie częstość
-    const mv = Math.min(1, sp * 1.6), ms = sp * 82; // prędkość w m/s
-    this.clfo.frequency.setTargetAtTime(4 + ms / 2.4, t, 0.1);
-    this.cg.gain.setTargetAtTime(active ? cobK * mv * 0.75 : 0, t, 0.08); this.cg2.gain.setTargetAtTime(active ? cobK * mv * 0.28 : 0, t, 0.08);
-    // piasek: szorstki szum i niski chrzęst, bez pisku
-    this.hbp.frequency.setTargetAtTime(1000 + sp * 1800, t, 0.1);
-    this.hg.gain.setTargetAtTime(active ? sandK * mv * 0.34 : 0, t, 0.08); this.hg2.gain.setTargetAtTime(active ? sandK * mv * 0.5 : 0, t, 0.08);
-    if ((sandK > 0.5) !== (this.surfK > 0.5) || (cobK > 0.5) !== (this.cobPrev > 0.5)) { if (active && sp > 0.1) this._burst(sandK > 0.5 ? 1800 : 400, 0.1, 0.18, 0.8); }
-    this.surfK = sandK; this.cobPrev = cobK;
+    // --- opony ---
+    const surfA = clamp01(1 - sandK - cobK), surfC = cobK * (1 - sandK), surfS = sandK;
+    const mv = Math.min(1, sp * 1.6), sl = clamp01(slip), brk = brake > 0.5 && sp > 0.28 ? Math.min(1, (brake - 0.4) * 1.6) * Math.min(1, sp * 1.5) * 0.85 : 0;
+    const sx = Math.max(sl, brk), rollFade = Math.cos(clamp01(sx / 0.85) * Math.PI / 2), slideW = Math.sin(clamp01(sx / 0.85) * Math.PI / 2) * (1 - 0.4 * surfS);
+    const sqW = clamp01((sx - 0.42) / 0.58) * (1 - 0.85 * surfS) * (1 - 0.55 * surfC) * (1 - 0.5 * surfS);
+    this.rollA.g.gain.setTargetAtTime(act * surfA * mv * tires.rollLevel * rollFade, t, 0.06); this.rollA.s.playbackRate.setTargetAtTime((0.7 + sp * 0.9) * dopK, t, 0.1);
+    this.rollC.g.gain.setTargetAtTime(act * surfC * mv * tires.cobbleRumble * tires.rollLevel * 1.4, t, 0.06); this.rollC.s.playbackRate.setTargetAtTime(0.4 + sp * 2.4, t, 0.1);
+    this.rollS.g.gain.setTargetAtTime(act * surfS * mv * tires.sandHiss * 1.2, t, 0.06); this.rollS.s.playbackRate.setTargetAtTime(0.8 + sp * 0.6, t, 0.1);
+    this.slide.g.gain.setTargetAtTime(act * slideW * mv * tires.slideLevel, t, 0.05);
+    const base = 980 + sl * 380 + sp * 260 + brk * 140;
+    this.sq1.frequency.setTargetAtTime(base * dopK, t, 0.05); this.sq2.frequency.setTargetAtTime(base * 1.49 * dopK, t, 0.05); this.sq3.frequency.setTargetAtTime(base * 2.2 * dopK, t, 0.05);
+    this.sqf.frequency.setTargetAtTime(1250 + sl * 700 + sp * 500, t, 0.05);
+    this.sqg.gain.setTargetAtTime(act * sqW ** 1.15 * tires.squealLevel, t, 0.05); this.sqlg.gain.setTargetAtTime(0.18 + sqW * 0.35, t, 0.1); this.sql.frequency.setTargetAtTime(30 + sqW * 40, t, 0.1);
+    // przejście między nawierzchniami: krótki trzask
+    if ((sandK > 0.5) !== (this.surfPrevS > 0.5) || (cobK > 0.5) !== (this.surfPrevC > 0.5)) { if (active && sp > 0.1) this._burst(sandK > 0.5 ? 1800 : 400, 0.1, 0.18, 0.8); }
+    this.surfPrevS = sandK; this.surfPrevC = cobK;
+    // --- wiatr: głośność ∝ speed², lowpass rośnie z prędkością; tąpnięcia na nierównościach ---
+    if (this.wind) {
+      this.windLp.frequency.setTargetAtTime(C.wind.lpMin + (C.wind.lpMax - C.wind.lpMin) * Math.min(1, sp), t, 0.1);
+      this.wind.g.gain.setTargetAtTime(act * Math.min(1.5, sp * sp) * C.wind.level, t, 0.1); this.wind.s.playbackRate.value = 0.85 + sp * 0.3;
+    }
+    this.bumpT -= dt; if ((cobK > 0.25 || rough > 0.1) && sp > 0.2 && this.bumpT <= 0 && active) { this.bumpT = 0.12 + Math.random() * 0.18 / (0.3 + sp); this.thump(0.12 + 0.25 * Math.max(cobK, rough) * sp); }
+    // --- miks wnętrze/zewnątrz (equal-power) i głośność auta ---
+    if (this.player) {
+      this.viewK += (viewMix - this.viewK) * Math.min(1, dt / C.view.switchSec);
+      this.ext.gain.setTargetAtTime(Math.cos(this.viewK * Math.PI / 2), t, 0.03); this.int.gain.setTargetAtTime(Math.sin(this.viewK * Math.PI / 2) * C.view.interiorGain, t, 0.03);
+    }
+    this.out.gain.setTargetAtTime(this.volume, t, 0.1);
   }
 
   stop() {
     if (!this.on) return;
-    const t = ctx.currentTime;
-    this.out.gain.setTargetAtTime(0, t, 0.05);
-    setTimeout(() => { [this.o1, this.o2, this.o3, this.o4, this.lfo, this.cn, this.clfo, this.hn, this.in, this.to, this.wn, this.sn, this.rn, this.so1, this.so2, this.so3, this.slfo, this.slfo2].forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
+    this.out.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+    setTimeout(() => { const all = [...this.eng.map((l) => l.src), this.rollA.s, this.rollC.s, this.rollS.s, this.slide.s, this.sq1, this.sq2, this.sq3, this.sql]; if (this.wind) all.push(this.wind.s); all.forEach((o) => { try { o.stop(); } catch { /* ok */ } }); this.out.disconnect(); }, 400);
   }
 }
 

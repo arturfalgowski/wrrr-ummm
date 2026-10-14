@@ -40,7 +40,7 @@ Logi: `ssh ubuntu@51.195.41.0 'journalctl -u wrrr-ummm -n 50 --no-pager'`.
 - `public/js/world3d.js` — świat: niebo (pora dnia), teren z mapy wysokości (nasypy, doliny pod mostami, `world.hAt`), nawierzchnie (asfalt/kostka/piasek), bandy, kerby, pady, brama START/META (s=0), mosty (dźwigary+filary), dekoracje motywu, chmury/balony/ptaki.
 - `public/js/themes3d.js` — motywy krajów (kolory, `relief`, `groundBelow`, dekoracje: sosny, palmy, skały, góry, trybuny, drapacze, piramidy…). Duże obiekty tła sprawdzają `farDist` (nie wchodzą na tor); obiekty stoją na `hAt`.
 - `public/js/main.js` — pętla gry, UI (menu/lobby/wyniki), kamera, HUD, multiplayer, okrążenia (`S.raceLaps`, `me.lapIdx`), uszkodzenia (`me.hp`, `damageMe`, wybuch, respawn po 2,6 s), paczki (nitro, karabin, olej, mina, naprawa), duch rekordu (`tc_ghost4_<tor>_<okr>`), powtórka.
-- `items3d.js` (paczki/miny/olej/pociski w współrzędnych toru, odległości modulo okrążenie), `car.js` (bolid F1, kolor, personalizacja, wgniecenia `setDamage`), `fx.js`, `minimap.js`, `post.js`, `audio.js`, `music.js`.
+- `audio.js` — `AUDIO_CONFIG` (strojenie na słuch, dostępne też jako `window.AUDIO_CONFIG`): silnik = warstwy pętli RPM × on/off-load (synteza offline albo próbki z `public/sfx/manifest.json`), opony/wiatr, miks wnętrze/zewnątrz (`setAudioView`), Doppler, pogłos (`setAmbience`). `items3d.js` (paczki/miny/olej/pociski w współrzędnych toru, odległości modulo okrążenie), `car.js` (bolid F1, kolor, personalizacja, wgniecenia `setDamage`), `fx.js`, `minimap.js`, `post.js`, `audio.js`, `music.js`.
 
 ## Konwencje i pułapki
 

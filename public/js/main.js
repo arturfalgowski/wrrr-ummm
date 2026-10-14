@@ -11,7 +11,7 @@ import { Particles, SkidMarks } from './fx.js';
 import { Minimap } from './minimap.js';
 import { Music } from './music.js';
 import { startFireworks, stopFireworks } from './podium.js';
-import { initAudio, audioReady, CarAudio, sfx, isMuted, setMuted, setRain, getSfxVolume, setSfxVolume } from './audio.js';
+import { initAudio, audioReady, CarAudio, AUDIO_CONFIG, setAmbience, setAudioView, sfx, isMuted, setMuted, setRain, getSfxVolume, setSfxVolume } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -861,6 +861,15 @@ function syncParts(c) {
   if (c.lostW) for (let i = 0; i < 4; i++) if (now[i] && !c.lostW[i]) spawnWheelDebris(c, i);
   c.lostW = now;
 }
+window.AUDIO_CONFIG = AUDIO_CONFIG; // strojenie dźwięku na słuch z konsoli (np. AUDIO_CONFIG.engine.rpmDownK = 4)
+const _dl = new THREE.Vector3();
+/** współczynnik Dopplera dla źródła `st` względem kamery (słuchacza) i prędkości mojego auta */
+function dopplerFor(st) {
+  const L = me.st; if (!L || !st) return 1;
+  _dl.set(st.x - camera.position.x, st.y - camera.position.y, st.z - camera.position.z); const d = _dl.length(); if (d < 1) return 1; _dl.multiplyScalar(1 / d);
+  const vl = L.vx * _dl.x + L.vy * _dl.y + L.vz * _dl.z, vs = -(st.vx * _dl.x + st.vy * _dl.y + st.vz * _dl.z), c = AUDIO_CONFIG.doppler.c;
+  return (c + vl) / Math.max(c * 0.3, c - vs);
+}
 const _sf = {};
 /** nawierzchnia pod autem (piasek/kostka, płynnie), brud na oponach i drżenie na kostce */
 function updateSurf(c, dt) {
@@ -1391,7 +1400,7 @@ function stepMe(dt) {
   st.step(track, inp, dt);
   if (me.dead > 0) { me.dead -= dt; if (me.dead <= 0) respawnMe(false, true); return; }
   if (st.fell) { respawnMe(false); return; }
-  if (wasAir && !st.air) { sfx.land(0.4 + Math.min(0.6, st.landHit / 12)); sparks(st.x, st.y, st.z, 8 + st.landHit * 2); }
+  if (wasAir && !st.air) { sfx.land(0.4 + Math.min(0.6, st.landHit / 12)); me.audio?.thump(0.4 + Math.min(0.6, st.landHit / 10)); sparks(st.x, st.y, st.z, 8 + st.landHit * 2); }
   me.hitCd = (me.hitCd || 0) - dt;
   if (st.hit > 3 && me.hitCd <= 0) { sfx.wall(st.hit / 18); sparks(st.x, st.y, st.z, st.hit); me.hitCd = 0.2; damageMe((st.hit - 5) * 0.9, zonesWall(st)); }
   for (const o of oppList()) if (o.st && !o.st.air) { const h = carVsCar(st, o.st, track); if (h > 1.5 && me.hitCd <= 0) { sfx.carHit(h / 14); sparks((st.x + o.st.x) / 2, st.y, (st.z + o.st.z) / 2, h); me.hitCd = 0.15; damageMe((h - 4) * 0.7, zonesCar(st, o.st), o.id); } }
@@ -1602,13 +1611,14 @@ function frame(now) {
   // dźwięk
   if (audioReady()) {
     if (!me.audio) me.audio = new CarAudio(0.85, 0);
+    if (me.st && racing) { const af = track.at(me.st.s, _ft); setAmbience(clamp((12 - af.hw) / 4, 0, 1) * 0.6 + (track.bridgeK[Math.max(0, Math.min(track.N - 1, Math.round(((me.st.s % track.length) + track.length) % track.length)))] > 0.5 ? 0.4 : 0)); }
     const maxS = me.st?.def.maxSpeed || 82, cornerSlip = (st) => clamp((Math.abs(st.steer) * Math.abs(st.vf) / st.def.maxSpeed - 0.3) / 0.35, 0, 1) * 0.65;
     me.audio.update({ speed: me.st ? me.st.vf / maxS : 0, throttle: racing && !me.finished ? input.throttle : 0, slip: me.st && !me.st.air ? Math.max(clamp((me.st.slip - 3.5) / 7, 0, 1), cornerSlip(me.st), me.st.hand && me.st.speed > 6 ? 0.95 : 0) * (active ? 1 : 0) : 0, brake: racing && !me.finished ? input.brake : 0, nitro: !!me.st?.nitro, sandK: me.sandK || 0, cobK: me.cobK || 0, rough: 0, active: racing && !S.spectator && !podium.on }, dt);
     for (const o of oppList()) {
-      if (!o.audio) o.audio = new CarAudio(0.35, 0);
+      if (!o.audio) o.audio = new CarAudio(0.35, 0, { lite: true });
       pv.set(o.st.x, o.st.y, o.st.z).project(camera); o.audio.panner.pan.value = Number.isFinite(pv.x) ? clamp(pv.x, -1, 1) * 0.6 : 0;
       o.audio.volume = 0.38 * clamp(1 - Math.hypot(o.st.x - (me.st?.x ?? 0), o.st.y - (me.st?.y ?? 0), o.st.z - (me.st?.z ?? 0)) / 220, 0.1, 1);
-      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, throttle: o.st.throttle || 0, slip: o.st.air ? 0 : Math.max(clamp((o.st.slip - 3.5) / 7, 0, 1), cornerSlip(o.st), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), brake: o.st.brakeLit ? 0.9 : 0, nitro: !!o.st.nitro, sandK: o.sandK || 0, cobK: o.cobK || 0, rough: 0, active: racing && !podium.on }, dt);
+      o.audio.update({ speed: o.st.vf / o.st.def.maxSpeed, doppler: dopplerFor(o.st), throttle: o.st.throttle || 0, slip: o.st.air ? 0 : Math.max(clamp((o.st.slip - 3.5) / 7, 0, 1), cornerSlip(o.st), o.st.hand && Math.abs(o.st.vf) > 6 ? 0.9 : 0), brake: o.st.brakeLit ? 0.9 : 0, nitro: !!o.st.nitro, sandK: o.sandK || 0, cobK: o.cobK || 0, rough: 0, active: racing && !podium.on }, dt);
     }
   }
 
