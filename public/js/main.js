@@ -175,7 +175,7 @@ const S = {
   solo: false, room: null, you: null, joinCode: null,
   raceStart: 0, results: null, resultSounded: false,
 };
-const me = { items: { ammo: 0, oil: 0, mine: 0, rocket: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity, hp: 100, dead: 0, inv: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity };
+const me = { items: { ammo: 0, oil: 0, mine: 0, rocket: 0, repair: 0 }, fireT: 0, fireAcc: 0, st: null, vis: null, audio: null, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: 0, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, color: S.color, best: Infinity, hp: 100, dead: 0, inv: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity };
 const opps = new Map(); // id -> { id, nick, st, vis, audio, snaps, bot?, ... }
 const visCache = new Map();
 const input = { throttle: 0, brake: 0, steer: 0, hand: false };
@@ -243,8 +243,8 @@ function resetRace() {
   const mp = S.solo ? null : myRoomPlayer();
   setCar(me, slot, mp?.color ?? S.color);
   if (!S.solo && S.room) syncOpps(true); else { clearOpps(); if (S.solo && S.raceBots > 0) spawnSoloBots(S.raceBots); }
-  items.clear(); soloSpawn.t = 5;
-  Object.assign(me, { items: S.loadout === 'full' ? { ammo: 1, oil: 1, mine: 1, rocket: 1 } : { ammo: 0, oil: 0, mine: 0, rocket: 0 }, fireT: 0, fireAcc: 0, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: -12, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, hp: 100, dead: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity });
+  items.clear(); soloSpawn.t = 5; soloSlots = null;
+  Object.assign(me, { items: S.loadout === 'full' ? { ammo: 1, oil: 1, mine: 1, rocket: 1, repair: 1 } : { ammo: 0, oil: 0, mine: 0, rocket: 0, repair: 0 }, fireT: 0, fireAcc: 0, finished: false, finishTime: 0, nitroT: 0, boost: 100, boosting: false, boostIdle: 0, cp: -12, cpIdx: 0, padCd: 0, driftT: 0, falls: 0, hp: 100, dead: 0, lapIdx: 0, lapStart: 0, bestLap: Infinity });
   S.results = null; S.resultSounded = false;
   particles.clear(); skids.clear();
   $('hud-time').textContent = '0:00.00';
@@ -930,7 +930,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !e.repeat) toggleMute();
   if (S.spectator && !e.repeat) { if (e.code === 'KeyA' || e.code === 'ArrowLeft') me.specIdx = (me.specIdx || 0) - 1; if (e.code === 'KeyD' || e.code === 'ArrowRight') me.specIdx = (me.specIdx || 0) + 1; }
   if (e.code === 'KeyR' && !e.repeat && racingNow() && !S.spectator) respawnMe(true);
-  if (!e.repeat) { if (e.code === 'KeyA') fireGun(); else if (e.code === 'KeyS') dropOil(); else if (e.code === 'KeyD') useMine(); else if (e.code === 'KeyF') fireRocket(); }
+  if (!e.repeat) { if (e.code === 'KeyA') fireGun(); else if (e.code === 'KeyS') dropOil(); else if (e.code === 'KeyD') useMine(); else if (e.code === 'KeyF') fireRocket(); else if (e.code === 'KeyG') useRepair(); }
   if (!audioReady()) initAudio();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1177,7 +1177,8 @@ function updateTags() {
 
 // ======================= Przedmioty i broń =======================
 const soloSpawn = { t: 5, id: 1 };
-const ITEM_POOL = ['nitro', 'nitro', 'ammo', 'ammo', 'oil', 'bomb', 'bomb', 'rocket', 'rocket', 'repair', 'repair'];
+const PICK_ORDER = ['ammo', 'oil', 'bomb', 'rocket', 'repair', 'nitro'];
+let soloSlots = null, soloCycle = 0;
 let idSeq = 0;
 const nextId = () => `${(S.you || 'me').slice(0, 5)}${++idSeq}`;
 function spawnCrate(id, type, u, l) {
@@ -1187,7 +1188,7 @@ function spawnCrate(id, type, u, l) {
 function applyPickup(type) {
   sfx.pickup(type);
   if (type === 'nitro') { me.boost = 100; toast('Nitro — pełny zbiornik'); }
-  else if (type === 'repair') { setHp(me.hp + 40); me.st.repairParts(0.45); toast('Naprawa +40'); }
+  else if (type === 'repair') { me.items.repair = Math.min(2, me.items.repair + 1); toast(`Naprawa${me.items.repair > 1 ? ' ×' + me.items.repair : ''} — G`); }
   else {
     const k = type === 'ammo' ? 'ammo' : type === 'oil' ? 'oil' : type === 'rocket' ? 'rocket' : 'mine';
     me.items[k] = Math.min(2, me.items[k] + 1);
@@ -1197,7 +1198,7 @@ function applyPickup(type) {
 }
 function updateSlots() {
   const set = (id, label, n) => { const el = $(id); if (!el) return; el.querySelector('span').textContent = n > 1 ? `${label} ×${n}` : label; el.classList.toggle('has', n > 0); };
-  set('slot-ammo', 'Karabin', me.items.ammo); set('slot-oil', 'Olej', me.items.oil); set('slot-mine', 'Mina', me.items.mine); set('slot-rocket', 'Rakieta', me.items.rocket);
+  set('slot-ammo', 'Karabin', me.items.ammo); set('slot-oil', 'Olej', me.items.oil); set('slot-mine', 'Mina', me.items.mine); set('slot-rocket', 'Rakieta', me.items.rocket); set('slot-repair', 'Naprawa', me.items.repair);
   $('slot-ammo')?.classList.toggle('active', me.fireT > 0);
 }
 const emitEvent = (e) => { if (!S.solo) socket?.emit('game:event', e); };
@@ -1221,6 +1222,13 @@ function fireRocket() {
 /** trafienie rakietą: duży wybuch, podrzut auta i uszkodzenia stref */
 function rocketBoom(st) {
   explodeAt(st); sparks(st.x, st.y, st.z, 24);
+}
+/** leczenie z ekwipunku: +40 stanu auta i naprawa stref (nie marnuje paczki przy pełnym stanie) */
+function useRepair() {
+  if (!racingNow() || S.spectator || me.dead > 0) return;
+  if (me.items.repair <= 0) { sfx.empty(); return; }
+  if (me.hp >= 100 && !me.st.parts.some((v) => v > 0.02)) { toast('Auto jest w pełni sprawne', 1200); return; }
+  me.items.repair--; setHp(me.hp + 40); me.st.repairParts(0.45); sfx.pickup('repair'); toast('Naprawa +40', 1200); updateSlots();
 }
 function dropOil() {
   if (!racingNow() || S.spectator) return;
@@ -1309,14 +1317,18 @@ function updateItems(dt) {
       break;
     }
   }
-  if (S.solo && S.pickups !== 'off') { // paczki w solo losuje klient; w multiplayerze serwer
-    soloSpawn.t -= dt;
-    if (soloSpawn.t <= 0) {
-      soloSpawn.t = (8 + Math.random() * 5) * { rare: 1.8, normal: 1, often: 0.5 }[S.pickups];
-      if (items.crates.size < 4) spawnCrate(soloSpawn.id++, ITEM_POOL[Math.random() * ITEM_POOL.length | 0], 0.06 + Math.random() * 0.88, (Math.random() - 0.5) * 1.3);
+  if (S.solo && S.pickups !== 'off') { // paczki w solo: stałe rzędy po 3, typy po kolei, zebrana wraca po 14 s
+    if (!soloSlots) {
+      const rows = { rare: 4, normal: 8, often: 14 }[S.pickups] ?? 8; soloSlots = []; soloCycle = Math.random() * 6 | 0;
+      for (let k = 0; k < rows; k++) for (const l of [-0.55, 0, 0.55]) soloSlots.push({ u: 0.04 + 0.92 * (k + 0.5) / rows, l, id: null, t: 0.5 });
     }
-    for (const c of items.crates.values()) if (c.landed && c.age > 32) items.remove(c.id, false);
+    for (const sl of soloSlots) {
+      if (sl.id != null) { if (!items.crates.has(sl.id)) { sl.id = null; sl.t = 14; } continue; }
+      sl.t -= dt;
+      if (sl.t <= 0) { sl.id = soloSpawn.id++; spawnCrate(sl.id, PICK_ORDER[soloCycle++ % PICK_ORDER.length], sl.u, sl.l); }
+    }
   }
+
 }
 // ======================= Rozgrywka =======================
 const cpFor = (s) => track.lastCp(s);

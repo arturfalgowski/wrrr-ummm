@@ -143,21 +143,19 @@ function startCountdown(r) {
   later(r, 4000 + 600 + Math.random() * 900, () => { r.state = 'racing'; io.to(r.id).emit('race:go'); schedulePickups(r); });
 }
 
-/** paczki losowane na torze (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne); klient dopasowuje je do jezdni */
+/** paczki na stałych miejscach: rzędy po 3 paczki w poprzek toru (u — położenie 0..1 wzdłuż trasy, l — przesunięcie boczne),
+ *  typy po kolei (karabin, olej, mina, rakieta, naprawa, nitro), więc regularnie trafiają się wszystkie; zebrana paczka wraca po 14 s */
+const PICK_TYPES = ['ammo', 'oil', 'bomb', 'rocket', 'repair', 'nitro'], PICK_ROWS = { rare: 4, normal: 8, often: 14 };
+function spawnPickup(r, slot) {
+  const id = ++r.pid, type = PICK_TYPES[r.pcycle++ % PICK_TYPES.length];
+  slot.id = id; r.pickups.set(id, type);
+  io.to(r.id).emit('pickup:spawn', { id, type, u: slot.u, l: slot.l });
+}
 function schedulePickups(r) {
-  const mul = PICKUP_MODES[r.settings.pickups];
-  if (!mul) return;
-  const tick = () => {
-    if (r.state !== 'racing') return;
-    if (r.pickups.size < 5) {
-      const id = ++r.pid, type = pick(ITEMS);
-      r.pickups.set(id, type);
-      io.to(r.id).emit('pickup:spawn', { id, type, u: 0.06 + Math.random() * 0.88, l: (Math.random() - 0.5) * 1.3 });
-      later(r, 32000, () => { if (r.pickups.delete(id)) io.to(r.id).emit('pickup:remove', { id }); });
-    }
-    later(r, (7000 + Math.random() * 5000) * mul, tick);
-  };
-  later(r, 5000, tick);
+  if (!PICKUP_MODES[r.settings.pickups]) return;
+  const rows = PICK_ROWS[r.settings.pickups] ?? 8;
+  r.pslots = []; r.pcycle = Math.random() * PICK_TYPES.length | 0;
+  for (let k = 0; k < rows; k++) for (const l of [-0.55, 0, 0.55]) { const slot = { u: 0.04 + 0.92 * (k + 0.5) / rows, l, id: null }; r.pslots.push(slot); spawnPickup(r, slot); }
 }
 
 /** kolejność końcowa: ukończone wg czasu, reszta wg postępu */
@@ -402,6 +400,7 @@ io.on('connection', (socket) => {
     const type = r.pickups.get(id);
     r.pickups.delete(id);
     io.to(r.id).emit('pickup:taken', { id, by: socket.id, type });
+    const slot = r.pslots?.find((x) => x.id === id); if (slot) { slot.id = null; later(r, 14000, () => { if (r.state === 'racing') spawnPickup(r, slot); }); }
   });
 
   // zdarzenia gry (strzał, olej, mina, wybuch, trafienie) — współrzędne toru (x = s, z = d) przekazywane pozostałym

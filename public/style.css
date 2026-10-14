@@ -584,6 +584,7 @@ input[type=range].fancy:active::-webkit-slider-thumb { transform: scale(1.22); b
 .slot.has { color: #fff; }
 #slot-ammo.has { background: rgba(200,110,10,.78); box-shadow: 0 0 22px rgba(255,176,46,.55); }
 #slot-oil.has { background: rgba(100,50,200,.75); box-shadow: 0 0 22px rgba(164,107,255,.55); }
+#slot-repair.has { background: rgba(30,150,90,.8); box-shadow: 0 0 22px rgba(62,224,138,.55); }
 #slot-rocket.has { background: rgba(214,80,30,.8); box-shadow: 0 0 22px rgba(255,106,61,.6); }
 #slot-mine.has { background: rgba(200,50,40,.78); box-shadow: 0 0 22px rgba(255,74,58,.55); }
 #slot-ammo.active { animation: pulse3 .25s ease-in-out infinite alternate; }

@@ -54,7 +54,7 @@ Pady nitro na jednym pasie, mini-turbo po długim dryfcie (hamulec ręczny), zbi
 | ← / → | skręt |
 | Spacja | hamulec ręczny (drift) |
 | Shift | nitro (zbiornik ładuje się sam) |
-| A / S / D / F | karabin / olej / mina / rakieta |
+| A / S / D / F / G | karabin / olej / mina / rakieta / naprawa |
 | R | powrót na ostatni bezpieczny punkt |
 | C | kamera: zza auta / izometryczna |
 | Enter, 1–9 | czat, szybkie reakcje |
