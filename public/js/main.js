@@ -248,7 +248,7 @@ function resetRace() {
   particles.clear(); skids.clear();
   $('hud-time').textContent = '0:00.00';
   $('chip-pos').classList.toggle('hidden', !opps.size);
-  setText('hud-cp', `1/${S.raceLaps}`); setHpBar(100); updateSlots();
+  setText('hud-cp', `1/${S.raceLaps}`); setHpBar(100); updateSlots(true);
   ghostSetup();
   recGhost.length = 0; replay.buf = []; replay.done = false;
 }
@@ -1195,8 +1195,17 @@ function applyPickup(type) {
   }
   updateSlots();
 }
-function updateSlots() {
-  const set = (id, label, n) => { const el = $(id); if (!el) return; el.querySelector('span').textContent = n > 1 ? `${label} ×${n}` : label; el.classList.toggle('has', n > 0); };
+const slotPrev = {};
+/** sloty ekwipunku: licznik w kółku po prawej; gdy przybywa przedmiot — ikona i liczba pulsują (quiet = bez efektu, np. na starcie) */
+function updateSlots(quiet = false) {
+  const set = (id, label, n) => {
+    const el = $(id); if (!el) return;
+    el.querySelector('span').textContent = label;
+    const cnt = el.querySelector('.cnt'); cnt.textContent = n; cnt.style.display = n > 0 ? 'grid' : 'none';
+    el.classList.toggle('has', n > 0);
+    if (!quiet && n > (slotPrev[id] ?? 0)) { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); clearTimeout(el._pt); el._pt = setTimeout(() => el.classList.remove('pulse'), 1250); }
+    slotPrev[id] = n;
+  };
   set('slot-ammo', 'Karabin', me.items.ammo); set('slot-oil', 'Olej', me.items.oil); set('slot-mine', 'Mina', me.items.mine); set('slot-rocket', 'Rakieta', me.items.rocket); set('slot-repair', 'Naprawa', me.items.repair);
   $('slot-ammo')?.classList.toggle('active', me.fireT > 0);
 }
